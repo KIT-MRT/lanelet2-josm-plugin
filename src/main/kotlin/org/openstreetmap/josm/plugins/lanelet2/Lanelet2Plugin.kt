@@ -4,7 +4,7 @@ import org.openstreetmap.josm.gui.MapFrame
 import org.openstreetmap.josm.plugins.Plugin
 import org.openstreetmap.josm.plugins.PluginInformation
 import org.openstreetmap.josm.plugins.lanelet2.dependent.DependentActions
-import org.openstreetmap.josm.plugins.lanelet2.dependent.RoutingSettings
+import org.openstreetmap.josm.plugins.lanelet2.settings.SettingsActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.EditActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.SmoothSplitActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.CommitReminder
@@ -35,7 +35,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             RegulatoryActions.registerAll()
             SelectionActions.registerAll()
             DependentActions.registerAll()
-            RoutingSettings.registerAll()
+            SettingsActions.registerAll()
             InternalActions.registerAll()
             Viewer3dActions.registerAll()
             CommitReminder.install()

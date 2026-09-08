@@ -67,6 +67,18 @@ object MapStyles {
 
     fun resolveUrl(entry: StyleCatalogEntry): String? = resolveStyleUrl(entry)
 
+    fun getCurrentStyleRows(): List<StyleSource> = styleSources()
+
+    /** Toggle active flag for the style at [index]. Returns true if toggled. */
+    fun toggleStyleAtIndex(index: Int): Boolean {
+        val idx = index
+        val sources = styleSources()
+        if (idx < 0 || idx >= sources.size) return false
+        MapPaintStyles.toggleStyleActive(idx)
+        LaneletSettings.setMapstyleLastPreset(LaneletSettings.MAPSTYLE_PRESET_CUSTOM)
+        return true
+    }
+
     private fun isRegistered(entry: StyleCatalogEntry): Boolean {
         val title = entry.title
         val url = resolveStyleUrl(entry)
