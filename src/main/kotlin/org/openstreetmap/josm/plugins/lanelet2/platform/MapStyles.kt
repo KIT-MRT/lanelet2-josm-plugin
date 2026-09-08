@@ -6,18 +6,62 @@ import org.openstreetmap.josm.data.preferences.sources.SourceType
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.mappaint.MapPaintStyles
 import org.openstreetmap.josm.gui.mappaint.StyleSource
+import org.openstreetmap.josm.spi.preferences.Config
 import org.openstreetmap.josm.tools.Logging
 
 object MapStyles {
+    /**
+     * JOSM's search path for map paint style icons. Our styles reference icons
+     * relatively (`style_images/133-10.png`), and unlike presets, a style's own
+     * `resource://` URL is not part of the search path, so the traffic sign,
+     * arrow and traffic light icons stay unresolved unless we add the root here.
+     */
+    private const val ICON_SOURCES_KEY = "mappaint.icon.sources"
+
     fun installOnLaunch() {
+        val iconSourceAdded = ensureIconSource()
         ensureStylesRegistered()
         if (LaneletSettings.getMapstyleAutoApplyOnLaunch()) {
             applyPreset(LaneletSettings.MAPSTYLE_PRESET_LL2_EDITING)
+        } else if (iconSourceAdded) {
+            // Styles cache their icon lookups, so a profile that already loaded
+            // them keeps rendering the misses until the sources are re-read.
+            reloadStyles()
+        }
+    }
+
+    private fun reloadStyles() {
+        try {
+            MapPaintStyles.readFromPreferences()
+            repaintMap()
+        } catch (e: Exception) {
+            Logging.error("lanelet2: failed to reload map styles after icon source change")
+            Logging.error(e)
+        }
+    }
+
+    /**
+     * Register the plugin's icon root with JOSM's style icon search path.
+     * Idempotent.
+     *
+     * @return true if the search path was modified.
+     */
+    fun ensureIconSource(): Boolean {
+        return try {
+            val current = Config.getPref().getList(ICON_SOURCES_KEY, emptyList())
+            if (TaggingPresetsInstaller.ICON_SOURCE in current) return false
+            Config.getPref().putList(ICON_SOURCES_KEY, current + TaggingPresetsInstaller.ICON_SOURCE)
+            true
+        } catch (e: Exception) {
+            Logging.error("lanelet2: failed to register map style icon source")
+            Logging.error(e)
+            false
         }
     }
 
     fun ensureStylesRegistered(): Boolean {
         var changed = false
+        ensureIconSource()
         for (entry in LaneletSettings.STYLE_CATALOG) {
             if (entry.kind != StyleKind.FILE && entry.kind != StyleKind.BUILTIN) continue
             if (isRegistered(entry)) continue

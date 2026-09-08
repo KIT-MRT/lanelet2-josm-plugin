@@ -82,12 +82,12 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
                 NotesActions.installDialog(newFrame)
             } else {
                 MenuInstaller.uninstall()
-                Viewer3dHook.uninstall()
                 NotesActions.uninstallDialog()
-                // Autotag / zoom-filter / routing-refresh persist for the
-                // session (Jython core_hooks.install once). Do not uninstall
-                // them here: JOSM fires newFrame==null when the last layer
-                // closes, then a new frame when a file is opened.
+                // Autotag / zoom-filter / routing-refresh / viewer3d persist for
+                // the session (Jython installs them once). Do not uninstall them
+                // here: JOSM fires newFrame==null when the last layer closes,
+                // then a new frame when a file is opened. Tearing the 3D bridge
+                // down here left it dead for the rest of the session.
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")

@@ -206,14 +206,22 @@ class Viewer3dSocketClient(
 
     fun enqueue(message: OutboundMessage) {
         if (queue.offer(message)) return
+        // Overflow: drop the backlog and ask the owner for a fresh snapshot,
+        // since surviving patches would apply to a baseline we just discarded.
         drainQueue()
         onConnected()
         queue.offer(message)
     }
 
+    /**
+     * Drops queued messages so a caller can rebuild from a full snapshot.
+     *
+     * Must not invoke [onConnected]: the owner's handler calls straight back
+     * into here, so doing so spins the EDT forever and drains every message
+     * before the sender can write it.
+     */
     fun requestResync() {
         drainQueue()
-        onConnected()
     }
 
     private fun drainQueue() {

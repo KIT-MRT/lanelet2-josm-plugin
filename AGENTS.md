@@ -55,6 +55,19 @@ the source, most of them after they had already shipped a silent bug.
 - **Preset icons need `TaggingPresets.ICON_SOURCES`.** JOSM resolves a preset's
   relative icon via `ImageProvider(name).setDirs(ICON_SOURCES.get())`. Without a
   registered source, every `style_images/...` reference silently fails to render.
+- **Map paint style icons need the *separate* `mappaint.icon.sources` pref.** A
+  style's own `resource://` url is *not* part of its icon search path, so
+  registering the preset source is not enough; `MapStyles.ensureIconSource()`
+  registers the same `resource://lanelet2/` root for styles. Both are guarded
+  (`MapStylesIconSourceTest`) because the failure is silent: the styles load and
+  render, only the sign/arrow/traffic-light icons go missing.
+- **The shipped `lines.mapcss` refers to more signs than the repo ships** (about
+  320 of ~550, plus remote wikimedia urls). That is upstream behaviour, not a
+  port bug — do not go hunting for lost icons.
+- **An icon on a `JRadioButton` replaces the radio bullet**, leaving no
+  selection indicator at all. Toolbar mode selectors therefore use
+  `JToggleButton` in a `ButtonGroup` and paint their own accent border and
+  background (`MenuInstaller.buildToggleButtons`).
 - **`ImageProvider` understands `resource://` in `dirs`.**
   `getImageUrl(path, name)` strips the scheme and calls
   `ResourceProvider.getResource(path + name)`, so `resource://lanelet2/` plus
@@ -274,6 +287,24 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   a bounded queue that resyncs on overflow; a separate reader thread.
 - **`_MAX_WAYS_PER_CYCLE` is 999**, not the 3000 the upstream `AGENTS.md`
   claims. Trust the code.
+- **`Viewer3dSocketClient.requestResync()` must never call its `onConnected`
+  callback.** The owner's handler (`Viewer3dHook.requestResync`) calls straight
+  back into it, and the resulting `invokeLater` chain pinned the EDT at ~85% CPU
+  while draining the send queue and restarting the 200 ms debounce on every
+  pass — the viewer reported a healthy connection and stayed at 0 features.
+  Only the sender thread (on connect) and queue overflow may call `onConnected`.
+  Guarded by `Viewer3dSocketClientTest`.
+- **Streaming follows the edit layer even when it is hidden**, matching Jython's
+  `_compute_and_send`. Only the *inbound* command path checks `isVisible()`
+  (Jython `ll2_viewer3d_hook.py:1013`). Do not add a visibility check to the
+  attach/outbound path.
+- **The 3D bridge is installed once per session**, like the other hooks. Do not
+  uninstall it from `mapFrameInitialized(newFrame == null)`: JOSM fires that
+  when the last layer closes, and nothing reinstalls it afterwards. Guarded by
+  `HooksFrameLifetimeTest`.
+- **Test the socket client, not just the server.** `Viewer3dE2ETest` originally
+  wrote raw lines straight to the ingest port, which is why a client that could
+  not deliver anything still passed.
 
 ### Approved divergences from the Jython (do NOT "restore parity")
 

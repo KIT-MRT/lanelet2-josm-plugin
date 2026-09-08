@@ -46,6 +46,9 @@ object Viewer3dHook {
 
     fun serverProcess(): Viewer3dServerProcess = server
 
+    /** Test seam: whether the JOSM-side half of the bridge is live. */
+    internal fun bridgeInstalled(): Boolean = activeListener != null
+
     fun installIfEnabled() {
         refreshSettings()
         if (Viewer3dSettings.isEnabled()) install() else uninstall()
@@ -170,9 +173,13 @@ object Viewer3dHook {
         attachedDs = null
     }
 
+    /**
+     * Streaming follows the edit layer even while it is hidden, as the Jython
+     * hook does. Only inbound edits from the browser require a visible layer.
+     */
     private fun currentDataSet(): DataSet? =
         try {
-            requireVisibleEditLayer()?.data
+            LaneletUtils.getEditLayer()?.data
         } catch (_: Exception) {
             null
         }

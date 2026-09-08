@@ -4,17 +4,20 @@ import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.plugins.lanelet2.tools.QuickTagModal
 import org.openstreetmap.josm.tools.Logging
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.event.KeyEvent
 import javax.swing.Action
+import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.ButtonGroup
 import javax.swing.JButton
 import javax.swing.JMenu
 import javax.swing.JMenuItem
 import javax.swing.JPanel
-import javax.swing.JRadioButton
+import javax.swing.JToggleButton
 import javax.swing.JToolBar
 import javax.swing.SwingUtilities
+import javax.swing.UIManager
 
 object MenuInstaller {
     const val TOOLBAR_CONTAINER_NAME = "Lanelet2ToolbarContainer"
@@ -190,21 +193,74 @@ object MenuInstaller {
     }
 
     private fun addToggleGroupToToolbar(tb: JToolBar, bufferItems: List<ActionSlot>, groupKind: String?) {
-        val bg = ButtonGroup()
-        val byValue = LinkedHashMap<String, JRadioButton>()
-        for (item in bufferItems) {
-            val rb = JRadioButton(item.action)
-            rb.isOpaque = false
-            rb.text = item.toolbarLabel
-            Icons.icon(item.iconName)?.let { rb.icon = it }
-            rb.toolTipText = tooltipFor(item)
-            bg.add(rb)
-            tb.add(rb)
-            groupValue(item.id)?.let { byValue[it] = rb }
-        }
+        val group = buildToggleButtons(bufferItems)
+        for (btn in group.buttons) tb.add(btn)
         if (groupKind != null) {
-            toggleGroups.add(ToggleGroupState(bg, byValue, groupKind))
+            toggleGroups.add(ToggleGroupState(group.buttonGroup, group.byValue, groupKind))
         }
+    }
+
+    /**
+     * Build one mutually exclusive group of toolbar mode buttons.
+     *
+     * A JRadioButton draws its bullet with the button's default icon, so giving
+     * it a slot icon leaves the active mode indistinguishable. Toggle buttons
+     * keep the icon and carry their state in the border and background instead.
+     */
+    internal fun buildToggleButtons(items: List<ActionSlot>): ToggleButtons {
+        val bg = ButtonGroup()
+        val buttons = ArrayList<JToggleButton>(items.size)
+        val byValue = LinkedHashMap<String, JToggleButton>()
+        for (item in items) {
+            val btn = JToggleButton(item.action)
+            btn.text = item.toolbarLabel
+            Icons.icon(item.iconName)?.let { btn.icon = it }
+            btn.toolTipText = tooltipFor(item)
+            markSelectionVisibly(btn)
+            bg.add(btn)
+            buttons.add(btn)
+            groupValue(item.id)?.let { byValue[it] = btn }
+        }
+        return ToggleButtons(bg, buttons, byValue)
+    }
+
+    internal data class ToggleButtons(
+        val buttonGroup: ButtonGroup,
+        val buttons: List<JToggleButton>,
+        val byValue: Map<String, JToggleButton>,
+    )
+
+    /**
+     * Some look and feels render a selected toolbar toggle almost identically to
+     * an idle one, which is the whole point of these buttons, so the active mode
+     * also gets an accent outline and a filled background.
+     */
+    private fun markSelectionVisibly(btn: JToggleButton) {
+        val accent = UIManager.getColor("List.selectionBackground") ?: Color(0x2D, 0x7F, 0xF9)
+        val idleBorder = BorderFactory.createEmptyBorder(3, 3, 3, 3)
+        val activeBorder = BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(accent, 2),
+            BorderFactory.createEmptyBorder(1, 1, 1, 1),
+        )
+        fun refresh() {
+            btn.border = if (btn.isSelected) activeBorder else idleBorder
+            btn.isOpaque = btn.isSelected
+            btn.background = if (btn.isSelected) accentWash(accent) else null
+        }
+        btn.isContentAreaFilled = true
+        btn.addItemListener { refresh() }
+        refresh()
+    }
+
+    /** A tint of [accent] light enough to keep the icon and label readable. */
+    private fun accentWash(accent: Color): Color {
+        val base = UIManager.getColor("Panel.background") ?: Color.LIGHT_GRAY
+        fun blend(a: Int, b: Int) = ((a * 0.30) + (b * 0.70)).toInt().coerceIn(0, 255)
+        return Color(
+            blend(accent.red, base.red),
+            blend(accent.green, base.green),
+            blend(accent.blue, base.blue),
+        )
     }
 
     private fun tooltipFor(slot: ActionSlot): String {
@@ -259,7 +315,7 @@ object MenuInstaller {
 
     private data class ToggleGroupState(
         val buttonGroup: ButtonGroup,
-        val byValue: Map<String, JRadioButton>,
+        val byValue: Map<String, JToggleButton>,
         val kind: String,
     )
 }

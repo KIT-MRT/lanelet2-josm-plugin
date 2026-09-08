@@ -11,6 +11,8 @@ import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.event.DataSetListener
 import org.openstreetmap.josm.gui.MapFrame
 import org.openstreetmap.josm.plugins.lanelet2.Lanelet2Plugin
+import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dHook
+import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dSettings
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.spi.preferences.Config
 import org.openstreetmap.josm.spi.preferences.MemoryPreferences
@@ -18,8 +20,8 @@ import org.openstreetmap.josm.spi.preferences.MemoryPreferences
 /**
  * JOSM calls [Lanelet2Plugin.mapFrameInitialized] with `newFrame == null` when
  * the last layer closes, then again with a fresh frame when a file is opened.
- * Autotag / zoom-filter / routing-refresh must keep working (Jython
- * `core_hooks.py` installs once and never uninstalls on teardown).
+ * Autotag / zoom-filter / routing-refresh and the 3D bridge must keep
+ * working (Jython installs them once and never uninstalls on teardown).
  */
 class HooksFrameLifetimeTest {
 
@@ -30,6 +32,7 @@ class HooksFrameLifetimeTest {
         AutotagHook.uninstallDeleteOverride()
         AutotagHook.uninstallAnchorProtection()
         ZoomFilterHook.uninstall()
+        Viewer3dHook.uninstall()
         RoutingRefreshHook.resetForTests()
     }
 
@@ -39,6 +42,7 @@ class HooksFrameLifetimeTest {
         AutotagHook.uninstallDeleteOverride()
         AutotagHook.uninstallAnchorProtection()
         ZoomFilterHook.uninstall()
+        Viewer3dHook.uninstall()
         RoutingRefreshHook.resetForTests()
     }
 
@@ -50,6 +54,10 @@ class HooksFrameLifetimeTest {
         AutotagHook.install()
         AutotagHook.attachTo(ds)
         ZoomFilterHook.install()
+        // A port nothing listens on: the bridge only has to stay installed here,
+        // and the default would dial a viewer the developer may have running.
+        Viewer3dSettings.saveConfig(enabled = true, host = "127.0.0.1", ingestPort = 49999)
+        Viewer3dHook.install()
         RoutingRefreshHook.setBackend { false }
         RoutingRefreshHook.install()
         LaneletSettings.setRoutingHookFullMap(true)
@@ -83,6 +91,7 @@ class HooksFrameLifetimeTest {
         assertTrue(RoutingRefreshHook.timerIsLive(), "routing timer died after map-frame teardown")
         assertTrue(RoutingRefreshHook.hasBackend())
         assertTrue(RoutingRefreshHook.isUpdatePending())
+        assertTrue(Viewer3dHook.bridgeInstalled(), "3D bridge torn down by map-frame teardown")
 
         AutotagHook.install()
         AutotagHook.attachTo(ds)

@@ -68,6 +68,78 @@ class Viewer3dE2ETest {
         }
     }
 
+    /**
+     * The test above writes raw lines to the server, so it stayed green while
+     * the real client could not deliver anything. This one pushes through
+     * [Viewer3dSocketClient] with the hook's own resync-on-connect handler.
+     */
+    @Test
+    fun socketClientDeliversSnapshotToShippedServer(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        Viewer3dStore.extract(root)
+        val serverScript = File(root, "viewer3d/server.py")
+        val httpPort = 48865
+        val ingestPort = 48866
+        var proc: Process? = null
+        var client: Viewer3dSocketClient? = null
+        try {
+            proc = ProcessBuilder(
+                python3,
+                serverScript.absolutePath,
+                "--host", "127.0.0.1",
+                "--http-port", httpPort.toString(),
+                "--ingest-port", ingestPort.toString(),
+                "--icons-dir", File(root, "style_images").absolutePath,
+                "--no-browser",
+            )
+                .directory(serverScript.parentFile)
+                .redirectErrorStream(true)
+                .start()
+            assumeTrue(waitForHealth(httpPort, 5000), "server did not become healthy")
+
+            val snapshot = OutboundMessage.Snapshot(
+                Anchor(49.0, 8.4),
+                listOf(
+                    ViewerFeature(
+                        id = "way/7",
+                        kind = "line",
+                        tags = emptyMap(),
+                        points = listOf(listOf(0.0, 0.0, 0.0), listOf(5.0, 0.0, 0.0)),
+                        nodes = listOf("node/1", "node/2"),
+                    ),
+                ),
+            )
+            lateinit var c: Viewer3dSocketClient
+            c = Viewer3dSocketClient(
+                host = { "127.0.0.1" },
+                port = { ingestPort },
+                onCommand = {},
+                onConnected = {
+                    // Exactly what Viewer3dHook.requestResync does on connect.
+                    c.requestResync()
+                    c.enqueue(snapshot)
+                },
+            )
+            client = c
+            c.start()
+
+            val deadline = System.currentTimeMillis() + 10_000
+            var state = ""
+            while (System.currentTimeMillis() < deadline) {
+                state = httpGet("http://127.0.0.1:$httpPort/state")
+                if (state.contains("way/7")) break
+                Thread.sleep(100)
+            }
+            assertTrue(state.contains("way/7"), "server never received the snapshot: $state")
+        } finally {
+            client?.stop()
+            proc?.destroyForcibly()
+            proc?.waitFor(2, TimeUnit.SECONDS)
+        }
+    }
+
     private fun waitForHealth(httpPort: Int, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
