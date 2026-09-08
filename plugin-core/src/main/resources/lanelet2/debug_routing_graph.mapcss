@@ -1,0 +1,69 @@
+/* MapCSS for Lanelet2 debug routing graph OSM file.
+ * Requires: type=routing_info, subtype=routing_connection on ways.
+ * Optional: lanelet_subtype (road, bicycle, etc.), location (urban, nonurban).
+ */
+
+canvas {
+    text-color: #333333;
+    error-color: #cc0000;
+}
+
+/* Routing connection ways: medium thick arrows, colors by lanelet_subtype */
+way[type=routing_info][subtype=routing_connection] {
+    width: 3;
+    color: #808080;
+    line-style: arrows;
+    z-index: 10;
+}
+
+/* Road (cars) - red */
+way[type=routing_info][subtype=routing_connection][lanelet_subtype=road] {
+    color: #cc0000;
+}
+
+/* Bicycle - bright green, very dense dashes */
+way[type=routing_info][subtype=routing_connection][lanelet_subtype=bicycle_lane] {
+    color: #00cc00;
+    dashes: 2, 2;
+}
+
+/* Pedestrian - blue */
+way[type=routing_info][subtype=routing_connection][lanelet_subtype=pedestrian] {
+    color: #0066cc;
+}
+
+/* Crosswalk - cyan */
+way[type=routing_info][subtype=routing_connection][lanelet_subtype=crosswalk] {
+    color: #00cccc;
+}
+
+/* location=nonurban: dashed lines */
+way[type=routing_info][subtype=routing_connection][location=nonurban] {
+    dashes: 8, 6;
+    dashes-background-color: #e0e0e0;
+}
+
+/* Nodes: lanelet center points (default) */
+node[type=routing_info][subtype=lanelet_center_point] {
+    symbol-shape: square;
+    symbol-size: 8;
+    symbol-fill-color: #9d3333;
+    symbol-stroke-color: #432121;
+    symbol-stroke-width: 1;
+}
+
+/* Bicycle lane nodes - circle */
+node[type=routing_info][subtype=lanelet_center_point][lanelet_subtype=bicycle_lane] {
+    symbol-shape: circle;
+    symbol-fill-color: #3e9830;
+    symbol-stroke-color: #2a552a;
+    symbol-size: 6;
+}
+
+/* Crosswalk nodes - pentagon (diamond-like, pedestrian crossing) */
+node[type=routing_info][subtype=lanelet_center_point][lanelet_subtype=crosswalk] {
+    symbol-shape: pentagon;
+    symbol-fill-color: #29b6d2;
+    symbol-stroke-color: #2a4e55;
+    symbol-size: 10;
+}

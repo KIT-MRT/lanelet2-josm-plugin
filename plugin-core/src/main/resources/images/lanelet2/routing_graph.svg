@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <circle cx="6" cy="6" r="2" style="fill:none;stroke:#8B008B;stroke-width:1.5"/>
+  <circle cx="18" cy="6" r="2" style="fill:none;stroke:#8B008B;stroke-width:1.5"/>
+  <circle cx="6" cy="18" r="2" style="fill:none;stroke:#8B008B;stroke-width:1.5"/>
+  <circle cx="18" cy="18" r="2" style="fill:none;stroke:#8B008B;stroke-width:1.5"/>
+  <circle cx="12" cy="12" r="2" style="fill:none;stroke:#8B008B;stroke-width:1.5"/>
+  <path style="fill:none;stroke:#8B008B;stroke-width:1" d="M6 6 L12 12 M18 6 L12 12 M6 18 L12 12 M18 18 L12 12"/>
+</svg>

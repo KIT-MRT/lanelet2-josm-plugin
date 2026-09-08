@@ -1,0 +1,441 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<presets>
+<group name="Lanelet2">
+    <group name="Lanelets">
+        <item name="City road" icon="presets/transport/way/way_secondary.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <key key="one_way" value="yes"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Road name" default="" />
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <combo key="subtype" text="Subtype" values="road,play_street,main_road,highway,bus,taxi" default="road" />
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1" />
+                <role key="right" text="right border" requisite="required" type="way" count="1" />
+                <role key="regulatory_element" text="regulatory element" requisite="optional" type="relation"/>
+            </roles>
+        </item> <!-- Lanelet -->
+        <item name="Two-way road" icon="presets/transport/way/way_service.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <key key="one_way" value="no"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Road name" default="" />
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <combo key="subtype" text="Subtype" values="road,play_street,main_road,highway,bus,taxi" default="road" />
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1" />
+                <role key="right" text="right border" requisite="required" type="way" count="1" />
+                <role key="regulatory_element" text="regulatory element" requisite="optional" type="relation"/>
+            </roles>
+        </item> <!-- Lanelet -->
+
+        <item name="Pedestrian way" icon="presets/transport/way/way_pedestrian.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Road name" default="" />
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <combo key="subtype" text="Subtype" values="walkway,crosswalk,stairs" default="walkway" />
+            <space />
+            <check key="one_way" text="One way" default="off"/>
+            <check key="bicycle" text="Bicycles allowed" default="on"/>
+
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1"/>
+                <role key="right" text="right border" requisite="required" type="way"  count="1"/>
+                <role key="regulatory_element" text="regulatory element" requisite="optional" type="relation"/>
+            </roles>
+        </item> <!-- Lanelet -->
+        <item name="Train rails" icon="presets/transport/railway/rail.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <key key="participant:pedestrian" value="no"/>
+            <key key="participant:bicycle" value="no"/>
+            <key key="participant:vehicle" value="no"/>
+            <key key="participant:train" value="yes"/>
+            <check key="one_way" text="One way" default="on"/>
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1" />
+                <role key="right" text="right border" requisite="required" type="way" count="1" />
+            </roles>
+        </item> <!-- Lanelet -->
+        <item name="Emergency lane" icon="presets/vehicle/firebrigade.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <combo key="subtype" text="Subtype" values="emergency_lane" default="emergency_lane"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Road name" default="" />
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <space />
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1" />
+                <role key="right" text="right border" requisite="required" type="way" count="1" />
+                <role key="regulatory_element" text="regulatory element" requisite="optional" type="relation"/>
+            </roles>
+        </item> <!-- Lanelet -->
+        <item name="Bike lane" icon="presets/vehicle/bicycle_rental.svg" type="relation" preset_name_label="true">
+            <key key="type" value="lanelet"/>
+            <combo key="subtype" text="Subtype" values="bicycle_lane" default="bicycle_lane"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Road name" default="" />
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <space />
+            <roles>
+                <role key="left" text="left border" requisite="required" type="way" count="1" />
+                <role key="right" text="right border" requisite="required" type="way" count="1" />
+                <role key="regulatory_element" text="regulatory element" requisite="optional" type="relation"/>
+            </roles>
+        </item>
+    </group>
+
+    <group name="Areas">
+        <item name="Vegetation" icon="presets/leisure/garden.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="vegetation"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Pedestrian area" icon="presets/transport/way/dedicated_footway.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="walkway"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Parking" icon="presets/vehicle/parking/parking.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="parking"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Keepout" icon="presets/vehicle/restriction/motorcar.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="keepout"/>
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Building" icon="presets/accommodation/basic_hut.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="building"/>
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Traffic island" icon="presets/vehicle/island.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="traffic_island"/>
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="House exit" icon="presets/misc/entrance_exit.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="exit"/>
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Freespace" icon="presets/misc/no_icon.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="subtype" value="freespace"/>
+            <combo key="location" text="Location" values="urban,nonurban,private" default="urban"  />
+            <text key="region" text="Region" default="de" />
+            <text key="name" text="Area name" default="" />
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Test Set" icon="presets/misc/danger.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="split" value="test"/>
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+        <item name="Validation Set" icon="presets/misc/boundaries.svg" type="relation" preset_name_label="true">
+            <key key="type" value="multipolygon"/>
+            <key key="split" value="val"/>
+            <roles>
+                <role key="outer" text="left border" requisite="required" type="way" />
+                <role key="inner" text="right border" requisite="optional" type="way" />
+            </roles>
+        </item>
+    </group>
+    <group name="Regulatory Elements">
+        <item name="Traffic light" icon="presets/vehicle/traffic_signals.svg" type="relation" preset_name_label="true">
+            <key key="type" value="regulatory_element"/>
+            <key key="subtype" value="traffic_light"/>
+            <roles>
+                <role key="refers" text="Traffic lights(s)" requisite="required" type="way" />
+                <role key="ref_line" text="Stop line" requisite="required" type="way"/>
+            </roles>
+        </item>
+        <item name="Right of way" icon="presets/vehicle/restriction/stop.svg" type="relation" preset_name_label="true">
+            <key key="type" value="regulatory_element"/>
+            <key key="subtype" value="right_of_way"/>
+            <roles>
+                <role key="refers" text="Traffic signs(s)" requisite="optional" type="way" />
+                <role key="ref_line" text="Stop line (required unless type is yield_from)" requisite="optional" type="way"/>
+                <role key="right_of_way" text="Lanelets that have right of way" requisite="required" type="relation"/>
+                <role key="yield" text="Lanelets that have to yield" requisite="required" type="relation"/>
+            </roles>
+        </item>
+        <item name="Speed limit" icon="presets/vehicle/restriction/maxspeed.svg" type="relation" preset_name_label="true">
+            <key key="type" value="regulatory_element"/>
+            <key key="subtype" value="speed_limit"/>
+            <roles>
+                <role key="refers" text="Traffic sign(s)" requisite="required" type="way" />
+                <role key="cancels" text="Cancelling traffic sign(s)" requisite="optional" type="way" />
+                <role key="ref_line" text="Valid from" requisite="optional" type="way"/>
+                <role key="cancel_line" text="Valid to" requisite="optional" type="way"/>
+            </roles>
+        </item>
+        <item name="Traffic sign" icon="presets/vehicle/restriction/restrictions.svg" type="relation" preset_name_label="true">
+            <key key="type" value="regulatory_element"/>
+            <key key="subtype" value="traffic_sign"/>
+            <roles>
+                <role key="refers" text="Traffic sign(s)" requisite="required" type="way" />
+                <role key="cancels" text="Cancelling traffic sign(s)" requisite="optional" type="way" />
+                <role key="ref_line" text="Valid from" requisite="optional" type="way"/>
+                <role key="cancel_line" text="Valid to" requisite="optional" type="way"/>
+            </roles>
+        </item>
+    </group> <!-- Regulatory elements -->
+
+    <group name="Special Tags">
+        <item name="Temporary map element: currently exists but removed in less than 1 year" type="way,closedway,relation" preset_name_label="true">
+            <key key="temporary" value="true"/>
+        </item>
+        <item name="Construction site element" type="way,closedway,relation" preset_name_label="true">
+            <key key="temporary" value="true"/>
+            <key key="construction_site_element" value="true"/>
+        </item>
+        <item name="Outdated element: known to be changed or removed by newer data" type="way,closedway,relation" preset_name_label="true">
+            <key key="outdated" value="true"/>
+        </item>
+        <item name="ignore element in solver" type="way,closedway,relation" preset_name_label="true">
+            <key key="ignore_in_mapping_solver" value="true"/>
+        </item>
+        <item name="virtual mapping element: used as mapping hint but does not exist in that place" type="way,closedway" preset_name_label="true">
+            <key key="virtual_mapping_element" value="true"/>
+        </item>
+    </group>
+
+    <group name="Lines">
+        <item name="Marking color" icon="" type="way,closedway" preset_name_label="true">
+            <combo key="color" text="color of the marking (leave empty for white, if yellow and white exists, explicitly state white)" values_searchable="true" default="">
+                <list_entry value=""  />
+                <list_entry value="white" />
+                <list_entry value="yellow"/>
+                <list_entry value="green"/>
+                <list_entry value="red" />
+                <list_entry value="blue" />
+            </combo>
+        </item>
+        <item name="marking damage" type="way,closedway" preset_name_label="true">
+            <combo key="damage" text="damage level of the marking" values_searchable="true" default="">
+                <list_entry value=""  />
+                <list_entry value="low" />
+                <list_entry value="medium"/>
+                <list_entry value="high"/>
+            </combo>
+        </item>
+        <item name="Dashed line" icon="presets/vehicle/crossing_unmarked.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="line_thin"  />
+            <key key="subtype" value="dashed"/>
+        </item>
+        <item name="Solid line" icon="presets/transport/airport/taxiway.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="line_thin"  />
+            <key key="subtype" value="solid"/>
+        </item>
+        <item name="Double line (dashed+solid (from left to right) or solid+solid)" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="line_thin"  />
+            <combo key="subtype" text="Sub Type" values="dashed_solid,solid_dashed,solid_solid"  />
+        </item>
+        <item name="Stop line" icon="style_images/stop_line.png" type="way,closedway" preset_name_label="true">
+            <key key="type" value="stop_line" />
+        </item>
+        <item name="Pedestrian marking" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="pedestrian_marking" />
+        </item>
+        <item name="Zebra marking" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="zebra_marking" />
+        </item>
+        <item name="Other line" icon="presets/transport/way/way_service.svg" type="way,closedway" preset_name_label="true">
+            <combo key="type" text="(Line) Type" values="line_thick,line_thin,zig-zag,zebra_marking,pedestrian_marking,bike_marking,stop_line"  />
+            <combo key="subtype" text="Sub Type" values="solid,dashed,dashed_solid,solid_dashed,solid_solid"  />
+        </item>
+        <item name="Road border" icon="presets/landuse/meadow.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="road_border"/>
+        </item>
+        <item name="Guard rail" icon="presets/barrier/guard_rail.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="guard_rail"/>
+        </item>
+        <item name="Curbstone high" icon="presets/barrier/kerb.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="curbstone"/>
+            <key key="subtype" value="high"/>
+        </item>
+        <item name="Curbstone low: road side-entry" icon="presets/transport/passage/tunnel_avalanche_protector.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="curbstone_regular_road"/>
+            <key key="subtype" value="low"/>
+            <key key="road_network" value="yes"/>
+        </item>
+        <item name="Curbstone low: private property or restricted area" icon="presets/transport/passage/tunnel_avalanche_protector.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="curbstone"/>
+            <key key="subtype" value="low"/>
+            <key key="road_network" value="no"/>
+        </item>
+        <item name="Curbstone low: sidewalk entry for bikes and pedestrians" icon="presets/transport/passage/tunnel_avalanche_protector.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="curbstone"/>
+            <key key="subtype" value="low"/>
+            <key key="road_network" value="yes"/>
+            <key key="sidewalk_entry" value="true"/>
+        </item>
+        <item name="Fence" icon="presets/barrier/fence.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="fence"/>
+        </item>
+        <item name="Wall" icon="presets/barrier/wall.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="wall"/>
+        </item>
+            <item name="Building Line" icon="presets/accommodation/basic_hut.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="building"/>
+        </item>
+        <item name="Virtual line" icon="presets/transport/way/way_road.svg" type="way,closedway" preset_name_label="true">
+            <key key="type" value="virtual"/>
+        </item>
+        <item name="Bike dashed" icon="style_images/bike_lane.png" type="way,closedway" preset_name_label="true">
+            <key key="type" value="bike_marking"/>
+            <key key="subtype" value="dashed"/>
+        </item>
+        <item name="Bike solid" icon="style_images/bike_lane.png" type="way,closedway" preset_name_label="true">
+            <key key="type" value="bike_marking"/>
+            <key key="subtype" value="solid"/>
+        </item>
+        <item name="drivable_space_border" type="way,closedway" preset_name_label="true">
+            <key key="drivable_space_border" value="true"/>
+        </item>
+        <item name="Trajectory: Car" type="way" preset_name_label="true">
+            <key key="type" value="trajectory"/>
+            <key key="subtype" value="car"/>
+        </item>
+        <item name="Trajectory: Bicycle" type="way" preset_name_label="true">
+            <key key="type" value="trajectory"/>
+            <key key="subtype" value="bike"/>
+        </item>
+        <item name="Trajectory: Special vehicles (Bus, Taxi...)" type="way" preset_name_label="true">
+            <key key="type" value="trajectory"/>
+            <key key="subtype" value="special_vehicle"/>
+        </item>
+        <item name="Trajectory: Pedestrian" type="way" preset_name_label="true">
+            <key key="type" value="trajectory"/>
+            <key key="subtype" value="pedestrian"/>
+        </item>
+    <item name="Bike Lane Border" icon="style_images/bike_lane.png" type="way,closedway" preset_name_label="true">
+            <combo key="subtype" text="Sub Type" values="solid,dashed,dashed_solid,solid_dashed"  />
+            <key key="type" value="bike_marking"/>
+        </item>
+        <item name="Bicycle Symbol" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="symbol"/>
+            <key key="subtype" value="bicycle"/>
+        </item>
+        <item name="BUS Symbol" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="symbol"/>
+            <key key="subtype" value="bus"/>
+        </item>
+        <item name="30kph Road Symbol" icon="" type="way,closedway" preset_name_label="true">
+            <key key="type" value="symbol"/>
+            <key key="subtype" value="30"/>
+        </item>
+    </group>
+    <group name="Traffic signs/lights">
+        <item name="Traffic light: Cars" icon="presets/vehicle/traffic_signals.svg" type="way">
+            <key key="type" value="traffic_light"/>
+            <combo key="subtype" text="Traffic light type" values_searchable="true" values="red_yellow_green,red_green,red_yellow,red,yellow" default="" />
+            <combo key="direction" text="arrow symbol direction (leave empty for no arrow)" values_searchable="true" default="">
+                <list_entry value=""  />
+                <list_entry value="straight" />
+                <list_entry value="left"/>
+                <list_entry value="right"/>
+                <list_entry value="straight_left" />
+                <list_entry value="straight_right" />
+                <list_entry value="left_right"  />
+            </combo>
+        </item>
+        <item name="Traffic light: Bicycles" icon="style_images/traffic_light_bikes.svg" type="way">
+            <key key="type" value="traffic_light_bikes"/>
+            <combo key="subtype" text="Traffic light type" values_searchable="true" values="red_yellow_green,red_green,red_yellow,red,yellow" default="" />
+            <combo key="direction" text="arrow symbol direction (leave empty for no arrow)" values_searchable="true" default="">
+                <list_entry value=""  />
+                <list_entry value="straight" />
+                <list_entry value="left"/>
+                <list_entry value="right"/>
+                <list_entry value="straight_left" />
+                <list_entry value="straight_right" />
+                <list_entry value="left_right"  />
+            </combo>
+
+        </item>
+        <item name="Traffic light: Pedestrians" icon="style_images/traffic_light_pedestrians.svg" type="way">
+            <key key="type" value="traffic_light_pedestrians"/>
+            <combo key="subtype" text="Traffic light type" values_searchable="true" values="red_yellow_green,red_green,red_yellow,red,yellow" default="" />
+        </item>
+        <item name="Traffic light: Misc (Tram, Bus...)" icon="style_images/traffic_light_misc.svg" type="way">
+            <key key="type" value="traffic_light_misc"/>
+        </item>
+        <item name="Generic traffic sign" icon="style_images/101.png" type="way">
+            <key key="type" value="traffic_sign"/>
+            <text key="subtype" text="Traffic sign ID" default="de250" />
+        </item>
+        <item name="Stop sign" icon="presets/vehicle/restriction/stop.svg" type="way">
+            <key key="type" value="traffic_sign"/>
+            <key key="subtype" value="de206"/>
+        </item>
+        <item name="Arrow" icon="style_images/pf-g.png" type="way">
+            <key key="type" value="arrow"/>
+            <combo key="subtype" text="Direction" values_searchable="true" default="straight" >
+                <list_entry value="straight" />
+                <list_entry value="left"/>
+                <list_entry value="right"/>
+                <list_entry value="straight_left" />
+                <list_entry value="straight_right" />
+                <list_entry value="left_right"  />
+            </combo>
+        </item>
+        <item name="Speed limit" icon="presets/vehicle/restriction/maxspeed.svg" type="way">
+            <key key="type" value="traffic_sign"/>
+            <combo key="subtype" text="Speed limit" values_searchable="true">
+                <list_entry value="de274-30" short_description="30 kmh" />
+                <list_entry value="de274-50" short_description="50 kmh" />
+                <list_entry value="de274-60" short_description="60 kmh" />
+                <list_entry value="de274-70" short_description="70 kmh" />
+                <list_entry value="de274-100" short_description="100 kmh" />
+                <list_entry value="de274-120" short_description="120 kmh" />
+                <list_entry value="de282" short_description="end of speed limit" />
+            </combo>
+        </item>
+    </group>
+</group>
+</presets>
