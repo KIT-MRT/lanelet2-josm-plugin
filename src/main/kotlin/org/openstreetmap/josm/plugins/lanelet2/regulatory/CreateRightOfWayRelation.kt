@@ -23,10 +23,10 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
  *
  * One SequenceCommand. Port of `create_right_of_way_relation.py`.
  *
- * The Jython 3-step wizard (optional ref_line, then right-of-way lanelets, then
- * yield lanelets) runs when the collection-dialog setting is on. Off: [run]
- * does not guess roles from a mixed selection and warns; [apply] remains the
- * headless-testable create path.
+ * [run] drives the Jython 3-step wizard: optional ref_line, then the
+ * right-of-way lanelets, then the yielding ones. It needs the collector
+ * regardless of the opt-in, since a flat selection cannot separate the two
+ * roles. [apply] remains the headless-testable create path.
  *
  * **lanelet2 C++:** `RightOfWay` emits `right_of_way` then `yield` then optional
  * `ref_line`. The Jython emits `yield` then `right_of_way` then `ref_line`.
@@ -106,18 +106,11 @@ All lanelets in the element must reference it."""
             return
         }
         val data = layer.data
-        if (!CollectionLogic.shouldOpenCollectionDialog()) {
+        if (!CollectionLogic.collectionDialogRequired()) {
+            // Headless only: there is no window to run the three steps in, and
+            // a flat selection cannot say which lanelets yield.
             val (_, err) = RegulatoryElements.extractRefLine(data.selected)
-            if (err != null) {
-                ui.warn(err, TITLE)
-                return
-            }
-            ui.warn(
-                "Enable \"Use collection dialog\" in Lanelet2 Settings to run the " +
-                    "right-of-way vs yield steps. Creating the relation needs two " +
-                    "distinct lanelet groups; the current selection cannot split them.",
-                TITLE,
-            )
+            ui.warn(err ?: "The right of way wizard needs a display.", TITLE)
             return
         }
         CollectionDialog.clearSelection(data)

@@ -195,6 +195,23 @@ class CollectionDialogTest {
         assertFalse(LaneletSettings.isCollectionDialogEnabled())
     }
 
+    /**
+     * The opt-in governs the actions that can fall back to the current
+     * selection. The right-of-way actions cannot: the Jython always opens the
+     * collector, and creating the element needs the right_of_way and yield
+     * groups kept apart. Gating them behind the (off by default) checkbox left
+     * the feature inert until the user found the setting.
+     */
+    @Test
+    fun rightOfWayNeedsTheCollectorRegardlessOfTheOptIn() {
+        assertFalse(LaneletSettings.isCollectionDialogEnabled(), "opt-in stays off by default")
+        assertTrue(CollectionLogic.collectionDialogRequired(headless = false))
+        assertFalse(
+            CollectionLogic.collectionDialogRequired(headless = true),
+            "only a missing display may skip the collector",
+        )
+    }
+
     @Test
     fun wizardPagingStillNextPrevDone() {
         assertEquals(1, DebugRightOfWayWizard.nextIndex(0, 3))

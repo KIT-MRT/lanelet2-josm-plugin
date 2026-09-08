@@ -102,6 +102,15 @@ object CollectionLogic {
         headless: Boolean = Dialogs.isHeadless(),
     ): Boolean = enabled && !headless
 
+    /**
+     * The right-of-way actions have no current-selection shortcut to fall back
+     * to: creating the element needs two distinct role groups (right_of_way vs
+     * yield), which a flat selection cannot express, and the Jython opens the
+     * collector unconditionally for both of them. They ignore the opt-in, which
+     * only governs actions that do work from the current selection.
+     */
+    fun collectionDialogRequired(headless: Boolean = Dialogs.isHeadless()): Boolean = !headless
+
     fun extractLaneletsForAdd(
         data: DataSet,
         selection: Iterable<OsmPrimitive?>,

@@ -29,10 +29,10 @@ import javax.swing.SwingUtilities
  *
  * No dataset mutation (no undo). Port of `debug_right_of_way_wizard.py`.
  *
- * [run] opens the collection dialog when that setting is on; otherwise it uses
- * the current selection of `right_of_way` regulatory elements (or ways that
- * belong to them). [pageFor] / [nextIndex] / [prevIndex] are headless-testable.
- * The wizard itself is read-only (no undo entries).
+ * [run] collects the relations through the collection dialog, as the Jython
+ * does; only a headless caller falls back to the current selection.
+ * [pageFor] / [nextIndex] / [prevIndex] are headless-testable. The wizard
+ * itself is read-only (no undo entries).
  */
 object DebugRightOfWayWizard {
     const val TITLE = "Right of Way Debug Wizard"
@@ -124,7 +124,7 @@ Use Prev/Next to navigate between relations."""
             return
         }
         val data = layer.data
-        if (CollectionLogic.shouldOpenCollectionDialog()) {
+        if (CollectionLogic.collectionDialogRequired()) {
             CollectionDialog.clearSelection(data)
             CollectionDialog.showRelationCollection(
                 data = data,
