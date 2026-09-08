@@ -11,9 +11,7 @@ import java.awt.event.MouseEvent
 import java.io.File
 import javax.swing.AbstractAction
 import javax.swing.BorderFactory
-import javax.swing.BoxLayout
 import javax.swing.JButton
-import javax.swing.JCheckBox
 import javax.swing.JComponent
 import javax.swing.JDialog
 import javax.swing.JLabel
@@ -43,63 +41,24 @@ object AutotagNewElements {
     fun run() {
         if (Dialogs.isHeadless()) return
         val parent = Dialogs.parent()
-        val (panel, enabledBox, textArea) = buildPanel()
+        val panel = AutotagSettingsPanel.create { Dialogs.parent() }
         val result = JOptionPane.showConfirmDialog(
-            parent, panel, TITLE,
+            parent, panel.component, TITLE,
             JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE,
         )
         if (result != JOptionPane.OK_OPTION) return
-        val pairs = AutotagLogic.textToTags(textArea.text ?: "")
-        AutotagHook.setTags(pairs)
-        AutotagHook.setEnabled(enabledBox.isSelected)
+        panel.save()
+        val pairs = AutotagLogic.textToTags(panel.textArea.text ?: "")
         val msg = when {
-            enabledBox.isSelected && pairs.isNotEmpty() -> {
+            panel.enabledBox.isSelected && pairs.isNotEmpty() -> {
                 val summary = pairs.joinToString(", ") { (k, v) -> "$k=$v" }
                 "Autotagging ON. New elements get: $summary"
             }
-            enabledBox.isSelected ->
+            panel.enabledBox.isSelected ->
                 "Autotagging is ON but no tags are set - nothing will be applied."
             else -> "Autotagging is OFF."
         }
         Dialogs.infoAutoClose(msg, TITLE, 2500)
-    }
-
-    private fun buildPanel(): Triple<JPanel, JCheckBox, JTextArea> {
-        val panel = JPanel(BorderLayout(8, 8))
-        panel.border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
-        val enabledBox = JCheckBox(
-            "Autotag newly created elements (nodes, ways, relations)",
-            AutotagHook.isEnabled(),
-        )
-        val hint = JLabel(
-            "<html>One <b>key=value</b> per line. Applied to elements you draw or " +
-                "paste (negative id); loaded file elements are untouched.</html>",
-        )
-        val north = JPanel()
-        north.layout = BoxLayout(north, BoxLayout.Y_AXIS)
-        for (comp in listOf<JComponent>(enabledBox, hint)) {
-            comp.alignmentX = Component.LEFT_ALIGNMENT
-            north.add(comp)
-        }
-        panel.add(north, BorderLayout.NORTH)
-        val textArea = JTextArea(AutotagLogic.tagsToText(AutotagHook.getTags()), 6, 36)
-        textArea.toolTipText = "e.g. file_origin=/path/to/your_map_ll2.osm"
-        val scroll = JScrollPane(textArea)
-        scroll.preferredSize = Dimension(420, 130)
-        panel.add(scroll, BorderLayout.CENTER)
-        val south = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0))
-        south.add(JLabel("file_origin:"))
-        val choose = JButton("Choose file_origin...")
-        choose.toolTipText = "Open a searchable table of file_origin values from the active layer"
-        choose.addActionListener {
-            val sel = showFileOriginPicker(Dialogs.parent(), AutotagHook.existingFileOrigins())
-            if (sel != null) {
-                applyFileOriginToText(textArea, sel)
-            }
-        }
-        south.add(choose)
-        panel.add(south, BorderLayout.SOUTH)
-        return Triple(panel, enabledBox, textArea)
     }
 
     internal fun applyFileOriginToText(textArea: JTextArea, path: String) {
