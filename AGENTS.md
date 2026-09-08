@@ -92,6 +92,17 @@ Requires JDK 21, compiles against JOSM 19555.
 ./gradlew runJosm   # launch one JOSM with the plugin
 ```
 
+**Do not put heavy or symlinked runtime data under JOSM's user data dir.**
+`runJosm` redirects JOSM user data into `build/.josm/userdata`, so anything the
+plugin writes there lands inside Gradle's build directory. The sidecar venv did,
+and broke the dev loop twice: `initJosmPrefs` fails with "Couldn't follow
+symbolic link .../venv/bin/python" (a venv's `bin/python` is a relative symlink
+to `bin/python3`), and `clean` deletes a ~116 MB pip install. The venv therefore
+lives at `$XDG_DATA_HOME/josm-lanelet2/venv` instead; see
+`BackendStore.defaultVenvDir`. Extracted *scripts* stay in JOSM user data —
+they are small and regenerate from the jar. If `initJosmPrefs` ever fails on a
+symlink again, something new is writing into `build/.josm`.
+
 **The repo must have at least one git commit.** `generateManifest` reads
 `HEAD` via jgit for `Plugin-Date`; on a repo with zero commits `resolve("HEAD")`
 returns null and the task fails with a confusing NPE.

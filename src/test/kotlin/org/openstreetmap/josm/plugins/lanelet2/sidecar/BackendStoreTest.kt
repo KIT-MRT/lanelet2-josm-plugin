@@ -20,6 +20,43 @@ class BackendStoreTest {
     }
 
     @Test
+    fun venvDirFollowsXdgDataHome() {
+        val dir = BackendStore.defaultVenvDir(xdgDataHome = "/xdg/data", userHome = "/home/u")
+        assertEquals(File("/xdg/data/josm-lanelet2/venv"), dir)
+    }
+
+    @Test
+    fun venvDirFallsBackToLocalShareUnderHome() {
+        val dir = BackendStore.defaultVenvDir(xdgDataHome = null, userHome = "/home/u")
+        assertEquals(File("/home/u/.local/share/josm-lanelet2/venv"), dir)
+    }
+
+    @Test
+    fun venvDirIgnoresRelativeXdgDataHomePerSpec() {
+        val dir = BackendStore.defaultVenvDir(xdgDataHome = "relative/dir", userHome = "/home/u")
+        assertEquals(File("/home/u/.local/share/josm-lanelet2/venv"), dir)
+        val blank = BackendStore.defaultVenvDir(xdgDataHome = "  ", userHome = "/home/u")
+        assertEquals(File("/home/u/.local/share/josm-lanelet2/venv"), blank)
+    }
+
+    /**
+     * Regression: the venv used to default under JOSM's user data directory,
+     * which `runJosm` redirects into `build/.josm`. Gradle then failed to
+     * traverse `venv/bin/python` and `clean` deleted the pip install.
+     */
+    @Test
+    fun venvDirIsOutsideJosmUserDataAndBuildDir() {
+        val venv = BackendStore.defaultVenvDir().absolutePath
+        val extract = BackendStore.defaultExtractDir().absolutePath
+        assertFalse(venv.startsWith(extract), "venv must not live under the scripts dir")
+        assertFalse(
+            venv.contains("${File.separator}build${File.separator}"),
+            "venv must not live inside a Gradle build directory: $venv",
+        )
+        assertFalse(venv.contains(".josm"), "venv must not live in JOSM user data: $venv")
+    }
+
+    @Test
     fun shippedVersionIsDeterministic() {
         val a = BackendStore.shippedVersion()
         val b = BackendStore.shippedVersion()

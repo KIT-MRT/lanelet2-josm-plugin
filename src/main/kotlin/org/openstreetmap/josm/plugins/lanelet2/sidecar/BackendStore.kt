@@ -46,7 +46,34 @@ object BackendStore {
         return File(File(File(root, "plugins"), "lanelet2"), BackendScripts.EXTRACT_SUBDIR)
     }
 
-    fun defaultVenvDir(): File = File(defaultExtractDir().parentFile, BackendScripts.VENV_SUBDIR)
+    /**
+     * Directory holding the private virtualenv, by default
+     * `$XDG_DATA_HOME/josm-lanelet2/venv` (`~/.local/share/...` when unset).
+     *
+     * Deliberately **outside** JOSM's user data directory, unlike the extracted
+     * scripts. Under `runJosm` the Gradle JOSM plugin redirects user data into
+     * `build/.josm`, and a venv there breaks the dev loop twice over: Gradle
+     * traverses it and `initJosmPrefs` fails on `bin/python` (a relative symlink
+     * to `bin/python3`), and `clean` discards a ~116 MB pip install. The
+     * extracted scripts are unaffected because they are small and regenerate
+     * from the jar. An explicit `backends.python` setting still wins over this.
+     */
+    fun defaultVenvDir(
+        xdgDataHome: String? = System.getenv("XDG_DATA_HOME"),
+        userHome: String? = System.getProperty("user.home"),
+    ): File {
+        // The XDG spec says a non-absolute XDG_DATA_HOME must be ignored.
+        val base = xdgDataHome
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf { it.isAbsolute }
+            ?: File(
+                userHome?.takeIf { it.isNotBlank() }
+                    ?: System.getProperty("java.io.tmpdir"),
+                ".local/share",
+            )
+        return File(File(base, BackendScripts.VENV_APP_DIR), BackendScripts.VENV_SUBDIR)
+    }
 
     /**
      * Ensure [dir] contains the current shipped scripts. Returns [dir].

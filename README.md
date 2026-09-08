@@ -43,6 +43,15 @@ its jar and manages a private virtualenv for them; see the in-app
 
 The upstream `lanelet2` wheel is Linux-only and supports Python 3.8 to 3.11.
 
+The virtualenv lives at `$XDG_DATA_HOME/josm-lanelet2/venv`
+(`~/.local/share/josm-lanelet2/venv` when `XDG_DATA_HOME` is unset), outside
+JOSM's user data directory so that `./gradlew clean` cannot discard it. Point the
+wizard's *Advanced* section at an existing interpreter to use your own instead.
+
+The 3D viewer is independent of all this: its server is Python-standard-library
+only and runs on the system `python3`, so it works even when the `lanelet2`
+install is missing or broken.
+
 ## Testing
 
 ```bash

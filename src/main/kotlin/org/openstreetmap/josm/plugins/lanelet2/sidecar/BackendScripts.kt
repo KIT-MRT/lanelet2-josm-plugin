@@ -13,6 +13,9 @@ object BackendScripts {
     const val EXTRACT_SUBDIR = "backends"
     const val VENV_SUBDIR = "venv"
 
+    /** Application directory under the XDG data home that holds the venv. */
+    const val VENV_APP_DIR = "josm-lanelet2"
+
     const val POSITIVE_IDS = "positive_ids"
     const val MERGE_OSM_FILES = "merge_osm_files"
     const val SPLIT_MERGED_OSM_FILE = "split_merged_osm_file"
