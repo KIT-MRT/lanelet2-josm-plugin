@@ -4,11 +4,18 @@ import org.openstreetmap.josm.data.preferences.sources.PresetPrefHelper
 import org.openstreetmap.josm.data.preferences.sources.SourceEntry
 import org.openstreetmap.josm.data.preferences.sources.SourceType
 import org.openstreetmap.josm.gui.MainApplication
+import org.openstreetmap.josm.gui.preferences.ToolbarPreferences
+import org.openstreetmap.josm.gui.tagging.presets.TaggingPreset
+import org.openstreetmap.josm.gui.tagging.presets.TaggingPresetMenu
+import org.openstreetmap.josm.gui.tagging.presets.TaggingPresetReader
+import org.openstreetmap.josm.gui.tagging.presets.TaggingPresetSeparator
 import org.openstreetmap.josm.gui.tagging.presets.TaggingPresets
+import org.openstreetmap.josm.spi.preferences.Config
 import org.openstreetmap.josm.tools.Logging
 
 object TaggingPresetsInstaller {
     const val PRESET_URL = "resource://lanelet2/ll2_editor_presets.xml"
+    private const val PRESET_NAME_PREFIX = "Lanelet2/"
 
     /**
      * Icon search root handed to JOSM for the presets' relative `style_images/...`
@@ -21,18 +28,18 @@ object TaggingPresetsInstaller {
 
     fun installOnLaunch() {
         if (!LaneletSettings.getPresetsAutoInstallOnLaunch()) return
-        installPresets()
+        if (!isInstalled()) {
+            installPresets()
+        } else {
+            if (ensureIconSource()) reloadTaggingPresets()
+            afterPresetSetup()
+        }
     }
 
     fun isInstalled(): Boolean = persistedSources().any { isOurSource(it) }
 
     /**
      * Register [ICON_SOURCE] with JOSM's preset icon search path. Idempotent.
-     *
-     * Without this, every relative icon reference in the bundled presets fails to
-     * resolve, because JOSM only looks in `TaggingPresets.ICON_SOURCES` plus its
-     * own stock locations. The Jython equivalent registered a filesystem
-     * directory; the bundled copy lives in the jar instead.
      *
      * @return true if the search path was modified.
      */
@@ -50,7 +57,6 @@ object TaggingPresetsInstaller {
     }
 
     fun installPresets(): Boolean {
-        // Must precede loading, so icons resolve on the first pass.
         var changed = ensureIconSource()
         if (!isInstalled()) {
             val entries = ArrayList(persistedSources())
@@ -74,10 +80,163 @@ object TaggingPresetsInstaller {
         }
         if (changed) {
             reloadTaggingPresets()
-            // TODO: pin selected LL2 tagging-preset items onto the JOSM main toolbar
-            // (Jython sync_toolbar_from_settings / apply_minimal_josm_toolbar).
+            afterPresetSetup()
+            return true
         }
-        return changed
+        return false
+    }
+
+    fun uninstallPresets(): Boolean {
+        if (!isInstalled()) return false
+        val toolbarStrings = mutableListOf<String>()
+        for (preset in listEditorPresets()) {
+            try {
+                val ts = preset.toolbarString
+                if (!ts.isNullOrBlank()) toolbarStrings.add(ts)
+            } catch (_: Exception) {
+            }
+        }
+        val entries = persistedSources().filterNot { isOurSource(it) }
+        return try {
+            PresetPrefHelper.INSTANCE.put(entries)
+            removeIconSource()
+            removeToolbarStrings(toolbarStrings)
+            reloadTaggingPresets()
+            true
+        } catch (e: Exception) {
+            Logging.error("lanelet2: failed to uninstall tagging presets")
+            Logging.error(e)
+            false
+        }
+    }
+
+    fun listEditorPresets(): List<TaggingPreset> {
+        val out = mutableListOf<TaggingPreset>()
+        try {
+            for (tp in TaggingPresets.getTaggingPresets()) {
+                if (tp is TaggingPresetSeparator || tp is TaggingPresetMenu) continue
+                val raw = try {
+                    tp.rawName
+                } catch (_: Exception) {
+                    tp.name
+                }
+                if (raw != null && raw.startsWith(PRESET_NAME_PREFIX)) {
+                    out.add(tp)
+                }
+            }
+        } catch (_: Exception) {
+        }
+        if (out.isNotEmpty()) return out
+        if (isInstalled()) return out
+        return listPresetsFromFile()
+    }
+
+    fun isOnToolbar(preset: TaggingPreset): Boolean {
+        return try {
+            val ts = preset.toolbarString ?: return false
+            ts in ToolbarPreferences.getToolString()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun setOnToolbar(preset: TaggingPreset, enabled: Boolean): Boolean {
+        return try {
+            val ts = preset.toolbarString ?: return false
+            val tb = MainApplication.getToolbar() ?: return false
+            val present = ts in ToolbarPreferences.getToolString()
+            val want = enabled
+            when {
+                want && !present -> {
+                    tb.addCustomButton(ts, -1, false)
+                    true
+                }
+                !want && present -> {
+                    tb.addCustomButton(ts, -1, true)
+                    true
+                }
+                else -> false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun applyMinimalJosmToolbar(): Boolean = setToolbarList(LaneletSettings.LL2_MINIMAL_JOSM_TOOLBAR)
+
+    fun restoreJosmDefaultToolbar(preserveLl2Presets: Boolean = true): Boolean {
+        val ok = setToolbarList(LaneletSettings.JOSM_DEFAULT_TOOLBAR)
+        if (ok && preserveLl2Presets && isInstalled()) {
+            syncToolbarFromSettings()
+        }
+        return ok
+    }
+
+    fun syncToolbarFromSettings() {
+        val enabled = LaneletSettings.getToolbarPresetNames().toSet()
+        for (tp in listEditorPresets()) {
+            val nm = tp.name
+            setOnToolbar(tp, nm in enabled)
+        }
+    }
+
+    fun applyToolbarDefaults() {
+        val names = LaneletSettings.getToolbarPresetNames()
+        val enabled = names.toSet()
+        for (tp in listEditorPresets()) {
+            val nm = tp.name
+            setOnToolbar(tp, nm in enabled)
+        }
+        LaneletSettings.setToolbarPresetNames(enabled.toList())
+    }
+
+    private fun afterPresetSetup() {
+        applyMinimalJosmToolbar()
+        syncToolbarFromSettings()
+    }
+
+    private fun listPresetsFromFile(): List<TaggingPreset> {
+        return try {
+            TaggingPresetReader.readAll(PRESET_URL, false)
+                .filter { it !is TaggingPresetSeparator && it !is TaggingPresetMenu }
+                .map { it as TaggingPreset }
+        } catch (e: Exception) {
+            Logging.debug("lanelet2: could not read bundled presets: {0}", e.message)
+            emptyList()
+        }
+    }
+
+    private fun setToolbarList(items: List<String>): Boolean {
+        return try {
+            Config.getPref().putList("toolbar", items)
+            MainApplication.getToolbar()?.refreshToolbarControl()
+            true
+        } catch (e: Exception) {
+            Logging.error("lanelet2: failed to set toolbar list")
+            Logging.error(e)
+            false
+        }
+    }
+
+    private fun removeToolbarStrings(strings: List<String>) {
+        val tb = MainApplication.getToolbar() ?: return
+        for (ts in strings) {
+            try {
+                tb.addCustomButton(ts, -1, true)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun removeIconSource(): Boolean {
+        val kept = iconSources().filter { it != ICON_SOURCE }
+        if (kept.size == iconSources().size) return false
+        return try {
+            TaggingPresets.ICON_SOURCES.put(kept)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun isOurSource(entry: SourceEntry): Boolean {

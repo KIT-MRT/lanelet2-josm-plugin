@@ -282,6 +282,8 @@ silent data loss. Keep them, and keep this note.
 
 - `src/main/kotlin/.../platform/` — settings, action registry, menu/toolbar,
   style and preset installers.
+- `src/main/kotlin/.../settings/` — Lanelet2 Settings window and sub-dialogs
+  (Map Styles, Tagging Presets), plus lanelet-default toolbar toggle slots.
 - `src/main/kotlin/.../infra/` — pure geometry and the lanelet data model over
   JOSM primitives.
 - `src/main/resources/lanelet2/` — MapCSS, presets, shared `style_images/`.
@@ -337,3 +339,19 @@ Jython quirks to keep (do not "fix"):
 - **`destroy()` calls `hideNotify()` then `super.destroy()`**, which may
   call `hideNotify` again if the dialog is still showing; removal is
   idempotent.
+## Settings UI quirks (ported faithfully)
+
+- **Grid cell spinner shows `int(get_merge_grid_cell_m())`**, truncating
+  fractional stored values for display (Jython `SpinnerNumberModel` uses `int(...)`).
+- **Routing debounce spinner uses integer division** (`ms / 1000`) in
+  [RoutingPanel].
+- **Settings window fixed size 520×720** like the Jython dialog (`pack()` is
+  not used).
+- **Map Styles / Presets sub-dialog errors** show via [Dialogs.error] when
+  opened from the settings window (Jython used `JOptionPane` on the parent).
+- **Backend setup button label** is “Set up Lanelet2 backends” with
+  [BackendSetupWizard] (Jython ll2_dependent tier used “Python3 Backends ...”
+  and a separate dialog — behaviour equivalent, label differs).
+- **Commit-reminder checkbox** lives in [RoutingPanel]; the Jython internal
+  launcher always-on timer is settings-gated in the Kotlin port (see existing
+  note under `getGitCommitReminder`).

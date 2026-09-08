@@ -1,88 +1,27 @@
-package org.openstreetmap.josm.plugins.lanelet2.dependent
+package org.openstreetmap.josm.plugins.lanelet2.settings
 
-import org.openstreetmap.josm.gui.MainApplication
-import org.openstreetmap.josm.plugins.lanelet2.platform.ActionRegistry
-import org.openstreetmap.josm.plugins.lanelet2.platform.ActionSlot
-import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
-import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletAction
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
-import org.openstreetmap.josm.plugins.lanelet2.platform.MenuId
+import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
 import org.openstreetmap.josm.plugins.lanelet2.sidecar.BackendSetupWizard
 import java.awt.FlowLayout
-import java.awt.GridLayout
-import java.awt.event.ActionEvent
 import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JComboBox
-import javax.swing.JDialog
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
-import javax.swing.WindowConstants
 
 /**
- * Routing settings panel injected by the Jython `ll2_dependent` tier into the
- * core settings window. The rest of that window is not ported yet; this dialog
- * is the home for participant / debounce / hook-full-map plus the backends
- * wizard button.
+ * Routing settings rows injected into [SettingsWindow]. Port of
+ * `ll2_dependent/scripts/ll2_routing_settings.build_routing_panel`, plus the
+ * commit-reminder checkbox from the internal launcher (settings-gated; the
+ * Jython timer itself is not ported).
  *
  * Debounce spinner shows seconds via **integer division** of milliseconds
  * (`ms / 1000`), matching Jython 2.7 (`int(ms) / 1000` truncates).
  */
-object RoutingSettings {
-    const val TITLE = "Lanelet2 Settings"
-
-    fun registerAll(registry: ActionRegistry = ActionRegistry.INSTANCE) {
-        val action = object : LaneletAction(TITLE, "icons/settings.svg", TITLE, null) {
-            override fun actionPerformed(e: ActionEvent) = show()
-        }
-        registry.register(
-            ActionSlot(
-                id = "settings_ui.lanelet2_settings_window",
-                action = action,
-                toolbarLabel = "Settings",
-                iconName = "icons/settings.svg",
-                menu = MenuId.UTILS,
-            ),
-        )
-    }
-
-    fun show() {
-        if (Dialogs.isHeadless()) return
-        val parent = try {
-            MainApplication.getMainFrame()
-        } catch (_: Exception) {
-            null
-        }
-        val dlg = JDialog(parent, TITLE, true)
-        dlg.defaultCloseOperation = WindowConstants.DISPOSE_ON_CLOSE
-        val content = JPanel(GridLayout(0, 1, 0, 4))
-        val onOk = addPanel(content)
-        val buttons = JPanel(FlowLayout(FlowLayout.RIGHT))
-        val ok = JButton("OK")
-        val cancel = JButton("Cancel")
-        ok.addActionListener {
-            onOk()
-            dlg.dispose()
-        }
-        cancel.addActionListener { dlg.dispose() }
-        buttons.add(ok)
-        buttons.add(cancel)
-        val wrap = JPanel()
-        wrap.layout = javax.swing.BoxLayout(wrap, javax.swing.BoxLayout.Y_AXIS)
-        wrap.add(content)
-        wrap.add(buttons)
-        dlg.add(wrap)
-        dlg.pack()
-        dlg.setLocationRelativeTo(parent)
-        dlg.isVisible = true
-    }
-
-    /**
-     * Add routing rows to [content] and return the persist-on-OK callback.
-     * Port of `ll2_routing_settings.build_routing_panel`.
-     */
+object RoutingPanel {
     fun addPanel(content: JPanel): () -> Unit {
         content.add(JLabel(" "))
         content.add(JLabel("Routing (lanelet2 backend):"))
