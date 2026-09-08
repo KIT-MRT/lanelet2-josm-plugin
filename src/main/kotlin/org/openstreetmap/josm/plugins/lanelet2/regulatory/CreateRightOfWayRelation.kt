@@ -7,6 +7,8 @@ import org.openstreetmap.josm.data.osm.RelationMember
 import org.openstreetmap.josm.data.osm.Way
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.plugins.lanelet2.infra.RegulatoryElements
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
@@ -21,11 +23,10 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
  *
  * One SequenceCommand. Port of `create_right_of_way_relation.py`.
  *
- * The Jython 3-step collection wizard is not ported. [run] cannot split "right of
- * way" vs "yield" from a mixed selection, so it is a no-op with a warning unless
- * callers use [apply] (tests / future wizard). Interactive users should wait for
- * the collection dialog; until then this action only reports that the wizard is
- * unavailable and does not guess roles.
+ * The Jython 3-step wizard (optional ref_line, then right-of-way lanelets, then
+ * yield lanelets) runs when the collection-dialog setting is on. Off: [run]
+ * does not guess roles from a mixed selection and warns; [apply] remains the
+ * headless-testable create path.
  *
  * **lanelet2 C++:** `RightOfWay` emits `right_of_way` then `yield` then optional
  * `ref_line`. The Jython emits `yield` then `right_of_way` then `ref_line`.
@@ -40,6 +41,31 @@ object CreateRightOfWayRelation {
     const val TITLE = "Create Right of Way Relation"
     const val SEQUENCE_NAME = "Create right of way regulatory element"
     const val SUBTYPE = "right_of_way"
+
+    const val HELP_TEXT = """Right of Way Regulatory Element (Lanelet2)
+
+Tags: type=regulatory_element, subtype=right_of_way
+
+Roles:
+- yield: Lanelets that must yield.
+- right_of_way: Lanelets that have priority over the yielding ones.
+- ref_line (optional): Lines where yielding vehicles must stop. If absent, end of yield lanelet.
+
+By default, intersecting lanelets are "first come first served". This element overrides that.
+Only one lanelet per lane chain needs to be referenced (typically the last before the intersection).
+All lanelets in the element must reference it."""
+
+    val HELP_LINKS: List<Pair<String, String>> = listOf(
+        "RegulatoryElementTagging" to "RegulatoryElementTagging.md",
+    )
+
+    fun createdMessage(yieldCount: Int, rightOfWayCount: Int, hasRefLine: Boolean): String {
+        var msg = "Created right of way regulatory element.\n"
+        msg += "Yield: $yieldCount, Right of way: $rightOfWayCount"
+        if (hasRefLine) msg += ", ref_line: yes"
+        msg += "\n\nReview in Properties dialog (Alt+O if not visible)."
+        return msg
+    }
 
     fun buildRelation(
         refLine: Way?,
@@ -80,19 +106,67 @@ object CreateRightOfWayRelation {
             return
         }
         val data = layer.data
-        val selection = data.selected
-        val (_, err) = RegulatoryElements.extractRefLine(selection)
-        if (err != null) {
-            ui.warn(err, TITLE)
+        if (!CollectionLogic.shouldOpenCollectionDialog()) {
+            val (_, err) = RegulatoryElements.extractRefLine(data.selected)
+            if (err != null) {
+                ui.warn(err, TITLE)
+                return
+            }
+            ui.warn(
+                "Enable \"Use collection dialog\" in Lanelet2 Settings to run the " +
+                    "right-of-way vs yield steps. Creating the relation needs two " +
+                    "distinct lanelet groups; the current selection cannot split them.",
+                TITLE,
+            )
             return
         }
-        // Without the collection dialog there is no way to collect two distinct
-        // lanelet groups (right_of_way vs yield) from one selection. Do not guess.
-        // [apply] / [buildRelation] are the headless-testable port of do_create_relation.
-        ui.warn(
-            "The Right of Way wizard (separate right-of-way vs yield lanelet steps) " +
-                "is not available yet. Creating the relation needs the collection dialog.",
-            TITLE,
+        CollectionDialog.clearSelection(data)
+        CollectionDialog.showStep(
+            title = "Right of Way - Step 1/3",
+            message = "Select the ref_line (stop line, type=stop_line).\n\n" +
+                "Leave selection empty to skip.\nClick OK when done.",
+            onOk = {
+                val (refLine, err) = RegulatoryElements.extractRefLine(data.selected)
+                if (err != null) {
+                    ui.warn(err, TITLE)
+                    return@showStep
+                }
+                CollectionDialog.clearSelection(data)
+                CollectionDialog.showLaneletCollection(
+                    data = data,
+                    onDone = { rightOfWay ->
+                        CollectionDialog.clearSelection(data)
+                        CollectionDialog.showLaneletCollection(
+                            data = data,
+                            onDone = { yieldLanelets ->
+                                apply(data, refLine, rightOfWay, yieldLanelets, layer)
+                                ui.info(
+                                    createdMessage(yieldLanelets.size, rightOfWay.size, refLine != null),
+                                    TITLE,
+                                )
+                            },
+                            title = "Right of Way - Step 3/3",
+                            message = "Select lanelets or linestrings (lane boundaries) that have to YIELD.",
+                            minCount = 1,
+                            helpTitle = "Right of Way - Lanelet2 Tagging",
+                            helpText = HELP_TEXT,
+                            helpLinks = HELP_LINKS,
+                            ui = ui,
+                        )
+                    },
+                    title = "Right of Way - Step 2/3",
+                    message = "Select lanelets or linestrings (lane boundaries) that have RIGHT OF WAY.",
+                    minCount = 1,
+                    helpTitle = "Right of Way - Lanelet2 Tagging",
+                    helpText = HELP_TEXT,
+                    helpLinks = HELP_LINKS,
+                    ui = ui,
+                )
+            },
+            highlight = "ref_line",
+            helpTitle = "Right of Way - Lanelet2 Tagging",
+            helpText = HELP_TEXT,
+            helpLinks = HELP_LINKS,
         )
     }
 }

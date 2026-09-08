@@ -8,8 +8,9 @@ import org.openstreetmap.josm.data.osm.Way
 /**
  * Selection extractors shared by lanelet edit actions.
  *
- * Port of the non-GUI helpers in `lanelet2_collection_dialog.py`. The collection
- * dialog itself is not ported; actions operate on the current JOSM selection.
+ * Port of the non-GUI helpers in `lanelet2_collection_dialog.py`. The dialog
+ * itself is [CollectionDialog]; these extractors are shared by both that UI
+ * and the current-selection shortcut.
  */
 object LaneletSelection {
     fun extractLanelets(selection: Iterable<OsmPrimitive?>): MutableList<Relation> {

@@ -53,6 +53,7 @@ object LaneletSettings {
     const val KEY_ZOOMFILTER_ENABLED = "zoomfilter.enabled"
     const val KEY_ZOOMFILTER_THRESHOLD = "zoomfilter.threshold"
     const val KEY_ZOOMFILTER_FILTERS = "zoomfilter.filters"
+    const val KEY_COLLECTION_DIALOG = "collection_dialog.enabled"
 
     const val ROUTING_AUTO_DEBOUNCE_MS_DEFAULT = 4000
     const val ROUTING_AUTO_DEBOUNCE_MS_MIN = 0
@@ -352,6 +353,20 @@ object LaneletSettings {
 
     fun setAutotagTagsRaw(raw: String) {
         put(KEY_AUTOTAG_TAGS, raw)
+    }
+
+    /**
+     * Opt into the legacy incremental collection dialog for Select Lanelets /
+     * Select Relations and the regulatory-element wizards. Off by default —
+     * those actions use the current JOSM selection. `"1"`-only, like autotag.
+     */
+    fun isCollectionDialogEnabled(default: Boolean = false): Boolean {
+        val raw = pref().get(prefKey(KEY_COLLECTION_DIALOG), null) ?: return default
+        return raw == "1"
+    }
+
+    fun setCollectionDialogEnabled(enabled: Boolean) {
+        putBoolean(KEY_COLLECTION_DIALOG, enabled)
     }
 
     /** Same `"1"`-only contract as [isAutotagEnabled]. */

@@ -6,9 +6,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.openstreetmap.josm.plugins.lanelet2.edit.TypeSubtype
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.OsmFixtures
 import org.openstreetmap.josm.plugins.lanelet2.infra.SelectRelations
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
+import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.spi.preferences.Config
 import org.openstreetmap.josm.spi.preferences.MemoryPreferences
 import java.nio.file.Path
@@ -67,6 +69,27 @@ class SelectFromLinestringsTest {
         assertEquals(1, n)
         assertEquals(setOf(keep), ds.selected.toSet())
         assertEquals(listOf(keep.uniqueId), SelectRelations.loadIdsFromFile(path))
+    }
+
+    @Test
+    fun initialFromFileSelectsLoadedRelations(@TempDir dir: Path) {
+        val left = OsmFixtures.way(0.0 to 1.0, 1.0 to 1.0)
+        val right = OsmFixtures.way(0.0 to 0.0, 1.0 to 0.0)
+        val ll = OsmFixtures.laneletRelation(left, right)
+        val ds = OsmFixtures.dataSet(ll)
+        val path = dir.resolve("lanelets.txt").toFile()
+        path.writeText("${ll.uniqueId}\n")
+        ds.clearSelection()
+        val loaded = SelectFromLinestrings.initialFromFile(ds, "lanelet", null, path)
+        assertEquals(listOf(ll), loaded)
+        assertEquals(setOf(ll), ds.selected.toSet())
+    }
+
+    @Test
+    fun collectionDialogSettingDoesNotChangeApplyShortcut() {
+        LaneletSettings.setCollectionDialogEnabled(true)
+        assertTrue(LaneletSettings.isCollectionDialogEnabled())
+        assertEquals(Dialogs.isHeadless(), !CollectionLogic.shouldOpenCollectionDialog())
     }
 
     @Test

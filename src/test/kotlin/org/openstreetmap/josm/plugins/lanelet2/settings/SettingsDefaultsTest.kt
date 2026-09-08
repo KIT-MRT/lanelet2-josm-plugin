@@ -27,6 +27,7 @@ class SettingsDefaultsTest {
     fun editingDefaultsMatchJython() {
         assertTrue(LaneletSettings.getDeleteTaggedNodes())
         assertTrue(LaneletSettings.getProtectMergeAnchors())
+        assertFalse(LaneletSettings.isCollectionDialogEnabled())
     }
 
     @Test
@@ -48,6 +49,7 @@ class SettingsDefaultsTest {
         LaneletSettings.setLaneletDefaultOneWay(LaneletSettings.ONE_WAY_NO)
         LaneletSettings.setDeleteTaggedNodes(false)
         LaneletSettings.setProtectMergeAnchors(false)
+        LaneletSettings.setCollectionDialogEnabled(true)
         LaneletSettings.setMergeGridCellM(75.0)
         LaneletSettings.setMapstyleAutoApplyOnLaunch(false)
         LaneletSettings.setPresetsAutoInstallOnLaunch(false)
@@ -57,6 +59,7 @@ class SettingsDefaultsTest {
         assertEquals(LaneletSettings.ONE_WAY_NO, LaneletSettings.getLaneletDefaultOneWay())
         assertFalse(LaneletSettings.getDeleteTaggedNodes())
         assertFalse(LaneletSettings.getProtectMergeAnchors())
+        assertTrue(LaneletSettings.isCollectionDialogEnabled())
         assertEquals(75.0, LaneletSettings.getMergeGridCellM(), 0.0)
         assertFalse(LaneletSettings.getMapstyleAutoApplyOnLaunch())
         assertFalse(LaneletSettings.getPresetsAutoInstallOnLaunch())

@@ -13,6 +13,8 @@ import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.applySequence
 import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.Lanelet
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletSelection
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
@@ -28,9 +30,8 @@ import java.util.LinkedHashMap
  * One SequenceCommand of [AddCommand]s targeting the **debug** dataset (not the
  * edit layer). Port of `debug_regulatory_element_connections.py`.
  *
- * The Jython subtype + collection wizard is not ported; [run] prompts for a
- * subtype via [UserPrompts.pick], then uses the current selection (regulatory
- * elements directly, or ways that are members of them).
+ * [run] prompts for a subtype via [UserPrompts.pick], then either opens the
+ * collection dialog (setting on) or uses the current selection.
  *
  * No MapCSS is registered: the original draws tagged ways/nodes and relies on
  * whatever styles are already on. [org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings.STYLE_CATALOG]
@@ -45,6 +46,16 @@ import java.util.LinkedHashMap
 object DebugRegulatoryConnections {
     const val TITLE = "Debug Regulatory Element Connections"
     const val SEQUENCE_NAME = "Debug regulatory element connections"
+
+    const val HELP_TEXT = """Debug Regulatory Element Connections (Lanelet2)
+
+Creates a new layer with polylines visualizing how regulatory elements connect to:
+- ref_line (stop lines)
+- refers (traffic lights, signs, etc.)
+- lanelets that reference the regulatory element
+
+Central nodes represent each relation. Ways show the direction of relationships.
+Useful for debugging relation structure and membership."""
 
     val WAY_TAG_MAP: Map<String, String> = mapOf(
         "ref_line" to "relation_to_ref_line",
@@ -345,9 +356,39 @@ object DebugRegulatoryConnections {
         } else {
             subtype
         }
+        if (CollectionLogic.shouldOpenCollectionDialog()) {
+            CollectionDialog.clearSelection(data)
+            val subtypeStr = relSubtype ?: "(any)"
+            CollectionDialog.showRelationCollection(
+                data = data,
+                onDone = { collected -> finishDebug(data, collected, relSubtype, ui) },
+                relType = "regulatory_element",
+                relSubtype = relSubtype,
+                title = "$TITLE: $subtypeStr",
+                message = "Select ways (e.g. traffic lights, stop lines) or regulatory_element relations. Add / Select / Done.",
+                minCount = 1,
+                helpTitle = TITLE,
+                helpText = HELP_TEXT,
+                helpLinks = listOf(
+                    "RegulatoryElementTagging" to "RegulatoryElementTagging.md",
+                    "LaneletAndAreaTagging" to "LaneletAndAreaTagging.md",
+                ),
+                ui = ui,
+            )
+            return
+        }
         val collected = LaneletSelection.extractRelationsOrFromWays(
             data, data.selected, "regulatory_element", relSubtype,
         )
+        finishDebug(data, collected, relSubtype, ui)
+    }
+
+    fun finishDebug(
+        data: DataSet,
+        collected: List<Relation>,
+        relSubtype: String?,
+        ui: UserPrompts,
+    ) {
         if (collected.isEmpty()) {
             ui.warn("Select at least 1 regulatory element (or a way that belongs to one).", TITLE)
             return

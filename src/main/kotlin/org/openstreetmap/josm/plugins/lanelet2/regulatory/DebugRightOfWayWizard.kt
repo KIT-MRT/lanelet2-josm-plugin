@@ -6,6 +6,8 @@ import org.openstreetmap.josm.data.osm.Relation
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.zoomToPrimitives
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletSelection
 import org.openstreetmap.josm.plugins.lanelet2.infra.RegulatoryElements
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
@@ -27,14 +29,25 @@ import javax.swing.SwingUtilities
  *
  * No dataset mutation (no undo). Port of `debug_right_of_way_wizard.py`.
  *
- * The Jython collection dialog is not ported; [run] uses the current selection
- * of `right_of_way` regulatory elements (or ways that belong to them). The
- * wizard UI itself is kept for interactive use; [pageFor] / [nextIndex] /
- * [prevIndex] are headless-testable.
+ * [run] opens the collection dialog when that setting is on; otherwise it uses
+ * the current selection of `right_of_way` regulatory elements (or ways that
+ * belong to them). [pageFor] / [nextIndex] / [prevIndex] are headless-testable.
+ * The wizard itself is read-only (no undo entries).
  */
 object DebugRightOfWayWizard {
     const val TITLE = "Right of Way Debug Wizard"
     const val TITLE_LAYER = "Right of Way Debug Wizard"
+    const val COLLECT_TITLE = "Right of Way Debug Wizard: Select Relations"
+
+    const val HELP_TEXT = """Right of Way Debug Wizard
+
+Select right_of_way regulatory elements, then step through each one.
+For each relation you can:
+- Select all right of way lanelets
+- Select all yielding lanelets
+- Select all ref_line(s)
+
+Use Prev/Next to navigate between relations."""
 
     data class Page(
         val relation: Relation,
@@ -111,9 +124,30 @@ object DebugRightOfWayWizard {
             return
         }
         val data = layer.data
+        if (CollectionLogic.shouldOpenCollectionDialog()) {
+            CollectionDialog.clearSelection(data)
+            CollectionDialog.showRelationCollection(
+                data = data,
+                onDone = { collected -> startWizard(data, collected, ui) },
+                relType = "regulatory_element",
+                relSubtype = "right_of_way",
+                title = COLLECT_TITLE,
+                message = "Select ways or right_of_way relations. Add / Select / Done. Then the wizard will open.",
+                minCount = 1,
+                helpTitle = TITLE,
+                helpText = HELP_TEXT,
+                helpLinks = listOf("RegulatoryElementTagging" to "RegulatoryElementTagging.md"),
+                ui = ui,
+            )
+            return
+        }
         val collected = LaneletSelection.extractRelationsOrFromWays(
             data, data.selected, "regulatory_element", "right_of_way",
         )
+        startWizard(data, collected, ui)
+    }
+
+    fun startWizard(data: DataSet, collected: List<Relation>, ui: UserPrompts = Dialogs) {
         if (collected.isEmpty()) {
             ui.info("No right_of_way relations to debug.", TITLE)
             return
@@ -231,11 +265,7 @@ object DebugRightOfWayWizard {
         refresh()
         dlg.pack()
         dlg.setSize(maxOf(450, dlg.width), maxOf(400, dlg.height))
-        try {
-            if (parent == null) dlg.setLocationRelativeTo(null)
-            else dlg.setLocationRelativeTo(parent)
-        } catch (_: Exception) {
-        }
+        CollectionDialog.positionUpperLeft(dlg, parent)
         dlg.isVisible = true
     }
 }

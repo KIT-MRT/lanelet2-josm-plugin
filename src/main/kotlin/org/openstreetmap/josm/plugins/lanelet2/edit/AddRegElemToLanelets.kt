@@ -7,6 +7,8 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.Relation
 import org.openstreetmap.josm.data.osm.RelationMember
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletSelection
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
@@ -18,12 +20,27 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
  * One SequenceCommand covering every lanelet that did not already reference it.
  * Port of `add_reg_elem_to_lanelets.py`.
  *
- * The Jython 2-step collection wizard is not ported; the action uses the current
- * selection (one regulatory element plus lanelets or their border linestrings).
+ * With the collection-dialog setting, [run] is the Jython 2-step wizard
+ * (pick the regulatory element, then collect lanelets). Off: current selection.
  */
 object AddRegElemToLanelets {
     const val TITLE = "Add Regulatory Element to Lanelets"
     const val SEQUENCE_NAME = "Add regulatory element to lanelets"
+
+    const val HELP_TEXT = """Add Regulatory Element to Lanelets (Lanelet2)
+
+Lanelets reference regulatory elements via the "regulatory_element" member role.
+Each lanelet that is affected by a restriction must have the regulatory element as a member.
+
+Regulatory elements: type=regulatory_element, subtype (traffic_light, traffic_sign, speed_limit, right_of_way, etc.)
+Lanelets: type=lanelet, left/right bounds (linestrings).
+
+This script adds an existing regulatory element to selected lanelets in bulk."""
+
+    val HELP_LINKS: List<Pair<String, String>> = listOf(
+        "RegulatoryElementTagging" to "RegulatoryElementTagging.md",
+        "LaneletAndAreaTagging" to "LaneletAndAreaTagging.md",
+    )
 
     fun extractRegulatoryElement(selection: Iterable<OsmPrimitive?>): Relation? {
         for (prim in selection) {
@@ -73,6 +90,37 @@ object AddRegElemToLanelets {
             return
         }
         val data = layer.data
+        if (CollectionLogic.shouldOpenCollectionDialog()) {
+            CollectionDialog.clearSelection(data)
+            CollectionDialog.showStep(
+                title = "Add Regulatory Element - Step 1/2",
+                message = "Select the regulatory element (type=regulatory_element) to add to lanelets.\n\nClick OK when done.",
+                onOk = {
+                    val regElem = extractRegulatoryElement(data.selected)
+                    if (regElem == null) {
+                        ui.warn("Select exactly 1 regulatory element (type=regulatory_element).", TITLE)
+                        return@showStep
+                    }
+                    CollectionDialog.clearSelection(data)
+                    CollectionDialog.showLaneletCollection(
+                        data = data,
+                        onDone = { lanelets -> finishAdd(regElem, lanelets.filter { it !== regElem }, layer, ui) },
+                        title = "Add Regulatory Element - Step 2/2",
+                        message = "Select lanelets or linestrings (lane boundaries). Linestrings infer lanelets (Mode B).",
+                        minCount = 1,
+                        helpTitle = "Add Regulatory Element - Lanelet2",
+                        helpText = HELP_TEXT,
+                        helpLinks = HELP_LINKS,
+                        ui = ui,
+                    )
+                },
+                highlight = "regulatory element",
+                helpTitle = "Add Regulatory Element - Lanelet2",
+                helpText = HELP_TEXT,
+                helpLinks = HELP_LINKS,
+            )
+            return
+        }
         val selection = data.selected
         val regElem = extractRegulatoryElement(selection)
         if (regElem == null) {
@@ -81,6 +129,15 @@ object AddRegElemToLanelets {
         }
         val lanelets = LaneletSelection.extractLaneletsOrFromLinestrings(data, selection)
             .filter { it !== regElem }
+        finishAdd(regElem, lanelets, layer, ui)
+    }
+
+    fun finishAdd(
+        regElem: Relation,
+        lanelets: List<Relation>,
+        layer: OsmDataLayer?,
+        ui: UserPrompts,
+    ) {
         if (lanelets.isEmpty()) {
             ui.warn("Select at least one lanelet (or its border linestrings).", TITLE)
             return

@@ -38,8 +38,9 @@ import kotlin.math.sqrt
  * (Jython `do_smooth` / `do_smooth_one_border`); a batch of N centers is N
  * undo entries.
  *
- * Port of `smooth_center_lanelet.py`. The collection dialog is not ported;
- * [SmoothCenterLanelet.run] uses the current selection.
+ * Port of `smooth_center_lanelet.py`. [SmoothCenterLanelet.run] opens the
+ * collection dialog when that setting is on; otherwise it uses the current
+ * selection.
  */
 object SmoothCenter {
     const val TITLE = "Smooth Center Lanelet"
@@ -602,10 +603,14 @@ object SmoothCenter {
 }
 
 /**
- * Smooth selected center lanelets (batch). Collection dialog is not ported;
- * uses the current JOSM selection (lanelets or their border linestrings).
+ * Smooth selected center lanelets (batch).
  */
 object SmoothCenterLanelet {
+    const val HELP_TEXT = """Smooth the left and right bounds of a center lanelet using entry/exit tangents.
+
+Select the CENTER lanelet(s). Entry and exit are found from shared boundary nodes.
+Each successful smooth is one undo entry."""
+
     fun run(ui: UserPrompts = Dialogs) {
         val layer = requireVisibleEditLayer()
         if (layer == null) {
@@ -613,6 +618,26 @@ object SmoothCenterLanelet {
             return
         }
         val data = layer.data
+        if (org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic.shouldOpenCollectionDialog()) {
+            org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog.showLaneletCollection(
+                data = data,
+                onDone = { collected ->
+                    if (collected.isEmpty()) {
+                        ui.warn("Select at least 1 center lanelet.", SmoothCenter.TITLE)
+                        return@showLaneletCollection
+                    }
+                    SmoothCenter.applyBatch(data, layer, collected, ui = ui)
+                },
+                title = "Smooth Center Lanelet - Select CENTER",
+                message = "Select center lanelets. Add / Select (S) / Remove (X) / Done.",
+                minCount = 1,
+                helpTitle = SmoothCenter.TITLE,
+                helpText = HELP_TEXT,
+                helpLinks = listOf("LaneletAndAreaTagging" to "LaneletAndAreaTagging.md"),
+                ui = ui,
+            )
+            return
+        }
         val collected = LaneletSelection.extractLaneletsOrFromLinestrings(data, data.selected)
         if (collected.isEmpty()) {
             ui.warn("Select at least 1 center lanelet.", SmoothCenter.TITLE)
