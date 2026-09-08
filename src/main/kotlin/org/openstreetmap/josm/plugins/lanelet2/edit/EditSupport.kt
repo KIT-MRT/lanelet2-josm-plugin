@@ -7,6 +7,7 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.visitor.BoundingXYVisitor
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
+import org.openstreetmap.josm.plugins.lanelet2.hooks.RoutingRefreshHook
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import java.util.ArrayList
 
@@ -34,9 +35,20 @@ internal fun applySequence(
     }
 }
 
-/** Jython `routing_refresh_hook.request_update()` — hook is not ported yet. */
+/** Jython `routing_refresh_hook.request_update()`. */
 internal fun requestRoutingRefresh() {
-    // Original already swallowed ImportError / any Exception.
+    try {
+        RoutingRefreshHook.requestUpdate()
+    } catch (_: Exception) {
+    }
+}
+
+/** Jython `routing_refresh_hook.flush()`. */
+internal fun flushRoutingRefresh() {
+    try {
+        RoutingRefreshHook.flush()
+    } catch (_: Exception) {
+    }
 }
 
 /** Pan to [prims] without changing zoom. Headless / no map: no-op. */

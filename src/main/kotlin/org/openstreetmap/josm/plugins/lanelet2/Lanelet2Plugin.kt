@@ -7,6 +7,10 @@ import org.openstreetmap.josm.plugins.lanelet2.dependent.DependentActions
 import org.openstreetmap.josm.plugins.lanelet2.settings.SettingsActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.EditActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.SmoothSplitActions
+import org.openstreetmap.josm.plugins.lanelet2.hooks.AutotagHook
+import org.openstreetmap.josm.plugins.lanelet2.hooks.HooksActions
+import org.openstreetmap.josm.plugins.lanelet2.hooks.RoutingRefreshHook
+import org.openstreetmap.josm.plugins.lanelet2.hooks.ZoomFilterHook
 import org.openstreetmap.josm.plugins.lanelet2.internal.CommitReminder
 import org.openstreetmap.josm.plugins.lanelet2.internal.InternalActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions
@@ -38,12 +42,18 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             SelectionActions.registerAll()
             ToolsActions.registerAll()
             NotesActions.registerAll()
+            HooksActions.registerAll()
             DependentActions.registerAll()
             SettingsActions.registerAll()
             InternalActions.registerAll()
             Viewer3dActions.registerAll()
             CommitReminder.install()
             Viewer3dHook.installIfEnabled()
+            AutotagHook.installIfEnabled()
+            AutotagHook.installDeleteOverride()
+            AutotagHook.installAnchorProtection()
+            ZoomFilterHook.installIfEnabled()
+            RoutingRefreshHook.install()
             ExampleScript.registerAll()
             // Scripting plugin may already be loaded; injection is idempotent.
             ScriptingVisibility.exposeOurClassesToScriptingPlugin()
@@ -66,6 +76,10 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
                 MenuInstaller.uninstall()
                 Viewer3dHook.uninstall()
                 NotesActions.uninstallDialog()
+                // Autotag / zoom-filter / routing-refresh persist for the
+                // session (Jython core_hooks.install once). Do not uninstall
+                // them here: JOSM fires newFrame==null when the last layer
+                // closes, then a new frame when a file is opened.
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")

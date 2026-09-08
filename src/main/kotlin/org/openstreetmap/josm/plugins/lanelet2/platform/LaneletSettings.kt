@@ -48,6 +48,11 @@ object LaneletSettings {
     const val KEY_PRESETS_AUTO_INSTALL_ON_LAUNCH = "presets.auto_install_on_launch"
     const val KEY_PRESETS_TOOLBAR_NAMES = "presets.toolbar.names"
     const val KEY_MIGRATED = "migrated"
+    const val KEY_AUTOTAG_ENABLED = "autotag.enabled"
+    const val KEY_AUTOTAG_TAGS = "autotag.tags"
+    const val KEY_ZOOMFILTER_ENABLED = "zoomfilter.enabled"
+    const val KEY_ZOOMFILTER_THRESHOLD = "zoomfilter.threshold"
+    const val KEY_ZOOMFILTER_FILTERS = "zoomfilter.filters"
 
     const val ROUTING_AUTO_DEBOUNCE_MS_DEFAULT = 4000
     const val ROUTING_AUTO_DEBOUNCE_MS_MIN = 0
@@ -328,6 +333,50 @@ object LaneletSettings {
 
     fun setGitCommitReminder(enabled: Boolean) {
         putBoolean(KEY_GIT_COMMIT_REMINDER, enabled)
+    }
+
+    /**
+     * Jython `l2s.get("autotag.enabled", "0") == "1"` — only the literal `"1"`
+     * is true, not `"true"` / `"yes"`.
+     */
+    fun isAutotagEnabled(default: Boolean = false): Boolean {
+        val raw = pref().get(prefKey(KEY_AUTOTAG_ENABLED), null) ?: return default
+        return raw == "1"
+    }
+
+    fun setAutotagEnabled(enabled: Boolean) {
+        putBoolean(KEY_AUTOTAG_ENABLED, enabled)
+    }
+
+    fun getAutotagTagsRaw(default: String = ""): String = get(KEY_AUTOTAG_TAGS, default)
+
+    fun setAutotagTagsRaw(raw: String) {
+        put(KEY_AUTOTAG_TAGS, raw)
+    }
+
+    /** Same `"1"`-only contract as [isAutotagEnabled]. */
+    fun isZoomFilterEnabled(default: Boolean = false): Boolean {
+        val raw = pref().get(prefKey(KEY_ZOOMFILTER_ENABLED), null) ?: return default
+        return raw == "1"
+    }
+
+    fun setZoomFilterEnabled(enabled: Boolean) {
+        putBoolean(KEY_ZOOMFILTER_ENABLED, enabled)
+    }
+
+    fun getZoomFilterThreshold(default: Double = 17.0): Double {
+        val raw = pref().get(prefKey(KEY_ZOOMFILTER_THRESHOLD), null) ?: return default
+        return raw.toDoubleOrNull() ?: default
+    }
+
+    fun setZoomFilterThreshold(threshold: Double) {
+        put(KEY_ZOOMFILTER_THRESHOLD, threshold.toString())
+    }
+
+    fun getZoomFilterFiltersRaw(default: String = ""): String = get(KEY_ZOOMFILTER_FILTERS, default)
+
+    fun setZoomFilterFiltersRaw(raw: String) {
+        put(KEY_ZOOMFILTER_FILTERS, raw)
     }
 
     /**

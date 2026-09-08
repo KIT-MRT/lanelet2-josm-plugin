@@ -149,6 +149,41 @@ returns null and the task fails with a confusing NPE.
   debug routing graph. `testdata/golden/` pins those backends; see its README,
   in particular that production passes **absolute** paths (`file_origin`).
 
+## Background hooks (autotag, zoom filter, routing refresh)
+
+Ported in `hooks/`. Quirks to keep:
+
+- **`autotag.enabled` / `zoomfilter.enabled` are `"1"`-only.** Jython used
+  `l2s.get(key, "0") == "1"`. `"true"` / `"yes"` stay off. Same contract as
+  `routing.hook_full_map`.
+- **Two tag parsers.** Settings persist as `k=v|k=v` and strip the key only
+  (`_deserialize_tags`). The dialog textarea strips key *and* value and skips
+  `#` comments (`_text_to_tags`). Do not unify them.
+- **Autotag `|` in values is a documented limitation** of the settings
+  serialization. Preserve it.
+- **Autotag re-entrancy guard is structural, not a flag.** Collect in
+  `primitivesAdded`, never mutate there; `tagsChanged` is a no-op; flush after
+  400 ms via `SequenceCommand("Autotag new elements", ...)`.
+- **Merge-anchor guard listens on `commandAdded` only** and sets `reverting`
+  around its own undo so the revert cannot loop.
+- **Zoom filter default is 17.0**, not the 19 mentioned in comments / the
+  window docstring. Filters are **on** when `zoom <= threshold` (zoomed out).
+- **Web Mercator constant is `156543.03392`**, not the 156543.03 in the
+  module docstring.
+- **Routing refresh** reads `routing.hook_full_map` and
+  `routing.auto_debounce_ms` on every request. Small path coalesces at 300 ms;
+  full-map path uses the debounce spinner (0 = immediate). An in-flight run
+  sets `pending_rerun`; on finish, small path waits another 300 ms and skips
+  attaching a stale graph.
+- **Session lifetime, like Jython `core_hooks.py`.** Installed once at plugin
+  init. `uninstall()` is only when the user turns a hook off (settings
+  dialog). `Lanelet2Plugin.mapFrameInitialized` must **not** tear them down:
+  JOSM calls it with `newFrame == null` when the last layer closes, then
+  again with a new frame when a file is opened. Autotag re-attaches via
+  `ActiveLayerChangeListener` and its HUD `MapFrameListener`; the zoom
+  listener is process-global; routing keeps its timer. Viewer3dHook is
+  unrelated and still uninstalls with the frame.
+
 ## Action metadata lives in three registries, not one
 
 Metadata parity is checked mechanically against the Jython registries, but they

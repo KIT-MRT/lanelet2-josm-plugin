@@ -871,6 +871,7 @@ object CreateLaneletRelation {
         dlg.layout = BorderLayout()
 
         fun onDialogClosed() {
+            flushRoutingRefresh()
             clearChain()
             directedSuccessorCb = null
             chainDialog = null
