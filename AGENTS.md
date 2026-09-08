@@ -155,6 +155,14 @@ Ported in `hooks/`. Quirks to keep:
   full-map path uses the debounce spinner (0 = immediate). An in-flight run
   sets `pending_rerun`; on finish, small path waits another 300 ms and skips
   attaching a stale graph.
+- **Session lifetime, like Jython `core_hooks.py`.** Installed once at plugin
+  init. `uninstall()` is only when the user turns a hook off (settings
+  dialog). `Lanelet2Plugin.mapFrameInitialized` must **not** tear them down:
+  JOSM calls it with `newFrame == null` when the last layer closes, then
+  again with a new frame when a file is opened. Autotag re-attaches via
+  `ActiveLayerChangeListener` and its HUD `MapFrameListener`; the zoom
+  listener is process-global; routing keeps its timer. Viewer3dHook is
+  unrelated and still uninstalls with the frame.
 
 ## Action metadata lives in three registries, not one
 

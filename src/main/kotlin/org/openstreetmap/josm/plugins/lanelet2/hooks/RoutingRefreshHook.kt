@@ -60,6 +60,9 @@ object RoutingRefreshHook {
         machine.cancel()
     }
 
+    /** True while a Swing debounce timer exists and is running. */
+    fun timerIsLive(): Boolean = timer?.isRunning == true
+
     fun resetForTests() {
         machine.reset()
         timer?.stop()

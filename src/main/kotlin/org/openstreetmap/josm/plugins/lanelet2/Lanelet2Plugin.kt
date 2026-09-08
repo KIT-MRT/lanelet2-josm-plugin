@@ -60,7 +60,13 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
     }
 
     override fun mapFrameInitialized(oldFrame: MapFrame?, newFrame: MapFrame?) {
-        Logging.info("lanelet2: mapFrameInitialized old=$oldFrame new=$newFrame")
+        try {
+            Logging.info("lanelet2: mapFrameInitialized old=$oldFrame new=$newFrame")
+        } catch (_: Exception) {
+            Logging.info(
+                "lanelet2: mapFrameInitialized oldPresent=${oldFrame != null} newPresent=${newFrame != null}",
+            )
+        }
         try {
             // All plugins have loaded by the first map-frame callback, so this
             // is the reliable point to reach into the Scripting plugin.
@@ -70,9 +76,10 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             } else {
                 MenuInstaller.uninstall()
                 Viewer3dHook.uninstall()
-                AutotagHook.uninstall()
-                ZoomFilterHook.uninstall()
-                RoutingRefreshHook.cancel()
+                // Autotag / zoom-filter / routing-refresh persist for the
+                // session (Jython core_hooks.install once). Do not uninstall
+                // them here: JOSM fires newFrame==null when the last layer
+                // closes, then a new frame when a file is opened.
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")
