@@ -324,6 +324,16 @@ class ThreadingTCPServer(socketserver.ThreadingTCPServer):
 SSE_HEARTBEAT_SECONDS = 15.0
 
 
+def _shutdown_soon():
+    """Flush the /shutdown response, then exit hard.
+
+    The accept loops sit on daemon threads with no clean stop signal and this
+    process owns nothing that needs unwinding.
+    """
+    time.sleep(0.2)
+    os._exit(0)
+
+
 class HttpHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -354,8 +364,22 @@ class HttpHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/command":
             self._handle_command()
+        elif self.path == "/shutdown":
+            self._handle_shutdown()
         else:
             self.send_error(404, "Not found")
+
+    def _handle_shutdown(self):
+        """
+        Let a JOSM that did not spawn this process still stop it.
+
+        Without this, a server left over from an earlier session keeps the port
+        and answers /healthz, so the plugin reports "running", refuses to start
+        a fresh one, and has no handle to kill the old one. We only ever bind
+        loopback, so the reachable callers are local.
+        """
+        self._serve_json({"ok": True})
+        threading.Thread(target=_shutdown_soon, daemon=True).start()
 
     def _handle_command(self):
         try:

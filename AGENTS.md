@@ -305,6 +305,13 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
 - **Test the socket client, not just the server.** `Viewer3dE2ETest` originally
   wrote raw lines straight to the ingest port, which is why a client that could
   not deliver anything still passed.
+- **`/healthz` is not enough to treat a leftover as healthy.** A process left
+  over from an earlier session keeps the port and answers `/healthz`, so the
+  GUI says "running" and Start is a no-op — while `/` 404s because extract
+  deleted `static/` from under it, and Stop has no `Process` handle. Adopt
+  only when `GET /` returns the page; otherwise recycle (remote `POST
+  /shutdown`, then kill by port if the leftover is older than that endpoint).
+  Do **not** `close()` the plugin `JarFile` when listing shipped viewer files.
 
 ### Approved divergences from the Jython (do NOT "restore parity")
 

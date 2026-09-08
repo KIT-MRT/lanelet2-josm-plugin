@@ -148,12 +148,12 @@ object Viewer3dWindow {
         Viewer3dHook.reinstallFromSettings()
 
         if (enabled) {
-            if (!server.isRunning(host, httpPort)) {
-                val (ok, msg) = server.start(host, ingestPort, httpPort, profileBox.isSelected, openBrowser = true)
-                if (!ok) {
-                    Dialogs.error(msg, "Live 3D Viewer")
-                    return
-                }
+            // start() is a no-op when a healthy UI is already up, and recycles
+            // a leftover that only answers /healthz (the 404-on-index.html case).
+            val (ok, msg) = server.start(host, ingestPort, httpPort, profileBox.isSelected, openBrowser = true)
+            if (!ok) {
+                Dialogs.error(msg, "Live 3D Viewer")
+                return
             }
             Dialogs.infoAutoClose(
                 "3D streaming ON -> $host:$ingestPort.\nBrowser tab: http://$host:$httpPort/",

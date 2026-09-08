@@ -25,8 +25,16 @@ class Viewer3dServerProcess(
 
     fun isRunning(host: String, httpPort: Int): Boolean = probeHealth(host, httpPort)
 
+    fun isServingUi(host: String, httpPort: Int): Boolean = probeUi(host, httpPort)
+
     fun statusText(host: String, httpPort: Int): String =
-        if (isRunning(host, httpPort)) "Running at http://$host:$httpPort/" else "Not running"
+        if (isServingUi(host, httpPort)) {
+            "Running at http://$host:$httpPort/"
+        } else if (isRunning(host, httpPort)) {
+            "Responding on http://$host:$httpPort/ but the page is missing (stale extract)"
+        } else {
+            "Not running"
+        }
 
     fun start(
         host: String,
@@ -36,8 +44,14 @@ class Viewer3dServerProcess(
         openBrowser: Boolean = false,
     ): Pair<Boolean, String> {
         val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
-        if (isRunning(h, httpPort)) {
+        if (isServingUi(h, httpPort)) {
             return true to "Viewer server is already running."
+        }
+        if (isRunning(h, httpPort)) {
+            // A leftover answers /healthz (so the GUI says "running") but
+            // cannot serve index.html — usually because extract deleted
+            // viewer3d/ from under an older process. Adopt is wrong; recycle.
+            stop(h, httpPort)
         }
         val py = python()
         if (py == null) {
@@ -51,6 +65,10 @@ class Viewer3dServerProcess(
         }
         if (!paths.serverScript.isFile) {
             return false to "server.py not found at:\n${paths.serverScript.absolutePath}"
+        }
+        val indexHtml = File(paths.viewerDir, "static/index.html")
+        if (!indexHtml.isFile) {
+            return false to "Extracted viewer is missing static/index.html at:\n${indexHtml.absolutePath}"
         }
         val cmd = mutableListOf(
             py,
@@ -70,7 +88,11 @@ class Viewer3dServerProcess(
             process = proc
             repeat(20) {
                 sleeper(100)
-                if (isRunning(h, httpPort)) return true to "Viewer server started."
+                if (isServingUi(h, httpPort)) return true to "Viewer server started."
+                if (isRunning(h, httpPort) && !proc.isAlive) {
+                    process = null
+                    return false to "Viewer server answered /healthz but died before serving the page."
+                }
                 if (!proc.isAlive) {
                     val out = proc.inputStream.bufferedReader().readText()
                     process = null
@@ -80,6 +102,10 @@ class Viewer3dServerProcess(
                             out.take(500)
                         )
                 }
+            }
+            if (isRunning(h, httpPort) && !isServingUi(h, httpPort)) {
+                stop(h, httpPort)
+                return false to "Viewer server started but is not serving index.html."
             }
             true to "Viewer server is starting..."
         } catch (e: Exception) {
@@ -103,7 +129,17 @@ class Viewer3dServerProcess(
         if (!isRunning(h, httpPort)) {
             return true to if (proc != null) "Viewer server stopped." else "Viewer server was not running."
         }
-        return false to "Failed to stop the viewer server on port $httpPort."
+        // Still answering: a server this JOSM did not spawn owns the port, so
+        // there is no handle to kill. Ask it to exit instead, otherwise the
+        // leftover keeps the port and Stop can never clear it.
+        if (requestRemoteShutdown(h, httpPort) && !isRunning(h, httpPort)) {
+            return true to "Stopped a viewer server that this JOSM did not start."
+        }
+        if (killViewerListeners(httpPort) && !isRunning(h, httpPort)) {
+            return true to "Killed a leftover viewer server on port $httpPort."
+        }
+        return false to "Failed to stop the viewer server on port $httpPort.\n" +
+            "Kill the leftover python process (plugins/lanelet2/viewer3d/server.py) and click Start again."
     }
 
     fun openBrowserTab(host: String, httpPort: Int): Pair<Boolean, String> {
@@ -135,6 +171,125 @@ class Viewer3dServerProcess(
                 }
             }
             return null
+        }
+
+        /** `POST /shutdown`; the server answers, then exits. */
+        fun requestRemoteShutdown(host: String, httpPort: Int, timeoutMs: Int = 1000): Boolean {
+            val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
+            for (candidate in listOf(h, "127.0.0.1", "localhost").distinct()) {
+                try {
+                    val conn = URI("http://$candidate:$httpPort/shutdown").toURL()
+                        .openConnection() as HttpURLConnection
+                    conn.connectTimeout = timeoutMs
+                    conn.readTimeout = timeoutMs
+                    conn.requestMethod = "POST"
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write(ByteArray(0)) }
+                    if (conn.responseCode == 200) {
+                        // The process exits a moment after replying.
+                        Thread.sleep(400)
+                        return true
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            return false
+        }
+
+        fun probeUi(host: String, httpPort: Int, timeoutMs: Int = 400): Boolean {
+            val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
+            for (candidate in listOf(h, "127.0.0.1", "localhost").distinct()) {
+                try {
+                    val conn = URI("http://$candidate:$httpPort/").toURL()
+                        .openConnection() as HttpURLConnection
+                    conn.connectTimeout = timeoutMs
+                    conn.readTimeout = timeoutMs
+                    conn.requestMethod = "GET"
+                    if (conn.responseCode != 200) continue
+                    val type = conn.contentType.orEmpty()
+                    val body = conn.inputStream.bufferedReader().readText()
+                    if (type.contains("html") || body.contains("<html") || body.contains("app.js")) {
+                        return true
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            return false
+        }
+
+        /**
+         * Last resort for a leftover whose /shutdown is missing or ignored.
+         * Only signals processes whose command line is our extracted server.py.
+         */
+        fun killViewerListeners(httpPort: Int): Boolean {
+            var killed = false
+            for (pid in pidsListeningOn(httpPort)) {
+                val cmd = processCommandLine(pid) ?: continue
+                if ("viewer3d/server.py" !in cmd && !cmd.contains("lanelet2/viewer3d")) continue
+                try {
+                    val handle = ProcessHandle.of(pid).orElse(null) ?: continue
+                    handle.destroy()
+                    val deadline = System.currentTimeMillis() + 2000
+                    while (handle.isAlive && System.currentTimeMillis() < deadline) {
+                        Thread.sleep(50)
+                    }
+                    if (handle.isAlive) handle.destroyForcibly()
+                    killed = true
+                } catch (_: Exception) {
+                }
+            }
+            return killed
+        }
+
+        internal fun pidsListeningOn(port: Int): List<Long> {
+            val inodes = linkedSetOf<String>()
+            for (table in listOf("/proc/net/tcp", "/proc/net/tcp6")) {
+                val file = File(table)
+                if (!file.isFile) continue
+                for (line in file.readLines().drop(1)) {
+                    val cols = line.trim().split(Regex("\\s+"))
+                    if (cols.size < 10) continue
+                    val local = cols[1]
+                    val colon = local.lastIndexOf(':')
+                    if (colon < 0) continue
+                    val localPort = local.substring(colon + 1).toIntOrNull(16) ?: continue
+                    if (localPort != port) continue
+                    // st 0A = LISTEN
+                    if (cols[3] != "0A") continue
+                    inodes.add(cols[9])
+                }
+            }
+            if (inodes.isEmpty()) return emptyList()
+            val pids = ArrayList<Long>()
+            val proc = File("/proc")
+            for (entry in proc.listFiles().orEmpty()) {
+                val pid = entry.name.toLongOrNull() ?: continue
+                val fdDir = File(entry, "fd")
+                if (!fdDir.isDirectory) continue
+                try {
+                    for (fd in fdDir.listFiles().orEmpty()) {
+                        val target = try {
+                            java.nio.file.Files.readSymbolicLink(fd.toPath()).toString()
+                        } catch (_: Exception) {
+                            continue
+                        }
+                        if (inodes.any { target == "socket:[$it]" }) {
+                            pids.add(pid)
+                            break
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            return pids.distinct()
+        }
+
+        private fun processCommandLine(pid: Long): String? = try {
+            File("/proc/$pid/cmdline").readBytes()
+                .toString(StandardCharsets.UTF_8)
+                .replace('\u0000', ' ')
+        } catch (_: Exception) {
+            null
         }
 
         fun probeHealth(host: String, httpPort: Int, timeoutMs: Int = 400): Boolean {

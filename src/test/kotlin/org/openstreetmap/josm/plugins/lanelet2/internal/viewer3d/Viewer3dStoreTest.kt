@@ -31,6 +31,7 @@ class Viewer3dStoreTest {
         val viewer = File(root, "viewer3d")
         val icons = File(root, "style_images")
         assertTrue(File(viewer, "server.py").isFile)
+        assertTrue(File(viewer, "static/index.html").isFile)
         assertTrue(File(viewer, "static/app.js").isFile)
         assertTrue(File(viewer, Viewer3dResources.VERSION_FILE).isFile)
         assertTrue(icons.isDirectory)

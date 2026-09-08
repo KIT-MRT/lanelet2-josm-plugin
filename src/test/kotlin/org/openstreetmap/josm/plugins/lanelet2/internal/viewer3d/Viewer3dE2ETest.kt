@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -137,6 +138,103 @@ class Viewer3dE2ETest {
             client?.stop()
             proc?.destroyForcibly()
             proc?.waitFor(2, TimeUnit.SECONDS)
+        }
+    }
+
+    /**
+     * A server left over from an earlier session keeps the port and answers
+     * `/healthz`, so the plugin reports "running" and refuses to start a new
+     * one — but it has no handle to kill a process it did not spawn, which left
+     * Stop unable to do anything. `POST /shutdown` is the way out.
+     */
+    @Test
+    fun aServerThisJosmDidNotSpawnCanStillBeStopped(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        Viewer3dStore.extract(root)
+        val serverScript = File(root, "viewer3d/server.py")
+        val httpPort = 48965
+        var proc: Process? = null
+        try {
+            proc = ProcessBuilder(
+                python3,
+                serverScript.absolutePath,
+                "--host", "127.0.0.1",
+                "--http-port", httpPort.toString(),
+                "--ingest-port", "48966",
+                "--icons-dir", File(root, "style_images").absolutePath,
+                "--no-browser",
+            )
+                .directory(serverScript.parentFile)
+                .redirectErrorStream(true)
+                .start()
+            assumeTrue(waitForHealth(httpPort, 5000), "server did not become healthy")
+
+            // A fresh instance, as if the previous JOSM had exited: it owns no
+            // Process for this server, exactly like the stranded case.
+            val orphanView = Viewer3dServerProcess()
+            assertTrue(orphanView.isRunning("127.0.0.1", httpPort))
+
+            val (ok, msg) = orphanView.stop("127.0.0.1", httpPort)
+
+            assertTrue(ok, msg)
+            assertFalse(Viewer3dServerProcess.probeHealth("127.0.0.1", httpPort), "port still served")
+            assertTrue(proc.waitFor(5, TimeUnit.SECONDS), "server process did not exit")
+        } finally {
+            proc?.destroyForcibly()
+            proc?.waitFor(2, TimeUnit.SECONDS)
+        }
+    }
+
+    /**
+     * The leftover we actually hit: /healthz 200, `/` is 404 because extract
+     * deleted `static/` from under the old process. Start must recycle it,
+     * not report "already running".
+     */
+    @Test
+    fun startRecyclesALeftoverThatCannotServeThePage(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        Viewer3dStore.extract(root)
+        val viewer = File(root, "viewer3d")
+        val index = File(viewer, "static/index.html")
+        assertTrue(index.isFile)
+        val httpPort = 49065
+        val ingestPort = 49066
+        var stale: Process? = null
+        var managed: Viewer3dServerProcess? = null
+        try {
+            stale = ProcessBuilder(
+                python3,
+                File(viewer, "server.py").absolutePath,
+                "--host", "127.0.0.1",
+                "--http-port", httpPort.toString(),
+                "--ingest-port", ingestPort.toString(),
+                "--icons-dir", File(root, "style_images").absolutePath,
+                "--no-browser",
+            )
+                .directory(viewer)
+                .redirectErrorStream(true)
+                .start()
+            assumeTrue(waitForHealth(httpPort, 5000), "stale server did not become healthy")
+            index.delete()
+            assertTrue(Viewer3dServerProcess.probeHealth("127.0.0.1", httpPort))
+            assertFalse(Viewer3dServerProcess.probeUi("127.0.0.1", httpPort), "page should be gone")
+
+            managed = Viewer3dServerProcess(
+                python = { python3 },
+                extract = { Viewer3dStore.ensureExtracted(root) },
+            )
+            val (ok, msg) = managed.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok, msg)
+            assertTrue(Viewer3dServerProcess.probeUi("127.0.0.1", httpPort), "recycled server still has no page")
+            assertTrue(index.isFile, "re-extract should have restored index.html")
+        } finally {
+            managed?.stop("127.0.0.1", httpPort)
+            stale?.destroyForcibly()
+            stale?.waitFor(2, TimeUnit.SECONDS)
         }
     }
 

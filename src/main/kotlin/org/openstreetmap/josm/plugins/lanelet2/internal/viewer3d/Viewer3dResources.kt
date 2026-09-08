@@ -51,17 +51,18 @@ object Viewer3dResources {
 
     private fun scanJar(anchor: URL): List<ShippedEntry> {
         val conn = anchor.openConnection() as JarURLConnection
-        val jarFile: JarFile = conn.jarFile
-        return jarFile.use { jar ->
-            jar.entries().asSequence()
-                .filter { !it.isDirectory }
-                .map { it.name }
-                .filter { path ->
-                    path.startsWith(VIEWER3D_PREFIX) || path.startsWith(STYLE_IMAGES_PREFIX)
-                }
-                .map { path -> ShippedEntry(path, toExtractRelative(path)) }
-                .toList()
-        }
+        // Do not close this JarFile: JarURLConnection caches it on the plugin
+        // jar, and closing it breaks later getResourceAsStream calls, which is
+        // how a re-extract can delete viewer3d/ and then fail to write static/.
+        val jar: JarFile = conn.jarFile
+        return jar.entries().asSequence()
+            .filter { !it.isDirectory }
+            .map { it.name }
+            .filter { path ->
+                path.startsWith(VIEWER3D_PREFIX) || path.startsWith(STYLE_IMAGES_PREFIX)
+            }
+            .map { path -> ShippedEntry(path, toExtractRelative(path)) }
+            .toList()
     }
 
     private fun scanDirectory(anchorFile: File): List<ShippedEntry> {
