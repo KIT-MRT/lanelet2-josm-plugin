@@ -13,16 +13,47 @@ import javax.swing.JSpinner
 import javax.swing.SpinnerNumberModel
 
 /**
- * Routing settings rows injected into [SettingsWindow]. Port of
- * `ll2_dependent/scripts/ll2_routing_settings.build_routing_panel`, plus the
+ * Routing settings rows injected into [SettingsWindow] / [Lanelet2PreferenceSetting].
+ * Port of `ll2_dependent/scripts/ll2_routing_settings.build_routing_panel`, plus the
  * commit-reminder checkbox from the internal launcher (settings-gated; the
  * Jython timer itself is not ported).
  *
  * Debounce spinner shows seconds via **integer division** of milliseconds
  * (`ms / 1000`), matching Jython 2.7 (`int(ms) / 1000` truncates).
  */
+class RoutingControls internal constructor(
+    val participantCombo: JComboBox<String>,
+    val debounceSpinner: JSpinner,
+    val hookFull: JCheckBox,
+    val reminder: JCheckBox,
+) {
+    fun save() {
+        LaneletSettings.setRoutingDefaultParticipant(participantCombo.selectedItem?.toString())
+        val debounceMs = try {
+            (debounceSpinner.value as Number).toInt() * 1000
+        } catch (_: Exception) {
+            LaneletSettings.ROUTING_AUTO_DEBOUNCE_MS_DEFAULT
+        }
+        LaneletSettings.setRoutingAutoDebounceMs(debounceMs)
+        LaneletSettings.setRoutingHookFullMap(hookFull.isSelected)
+        LaneletSettings.setGitCommitReminder(reminder.isSelected)
+    }
+
+    companion object {
+        const val ID = "routing"
+        val KEYS = setOf(
+            LaneletSettings.KEY_ROUTING_DEFAULT_PARTICIPANT,
+            LaneletSettings.KEY_ROUTING_AUTO_DEBOUNCE_MS,
+            LaneletSettings.KEY_ROUTING_HOOK_FULL_MAP,
+            LaneletSettings.KEY_GIT_COMMIT_REMINDER,
+        )
+    }
+}
+
 object RoutingPanel {
-    fun addPanel(content: JPanel): () -> Unit {
+    fun addPanel(content: JPanel): () -> Unit = addControls(content)::save
+
+    fun addControls(content: JPanel): RoutingControls {
         content.add(JLabel(" "))
         content.add(JLabel("Routing (lanelet2 backend):"))
 
@@ -82,16 +113,6 @@ object RoutingPanel {
         reminderRow.add(chkReminder)
         content.add(reminderRow)
 
-        return {
-            LaneletSettings.setRoutingDefaultParticipant(combo.selectedItem?.toString())
-            val debounceMs = try {
-                (debounceSpinner.value as Number).toInt() * 1000
-            } catch (_: Exception) {
-                LaneletSettings.ROUTING_AUTO_DEBOUNCE_MS_DEFAULT
-            }
-            LaneletSettings.setRoutingAutoDebounceMs(debounceMs)
-            LaneletSettings.setRoutingHookFullMap(chkHookFull.isSelected)
-            LaneletSettings.setGitCommitReminder(chkReminder.isSelected)
-        }
+        return RoutingControls(combo, debounceSpinner, chkHookFull, chkReminder)
     }
 }

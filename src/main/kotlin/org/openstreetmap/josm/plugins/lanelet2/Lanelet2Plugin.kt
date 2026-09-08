@@ -1,9 +1,11 @@
 package org.openstreetmap.josm.plugins.lanelet2
 
 import org.openstreetmap.josm.gui.MapFrame
+import org.openstreetmap.josm.gui.preferences.PreferenceSetting
 import org.openstreetmap.josm.plugins.Plugin
 import org.openstreetmap.josm.plugins.PluginInformation
 import org.openstreetmap.josm.plugins.lanelet2.dependent.DependentActions
+import org.openstreetmap.josm.plugins.lanelet2.settings.Lanelet2PreferenceSetting
 import org.openstreetmap.josm.plugins.lanelet2.settings.SettingsActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.EditActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.SmoothSplitActions
@@ -62,6 +64,8 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             Logging.error(e)
         }
     }
+
+    override fun getPreferenceSetting(): PreferenceSetting = Lanelet2PreferenceSetting()
 
     override fun mapFrameInitialized(oldFrame: MapFrame?, newFrame: MapFrame?) {
         // Log presence, not the frames: MapFrame.toString() dumps the whole
