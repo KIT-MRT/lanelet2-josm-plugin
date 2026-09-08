@@ -19,12 +19,13 @@ class SidecarHealthTest {
     }
 
     @Test
-    fun supportedVersionsAre38To311() {
+    fun supportedVersionsAre38To312() {
         assertFalse(SidecarHealth.isSupportedVersion(2, 7))
         assertFalse(SidecarHealth.isSupportedVersion(3, 7))
         assertTrue(SidecarHealth.isSupportedVersion(3, 8))
         assertTrue(SidecarHealth.isSupportedVersion(3, 11))
-        assertFalse(SidecarHealth.isSupportedVersion(3, 12))
+        assertTrue(SidecarHealth.isSupportedVersion(3, 12))
+        assertFalse(SidecarHealth.isSupportedVersion(3, 13))
         assertFalse(SidecarHealth.isSupportedVersion(4, 0))
     }
 
@@ -45,10 +46,10 @@ class SidecarHealthTest {
 
     @Test
     fun classifyWrongPythonVersionBeforeImportFailure() {
-        val r = SidecarHealth.classify("PY=3.12\nLANELET2=fail:ModuleNotFoundError\n", started = true)
+        val r = SidecarHealth.classify("PY=3.13\nLANELET2=fail:ModuleNotFoundError\n", started = true)
         assertEquals(SidecarProblem.WRONG_PYTHON_VERSION, r.problem)
-        assertEquals("3.12", r.pythonVersion)
-        assertTrue(r.userMessage().contains("3.8 to 3.11"))
+        assertEquals("3.13", r.pythonVersion)
+        assertTrue(r.userMessage().contains(SidecarHealth.VERSION_RANGE_WORDS))
     }
 
     @Test

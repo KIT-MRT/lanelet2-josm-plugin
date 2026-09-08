@@ -26,14 +26,16 @@ data class HealthReport(
 
     fun userMessage(): String {
         val wizard = "Open Lanelet2 Settings and run “Set up Lanelet2 backends” " +
-            "(or point Advanced at an existing Python 3.8–3.11 interpreter that can `import lanelet2`)."
+            "(or point Advanced at an existing Python ${SidecarHealth.VERSION_RANGE} " +
+            "interpreter that can `import lanelet2`)."
         return when (problem) {
             SidecarProblem.HEALTHY -> "Lanelet2 backends are ready."
             SidecarProblem.INTERPRETER_MISSING ->
                 "Python interpreter not found: ${python.ifEmpty { "(not configured)" }}\n\n$detail\n\n$wizard"
             SidecarProblem.WRONG_PYTHON_VERSION ->
                 "Python ${pythonVersion ?: "unknown"} is not supported.\n\n" +
-                    "The upstream lanelet2 wheel is Linux x64 only and supports Python 3.8 to 3.11.\n\n" +
+                    "The upstream lanelet2 wheel is Linux x64 only and supports " +
+                    "Python ${SidecarHealth.VERSION_RANGE_WORDS}.\n\n" +
                     "$detail\n\n$wizard"
             SidecarProblem.LANELET2_IMPORT_FAILED ->
                 "Python is present (${pythonVersion ?: python}) but `import lanelet2` failed.\n\n" +
@@ -46,8 +48,10 @@ data class HealthReport(
 
 object SidecarHealth {
     const val MIN_MINOR = 8
-    const val MAX_MINOR = 11
+    const val MAX_MINOR = 12
     const val REQUIRED_MAJOR = 3
+    const val VERSION_RANGE = "3.8–3.12"
+    const val VERSION_RANGE_WORDS = "3.8 to 3.12"
 
     /**
      * Probe snippet printed as `PY=3.10` / `LANELET2=ok` (or `LANELET2=fail:...`).

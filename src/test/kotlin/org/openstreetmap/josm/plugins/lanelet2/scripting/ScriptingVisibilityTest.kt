@@ -4,9 +4,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.openstreetmap.josm.plugins.PluginClassLoader
 import org.openstreetmap.josm.plugins.PluginHandler
+import org.openstreetmap.josm.spi.preferences.Config
+import org.openstreetmap.josm.spi.preferences.MemoryPreferences
 import java.io.File
 import java.net.URLClassLoader
 
@@ -19,11 +22,21 @@ import java.net.URLClassLoader
  * loader (the scripting [PluginClassLoader]). Either way the parent of the
  * engine loader is that PluginClassLoader, so [PluginClassLoader.addDependency]
  * is what makes our classes visible to a Jython `import`.
+ *
+ * The GraalPy plugin is simpler: its polyglot context uses the GraalPy
+ * [PluginClassLoader] as `hostClassLoader` directly (no child
+ * `URLClassLoader`). The same [ScriptingVisibility.exposeTo] call is what
+ * makes `from …lanelet2.api import Lanelet2Extensions` work there.
  */
 class ScriptingVisibilityTest {
 
     private val facadeName =
         "org.openstreetmap.josm.plugins.lanelet2.api.Lanelet2Extensions"
+
+    @BeforeEach
+    fun prefs() {
+        Config.setPreferencesInstance(MemoryPreferences())
+    }
 
     private val pluginJar = File(
         requireNotNull(System.getProperty("lanelet2.jar")) {
@@ -41,6 +54,10 @@ class ScriptingVisibilityTest {
         assertEquals(
             null,
             PluginHandler.getPluginClassLoader(ScriptingVisibility.SCRIPTING_PLUGIN_NAME),
+        )
+        assertEquals(
+            null,
+            PluginHandler.getPluginClassLoader(ScriptingVisibility.GRAALPY_PLUGIN_NAME),
         )
         ScriptingVisibility.exposeOurClassesToScriptingPlugin()
     }
@@ -79,5 +96,10 @@ class ScriptingVisibilityTest {
         val loaded = engineLoader.loadClass(facadeName)
         assertNotNull(loaded)
         assertEquals(facadeName, loaded.name)
+        val settings = loaded.getMethod("settings").invoke(null)
+        val get = settings.javaClass.getMethod("get", String::class.java, String::class.java)
+        assertEquals("road", get.invoke(settings, "lanelet.default_subtype", "road"))
+        val anchors = loaded.getMethod("anchors").invoke(null) as List<*>
+        assertTrue(anchors.contains("lanelet_edit.check_lanelet_borders"))
     }
 }

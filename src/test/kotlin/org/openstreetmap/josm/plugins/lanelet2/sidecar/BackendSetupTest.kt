@@ -128,11 +128,11 @@ class BackendSetupTest {
             HealthReport(
                 SidecarProblem.WRONG_PYTHON_VERSION,
                 python = "python3",
-                pythonVersion = "3.12",
+                pythonVersion = "3.13",
             )
         }
         assertFalse(check.ok)
         assertEquals(SidecarProblem.WRONG_PYTHON_VERSION, check.problem)
-        assertTrue(check.message.contains("3.8"))
+        assertTrue(check.message.contains(SidecarHealth.VERSION_RANGE))
     }
 }

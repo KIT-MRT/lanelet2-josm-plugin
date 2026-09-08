@@ -8,14 +8,14 @@ import java.io.File
  * interpreter, create a private venv, pip-install `lanelet2` and `numpy<2`,
  * persist the result through [LaneletSettings].
  *
- * The upstream `lanelet2` wheel is Linux x64 and Python 3.8–3.11 only.
+ * The upstream `lanelet2` wheel is Linux x64 and Python 3.8–3.12.
  * Validation reports that clearly rather than failing inside pip.
  */
 object BackendSetup {
     val PIP_PACKAGES: List<String> = listOf("lanelet2", "numpy<2")
 
     val CANDIDATE_NAMES: List<String> = listOf(
-        "python3.11", "python3.10", "python3.9", "python3.8", "python3",
+        "python3.12", "python3.11", "python3.10", "python3.9", "python3.8", "python3",
     )
 
     data class InterpreterCheck(
@@ -48,7 +48,8 @@ object BackendSetup {
         osArch: String = System.getProperty("os.arch", ""),
     ): String? {
         if (SidecarHealth.isSupportedPlatform(osName, osArch)) return null
-        return "The upstream lanelet2 wheel is Linux x64 only (Python 3.8–3.11). " +
+        return "The upstream lanelet2 wheel is Linux x64 only " +
+            "(Python ${SidecarHealth.VERSION_RANGE}). " +
             "This machine reports os=$osName arch=$osArch."
     }
 
@@ -67,7 +68,8 @@ object BackendSetup {
             SidecarProblem.WRONG_PYTHON_VERSION -> InterpreterCheck(
                 ok = false,
                 problem = report.problem,
-                message = "Python ${report.pythonVersion ?: "unknown"} is not 3.8–3.11. " +
+                message = "Python ${report.pythonVersion ?: "unknown"} is not " +
+                    "${SidecarHealth.VERSION_RANGE}. " +
                     "The upstream lanelet2 wheel does not support this version.",
                 version = report.pythonVersion,
                 python = python,
@@ -110,7 +112,8 @@ object BackendSetup {
             -> InterpreterCheck(
                 ok = true,
                 problem = report.problem,
-                message = "Python ${report.pythonVersion} is 3.8–3.11 and can create a virtualenv.",
+                message = "Python ${report.pythonVersion} is ${SidecarHealth.VERSION_RANGE} " +
+                    "and can create a virtualenv.",
                 version = report.pythonVersion,
                 python = python,
             )

@@ -9,11 +9,11 @@ import org.openstreetmap.josm.tools.Logging
 import java.awt.event.ActionEvent
 
 /**
- * Stable entry point for Jython 2.7 (and other JSR-223) scripts that want to
- * call into this plugin.
+ * Stable entry point for Jython 2.7 and GraalPy (Python 3) scripts that want
+ * to call into this plugin.
  *
  * Scripts import this object after the plugin has injected its classloader
- * into the Scripting plugin:
+ * into the Scripting / GraalPy plugin:
  *
  * ```
  * from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions

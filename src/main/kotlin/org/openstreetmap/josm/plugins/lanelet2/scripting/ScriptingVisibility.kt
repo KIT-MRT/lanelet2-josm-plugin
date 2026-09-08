@@ -7,7 +7,7 @@ import org.openstreetmap.josm.tools.Logging
 
 /**
  * Makes this plugin's classes visible to scripts running under the JOSM
- * Scripting plugin.
+ * Scripting plugin (Jython) and the GraalPy plugin (Python 3).
  *
  * JOSM gives each plugin its own [PluginClassLoader]; the joined loader is
  * resources-only (`PluginHandler.getJoinedPluginResourceCL`). The Scripting
@@ -23,22 +23,39 @@ import org.openstreetmap.josm.tools.Logging
  */
 object ScriptingVisibility {
     const val SCRIPTING_PLUGIN_NAME = "scripting"
+    const val GRAALPY_PLUGIN_NAME = "graalpy"
 
     /**
-     * Look up the Scripting plugin's loader and inject ours. Safe to call
-     * more than once (addDependency is idempotent).
+     * Look up host script-engine plugins and inject ours. Safe to call more
+     * than once ([PluginClassLoader.addDependency] is idempotent).
+     *
+     * Targets the JOSM Scripting plugin (Jython 2.7) and the GraalPy plugin
+     * (Python 3). Either being absent is a logged no-op.
      */
     fun exposeOurClassesToScriptingPlugin() {
         try {
-            val scripting = PluginHandler.getPluginClassLoader(SCRIPTING_PLUGIN_NAME)
-            exposeTo(scripting, Lanelet2Plugin::class.java.classLoader)
+            val ours = Lanelet2Plugin::class.java.classLoader
+            exposeToNamed(SCRIPTING_PLUGIN_NAME, ours)
+            exposeToNamed(GRAALPY_PLUGIN_NAME, ours)
         } catch (t: Throwable) {
             Logging.warn(
-                "lanelet2: could not expose classes to the scripting plugin: {0}",
+                "lanelet2: could not expose classes to script-engine plugins: {0}",
                 t.message,
             )
             Logging.trace(t)
         }
+    }
+
+    private fun exposeToNamed(pluginName: String, ours: ClassLoader) {
+        val host = PluginHandler.getPluginClassLoader(pluginName)
+        if (host == null) {
+            Logging.info(
+                "lanelet2: $pluginName plugin is not loaded; " +
+                    "scripts there cannot import plugin classes",
+            )
+            return
+        }
+        exposeTo(host, ours)
     }
 
     /**
@@ -52,8 +69,8 @@ object ScriptingVisibility {
     fun exposeTo(scriptingLoader: PluginClassLoader?, ourLoader: ClassLoader): ExposeResult {
         if (scriptingLoader == null) {
             Logging.info(
-                "lanelet2: scripting plugin is not loaded; " +
-                    "Jython scripts cannot import plugin classes",
+                "lanelet2: host script-engine plugin is not loaded; " +
+                    "its scripts cannot import plugin classes",
             )
             return ExposeResult.SCRIPTING_ABSENT
         }
@@ -68,7 +85,7 @@ object ScriptingVisibility {
         return try {
             val added = scriptingLoader.addDependency(ours)
             if (added) {
-                Logging.info("lanelet2: exposed plugin classes to the scripting plugin")
+                Logging.info("lanelet2: exposed plugin classes to a script-engine plugin")
                 ExposeResult.INJECTED
             } else {
                 ExposeResult.ALREADY_PRESENT

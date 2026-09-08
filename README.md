@@ -1,102 +1,207 @@
 # JOSM Lanelet2 Plugin
 
-Lanelet2 map editing tools for [JOSM](https://josm.openstreetmap.de/), as a native
-Kotlin plugin. This replaces the Jython 2.7 script collection that previously ran
-under the JOSM Scripting plugin.
+Lanelet2 map editing tools for [JOSM](https://josm.openstreetmap.de/), as a
+native Kotlin plugin (`lanelet2.jar`). It replaces the Jython 2.7 script
+collection that previously ran under the JOSM Scripting plugin.
 
-Ships as a **single plugin** (`lanelet2`). Features that need the upstream
-`lanelet2` Python library (positive IDs, merge, split, debug routing graph) warn
-at the point of use if Python is missing or misconfigured; everything else works
-without it.
+Most tools are self-contained. Four actions (positive IDs, merge, split, debug
+routing graph) also need a local Python `lanelet2` install; they warn at the
+point of use if that sidecar is missing. Everything else works without it.
 
-`testdata/golden/` holds a regression corpus that pins the behaviour of the Python
-lanelet2 backends. `examples/jython/` holds example scripts for users who want to
-script against the plugin (also shipped inside the jar; see [Scripting](#scripting)).
+## Requirements
 
-## Building
+| You want… | You need |
+|---|---|
+| Core editing, styles, presets, 3D viewer, notes, git helpers | [JOSM](https://josm.openstreetmap.de/) **19555** or newer |
+| Positive IDs, OSM merge/split, debug routing graph | The above, plus Python **3.8–3.12** and the upstream [`lanelet2`](https://github.com/fzi-forschungszentrum-informatik/Lanelet2) wheel (Linux) |
+| Ad-hoc **Python 3** scripts against this plugin | The sibling [GraalPy plugin](../JOSM_GraalPy_Plugin/) (`graalpy`) |
+| Ad-hoc **Jython 2.7** scripts against this plugin | The [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) with a Jython 2.7 engine |
+
+## Install
+
+`install.sh` copies `lanelet2.jar` into JOSM's default plugins directory. The
+jar **must** keep that name — JOSM keys plugins off the filename.
 
 ```bash
-./gradlew build          # compile + test
-./gradlew runJosm        # launch JOSM with the plugin loaded
-./gradlew debugJosm      # same, waiting for a debugger on port 1740
-./gradlew localDist      # produce a plugin update site under build/localDist/
+# After a local build (./gradlew dist → build/dist/lanelet2.jar)
+./install.sh
+
+# A downloaded GitHub (or other) release jar
+./install.sh /path/to/downloaded-lanelet2.jar
 ```
 
-Requires JDK 21. The build compiles against JOSM 19555, which is also the minimum
-supported version. The repo must have at least one git commit: the JOSM Gradle
-plugin reads `HEAD` when writing the plugin manifest.
+The script follows JOSM's own user-data rule:
 
-To install into a real JOSM, add the generated `build/localDist/list` as a plugin
-update site (Preferences -> Plugins, expert mode), or copy
-`build/dist/lanelet2.jar` into `~/.josm/plugins/`.
+| OS | Plugins directory |
+|---|---|
+| Linux | `~/.josm/plugins` if that legacy home still exists, otherwise `${XDG_DATA_HOME:-~/.local/share}/JOSM/plugins` |
+| macOS | `~/Library/JOSM/plugins` |
+| Windows | `%APPDATA%\JOSM\plugins` |
 
-Because a JOSM plugin ships as a single jar and JOSM does not provide the Kotlin
+Override with `--dir DIR` or `JOSM_PLUGIN_DIR`. If the plugins directory (or
+the JOSM user-data home around it) does not exist, the script **warns** —
+JOSM has probably never been started on this account — then creates the
+directory and copies the jar anyway.
+
+Restart JOSM and enable **lanelet2** under *Edit → Preferences → Plugins* on
+the first install.
+
+## What it ships
+
+Menus appear at JOSM startup (**Lanelet2 Utils**, **Lanelet2 Map**). Extra
+toolbars appear once a data layer is open; hide or show them with the **LL2**
+toggle on JOSM's main toolbar, or *Lanelet2 Utils → Show Lanelet2 toolbars*.
+Settings live in *Lanelet2 Utils → Lanelet2 Settings* and on the native
+**Lanelet2** tab under *Edit → Preferences*.
+
+### Lanelets
+
+- Create lanelet(s) from a left/right linestring pair
+- Merge a shared border (two lanelets) or merge swapped left/right bounds
+- Split bidirectional lanelets on the virtual centerline; split ways at selected nodes
+- Smooth the centerline from the borders, or from a selected centerline
+- Revert lanelet direction; check borders (selects broken ones)
+- Delete relations (drop memberships) or purge relations including member ways and nodes
+
+Delete/purge use the **current JOSM selection**, not the collection dialog.
+
+### Regulatory elements
+
+Wizards for traffic lights, traffic signs, speed limits, and right-of-way;
+add an existing regulatory element to lanelets; convert bike traffic lights;
+visualize regulatory connections and the right-of-way wizard.
+
+Select-from-linestring and the traffic-light / sign / speed-limit wizards use
+the current selection by default. Turn on **Use collection dialog** in settings
+to collect members interactively instead. Right-of-way create/debug always open
+the collector (two role groups cannot be expressed as a flat selection).
+
+### Selection and tagging
+
+- Select lanelets or relations from selected linestrings
+- Quick-tag modal (Space)
+- Toolbar defaults for new-lanelet subtype (`road` / `bicycle_lane` / `crosswalk`) and one-way vs bidirectional
+- Autotag new elements (`file_origin` and friends) and a zoom-based filter hook
+- Highlight file-boundary hulls (grouped by `file_origin`)
+- Load an older git revision of the current file
+- Notes panel (custom geolocated notes)
+
+### Map appearance
+
+Bundled MapCSS styles and tagging presets (including traffic-sign icons)
+install on launch. Choose the style preset from the settings window.
+
+### Maintenance
+
+- Filter broken lanelets and regulatory elements (writes a backup and asks before applying)
+- Git commit of the current file (optional save reminder)
+- Routing-graph refresh hook (used with the debug graph)
+
+### Live 3D viewer
+
+*Lanelet2 Utils → Live 3D Viewer* starts a local stdlib `python3` server and
+opens a Three.js view of the loaded map. It does **not** need the `lanelet2`
+Python package.
+
+### Needs the `lanelet2` sidecar
+
+These four call the upstream library through a private virtualenv
+(`$XDG_DATA_HOME/josm-lanelet2/venv`, or `~/.local/share/josm-lanelet2/venv`).
+Use *Set up Lanelet2 backends* in the settings window.
+
+- Make Positive IDs
+- Merge OSM Files
+- Split Merged OSM File
+- Generate Debug Routing Graph (and the small-graph variant)
+
+The upstream wheel is Linux-only and supports Python 3.8–3.12. Point the
+wizard's *Advanced* section at another interpreter to use your own.
+
+## Building from source
+
+Requires JDK 21. The build compiles against JOSM 19555 (also the minimum
+runtime). The repo must have at least one git commit: the JOSM Gradle plugin
+reads `HEAD` when writing the plugin manifest.
+
+```bash
+./gradlew build          # compile + test (also produces build/dist/lanelet2.jar)
+./gradlew dist           # plugin jar only
+./gradlew runJosm        # launch JOSM with this plugin loaded
+./gradlew debugJosm      # same, waiting for a debugger on port 1740
+./install.sh             # copy build/dist/lanelet2.jar into the real JOSM plugins dir
+```
+
+`runJosm` uses `build/.josm/userdata`, so it does not touch your everyday JOSM
+profile. The sidecar venv stays outside that tree on purpose (`./gradlew clean`
+must not delete a 100+ MB pip install).
+
+Because a JOSM plugin is a single jar and JOSM does not ship the Kotlin
 runtime, the plugin packs the Kotlin stdlib.
-
-## Python backends
-
-Four features — positive IDs, merging input OSM files, splitting merged files, and
-the debug routing graph — run through the upstream `lanelet2` Python library rather
-than reimplementing its map semantics. The plugin ships those backend scripts inside
-its jar and manages a private virtualenv for them; see the in-app
-*Set up Lanelet2 backends* wizard. Everything else in the plugin works without Python.
-
-The upstream `lanelet2` wheel is Linux-only and supports Python 3.8 to 3.11.
-
-The virtualenv lives at `$XDG_DATA_HOME/josm-lanelet2/venv`
-(`~/.local/share/josm-lanelet2/venv` when `XDG_DATA_HOME` is unset), outside
-JOSM's user data directory so that `./gradlew clean` cannot discard it. Point the
-wizard's *Advanced* section at an existing interpreter to use your own instead.
-
-The 3D viewer is independent of all this: its server is Python-standard-library
-only and runs on the system `python3`, so it works even when the `lanelet2`
-install is missing or broken.
 
 ## Testing
 
 ```bash
-./gradlew test                                   # JVM tests
+./gradlew test                                   # JVM tests (headless)
 python3 testdata/golden/run_golden.py            # Python backend regression corpus
 ```
 
-The JVM tests deliberately avoid needing a running JOSM GUI, so they can run in CI.
-Anything that genuinely requires a live JOSM instance is listed in the release
-checklist instead.
+`testdata/golden/` pins the behaviour of the four `lanelet2` backends. The JVM
+suite does not need a running JOSM GUI.
 
 ## Scripting
 
-Users can keep writing small ad-hoc scripts against this plugin via the
-[JOSM Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting).
-The supported engine is **Jython 2.7** (Python 2 syntax). Scripting plugin v0.4.x
-is GraalVM-based and does **not** bundle Jython; add a `jython-standalone` jar
+Ad-hoc scripts can call this plugin's `Lanelet2Extensions` facade. Two
+in-process engines work; they share the live JOSM `DataSet`, not a file
+round-trip.
+
+| | [GraalPy plugin](../JOSM_GraalPy_Plugin/) | [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) |
+|---|---|---|
+| Language | **Python 3** (GraalPy 25, currently 3.13) | **Jython 2.7** only |
+| How to run | *Tools → Run Python file…* (also bundled hello / centroid) | *Scripting → Run Script* after adding a Jython engine jar |
+| NumPy / PyData | Yes (GraalPy wheels; NumPy ships with that plugin) | No |
+| This plugin's classes | After both plugins load — see below | After both plugins load — see below |
+
+This plugin injects its classloader into both hosts (`scripting` and
+`graalpy`). The GraalPy plugin also pulls every other `PluginClassLoader`
+into its own. Either direction is enough; doing both covers load order.
+Startup still succeeds if neither script engine is installed.
+
+```
+from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
+```
+
+### Python 3 via GraalPy
+
+The sibling [JOSM GraalPy plugin](../JOSM_GraalPy_Plugin/) evals Python 3
+inside the same JVM (Polyglot / GraalPy), with `from org.openstreetmap.josm…`
+imports and optional NumPy. It is a separate plugin (`graalpy`); this one
+does not embed GraalVM.
+
+1. Load **lanelet2** and **graalpy** in the same JOSM.
+2. Open a data layer, then *Tools → Run Python file…* and pick
+   `examples/graalpy/hello_lanelet2.py`.
+
+That example is Python 3 (`f"…"`, generator expressions). It imports
+`Lanelet2Extensions` the same way as the Jython script and reports the
+current selection. `./gradlew runJosm` in the GraalPy repo is the supported
+way to launch that plugin today (GraalPy must sit on `java.class.path`; a
+plain plugin-manager install is still a PoC limitation — see that README).
+
+Ideas that need SciPy / Shapely / NetworkX live under
+[`JOSM_GraalPy_Plugin/inspiration/`](../JOSM_GraalPy_Plugin/inspiration/).
+
+### Jython 2.7 via the Scripting plugin
+
+Scripting plugin v0.4.x does not bundle Jython; add a `jython-standalone` jar
 under *Preferences → Scripting → Script engines* first.
 
-### Enable it
-
-1. Install this plugin and the Scripting plugin.
-2. Add a Jython 2.7 engine jar as above.
-3. Restart JOSM (or load both plugins at runtime). This plugin injects its
-   classloader into the Scripting plugin so `import` can see our classes. If
-   the Scripting plugin is absent, startup still succeeds; only script imports
-   of our API will fail.
-
-### Example script
+1. Install this plugin and the Scripting plugin, then add a Jython 2.7 engine.
+2. Restart JOSM.
 
 `examples/jython/hello_lanelet2.py` registers a **Hello Lanelet2 (example)**
-item on the *Lanelet2 Utils* menu. Clicking it reports how many lanelets are
-in the current selection (including those inferred from selected linestrings),
-their combined centerline length in metres, and the plugin's default subtype.
-
-The same file ships inside the plugin jar. Extract it with
-*Lanelet2 Utils → Copy example script to...* (toolbar short label **Copy Ex**),
-then run the copy via *Scripting → Run Script*. Running the script once adds
-the menu item; it does not need to stay open.
-
-This script is also the manual acceptance test for classloader injection: if
-it imports `Lanelet2Extensions` and the new menu item appears, the bridge
-works. Automating that would require a live JOSM plus Jython in CI.
-
-### The `Lanelet2Extensions` facade
+item on *Lanelet2 Utils*. The same file ships inside the jar: *Lanelet2 Utils →
+Copy example script to…*, then *Scripting → Run Script*. Do not use Python 3
+syntax in this file.
 
 ```
 from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
@@ -104,7 +209,7 @@ from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
 
 | Method | Purpose |
 | --- | --- |
-| `register(slotId, title, callback, anchor)` | Add a menu item. `callback` is a Jython function (SAM). |
+| `register(slotId, title, callback, anchor)` | Add a menu item. `callback` is a zero-arg function (SAM). |
 | `unregister(slotId)` | Remove a previously registered item. |
 | `after(slotId)` / `before(slotId)` | Anchor relative to a first-party slot. |
 | `anchors()` | Stable slot-ids you can pass to `after` / `before`. |
@@ -117,7 +222,6 @@ from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
 | `lanelets().fromCurrentSelection()` | Same, on the active edit layer. |
 | `lanelets().wrap(relation)` | Wrap a `type=lanelet` relation. |
 
-Do not use Python 3 syntax (`f"..."`, `async`, walrus `:=`, type annotations).
-`print x` is a statement in Jython 2.7; prefer Swing dialogs as the example
-does. JOSM's own `getBoolean` treats only `"true"` as true — always go through
+Jython scripts must stay on Python 2 syntax. GraalPy scripts use Python 3.
+JOSM's own `getBoolean` treats only `"true"` as true — always go through
 `Lanelet2Extensions.settings()` for plugin keys.

@@ -57,7 +57,8 @@ object BackendSetupDialog {
         val intro = JLabel(
             "<html><b>Set up Lanelet2 backends</b><br>" +
                 "Creates a private virtualenv and installs <code>lanelet2</code> and <code>numpy&lt;2</code>.<br>" +
-                "The upstream wheel is <b>Linux x64</b> and supports <b>Python 3.8–3.11</b> only.</html>",
+                "The upstream wheel is <b>Linux x64</b> and supports " +
+                "<b>Python ${SidecarHealth.VERSION_RANGE}</b>.</html>",
         )
         intro.border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
 
@@ -134,7 +135,10 @@ object BackendSetupDialog {
         }
 
         browseBtn.addActionListener {
-            val picked = FileChoosers.chooseFile("Select Python 3.8–3.11 executable", File(pythonField.text))
+            val picked = FileChoosers.chooseFile(
+                "Select Python ${SidecarHealth.VERSION_RANGE} executable",
+                File(pythonField.text),
+            )
             if (picked != null) pythonField.text = picked.absolutePath
         }
 
