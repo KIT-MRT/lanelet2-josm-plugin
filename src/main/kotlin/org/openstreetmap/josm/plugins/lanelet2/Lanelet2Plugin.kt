@@ -14,6 +14,7 @@ import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dHook
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.plugins.lanelet2.regulatory.RegulatoryActions
 import org.openstreetmap.josm.plugins.lanelet2.selection.SelectionActions
+import org.openstreetmap.josm.plugins.lanelet2.tools.ToolsActions
 import org.openstreetmap.josm.plugins.lanelet2.platform.MapStyles
 import org.openstreetmap.josm.plugins.lanelet2.platform.MenuInstaller
 import org.openstreetmap.josm.plugins.lanelet2.platform.TaggingPresetsInstaller
@@ -34,6 +35,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             SmoothSplitActions.registerAll()
             RegulatoryActions.registerAll()
             SelectionActions.registerAll()
+            ToolsActions.registerAll()
             DependentActions.registerAll()
             RoutingSettings.registerAll()
             InternalActions.registerAll()

@@ -121,6 +121,26 @@ returns null and the task fails with a confusing NPE.
 - **Watch for Python 2 semantics.** The originals are Jython 2.7, where `/` on
   two ints truncates. Check every division when porting.
 - **Tests must run headless** — no JOSM GUI, no display, so they work in CI.
+
+### Jython quirks (josm_tools ports)
+
+- **`highlight_file_boundaries` group tag vs mismatch tag.** Hull grouping
+  reads `highlight_file_boundaries.group_tag` (default `file_origin`).
+  Relation-vs-member mismatch detection, the empty-map warning, and the
+  "untagged points ignored" toast always use the literal key `file_origin`.
+- **Hull ring start is insertion-ordered.** The Jython walks `set`/`dict`
+  (hash order in 2.7), so Douglas-Peucker can keep a different vertex if the
+  ring starts elsewhere. The port uses `LinkedHashSet`/`LinkedHashMap` so
+  rings are stable and match a CPython 3.7+ replica of the same algorithm.
+- **`quick_tag_modal` Space binding.** The module docstring says Ctrl+Space;
+  `launcher/menu.py` binds unmodified Space and skips it while focus is in a
+  text component. Registry shortcut is `None`. Dialog x-position uses
+  Python 2 int division `(pw - dw) / 2`.
+- **`git_history_loader` replace overwrites the original file on save.** The
+  replacement layer is associated with the active file path, not the `/tmp`
+  extract. Load-into-new-layer leaves the extract in `/tmp`; replace deletes
+  it. `.git` must be a directory ([GitHelpers.findGitRepo]). `git log` lines
+  are split on `|` with maxsplit 3, so a `|` in the subject shifts date/author.
 - **Pin numerics differentially.** Geometry ports are verified against the
   original Python, not against hand-written expectations: see
   `testdata/centerline/gen_centerline_corpus.py` and `CenterlineCorpusTest`

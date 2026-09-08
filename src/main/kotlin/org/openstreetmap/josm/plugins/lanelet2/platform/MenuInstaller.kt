@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.platform
 
 import org.openstreetmap.josm.gui.MainApplication
+import org.openstreetmap.josm.plugins.lanelet2.tools.QuickTagModal
 import org.openstreetmap.josm.tools.Logging
 import java.awt.BorderLayout
 import java.awt.event.KeyEvent
@@ -30,6 +31,7 @@ object MenuInstaller {
         uninstall()
         installMenus()
         installToolbar()
+        QuickTagModal.installShortcut()
         installed = true
     }
 
