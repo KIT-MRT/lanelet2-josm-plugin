@@ -3,6 +3,7 @@ package org.openstreetmap.josm.plugins.lanelet2.hooks
 import org.openstreetmap.josm.plugins.lanelet2.platform.ActionRegistry
 import org.openstreetmap.josm.plugins.lanelet2.platform.ActionSlot
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletAction
+import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.plugins.lanelet2.platform.MenuId
 import java.awt.event.ActionEvent
 
@@ -32,6 +33,7 @@ object HooksActions {
             toolbarLabel = "AT",
             iconPath = "icons/autotag.svg",
             menu = MenuId.UTILS,
+            highlight = { LaneletSettings.isAutotagEnabled() },
         ) { AutotagNewElements.run() },
         slot(
             id = "hooks.zoom_filter_window",
@@ -40,6 +42,7 @@ object HooksActions {
             toolbarLabel = "ZFi",
             iconPath = "icons/zoom_filter.svg",
             menu = MenuId.UTILS,
+            highlight = { LaneletSettings.isZoomFilterEnabled() },
         ) { ZoomFilterWindow.run() },
     )
 
@@ -50,6 +53,7 @@ object HooksActions {
         toolbarLabel: String?,
         iconPath: String?,
         menu: MenuId,
+        highlight: (() -> Boolean)? = null,
         run: () -> Unit,
     ): ActionSlot {
         val action = object : LaneletAction(displayName, iconPath, displayName, shortcutKey) {
@@ -60,6 +64,7 @@ object HooksActions {
             action = action,
             toolbarLabel = toolbarLabel,
             iconName = iconPath,
+            toolbarHighlight = highlight,
             menu = menu,
         )
     }

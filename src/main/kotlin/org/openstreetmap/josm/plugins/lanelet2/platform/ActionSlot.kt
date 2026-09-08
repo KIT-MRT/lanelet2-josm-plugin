@@ -10,6 +10,8 @@ data class ActionSlot(
     val toolbarLabel: String?,
     val iconName: String?,
     val toolbarGroup: String? = null,
+    /** Independent on/off highlight (autotag, zoom filter, 3D). Not a radio group. */
+    val toolbarHighlight: (() -> Boolean)? = null,
     val menu: MenuId,
 ) {
     companion object {

@@ -347,6 +347,7 @@ object LaneletSettings {
 
     fun setAutotagEnabled(enabled: Boolean) {
         putBoolean(KEY_AUTOTAG_ENABLED, enabled)
+        notifyLaneletDefaultUiChanged()
     }
 
     fun getAutotagTagsRaw(default: String = ""): String = get(KEY_AUTOTAG_TAGS, default)
@@ -377,6 +378,7 @@ object LaneletSettings {
 
     fun setZoomFilterEnabled(enabled: Boolean) {
         putBoolean(KEY_ZOOMFILTER_ENABLED, enabled)
+        notifyLaneletDefaultUiChanged()
     }
 
     fun getZoomFilterThreshold(default: Double = 17.0): Double {
@@ -555,7 +557,7 @@ object LaneletSettings {
         return LaneletCreateTags(subtype, loc, oneWayTag)
     }
 
-    private fun notifyLaneletDefaultUiChanged() {
+    internal fun notifyLaneletDefaultUiChanged() {
         for (fn in laneletDefaultUiListeners) {
             try {
                 fn.run()

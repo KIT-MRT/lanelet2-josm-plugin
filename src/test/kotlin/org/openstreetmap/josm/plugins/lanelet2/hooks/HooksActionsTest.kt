@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.hooks
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -54,7 +55,21 @@ class HooksActionsTest {
             assertEquals(tuple.toolbarLabel, slot.toolbarLabel, id)
             assertEquals(tuple.iconPath, slot.iconName, id)
             assertEquals(tuple.shortcutKey, null, "$id shortcut")
+            assertTrue(slot.toolbarHighlight != null, "$id must highlight when the hook is on")
         }
+    }
+
+    @Test
+    fun highlightFollowsTheEnabledFlags() {
+        val slots = HooksActions.allSlots().associateBy { it.id }
+        val autotag = slots.getValue("hooks.autotag_new_elements").toolbarHighlight!!
+        val zoom = slots.getValue("hooks.zoom_filter_window").toolbarHighlight!!
+        assertFalse(autotag())
+        assertFalse(zoom())
+        org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings.setAutotagEnabled(true)
+        org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings.setZoomFilterEnabled(true)
+        assertTrue(autotag())
+        assertTrue(zoom())
     }
 
     private data class Tuple(

@@ -70,5 +70,6 @@ object Viewer3dSettings {
         if (cullRangeM != null) LaneletSettings.putInt(KEY_CULL_RANGE_M, cullRangeM.coerceAtLeast(10))
         if (followView != null) LaneletSettings.putBoolean(KEY_FOLLOW_VIEW, followView)
         if (driveView != null) LaneletSettings.putBoolean(KEY_DRIVE_VIEW, driveView)
+        LaneletSettings.notifyLaneletDefaultUiChanged()
     }
 }

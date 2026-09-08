@@ -28,6 +28,7 @@ object MenuInstaller {
 
     private var defaultUiListener: Runnable? = null
     private val toggleGroups = mutableListOf<ToggleGroupState>()
+    private val highlightButtons = mutableListOf<HighlightButton>()
     private var installed = false
 
     fun install() {
@@ -41,6 +42,7 @@ object MenuInstaller {
     fun uninstall() {
         unregisterDefaultUiListener()
         toggleGroups.clear()
+        highlightButtons.clear()
         removeMenus()
         removeToolbar()
         installed = false
@@ -171,6 +173,15 @@ object MenuInstaller {
             if (item.toolbarLabel == null && item.iconName == null) {
                 continue
             }
+            if (item.toolbarHighlight != null) {
+                flushToggle()
+                toggleGroup = null
+                (item.action as? LaneletAction)?.bindShortcutToWindow()
+                val btn = buildHighlightButton(item)
+                highlightButtons.add(HighlightButton(btn, item.toolbarHighlight))
+                tb.add(btn)
+                continue
+            }
             val gid = item.toolbarGroup
             if (gid != null) {
                 if (toggleGroup != gid) {
@@ -207,6 +218,31 @@ object MenuInstaller {
      * it a slot icon leaves the active mode indistinguishable. Toggle buttons
      * keep the icon and carry their state in the border and background instead.
      */
+    /**
+     * Independent on/off button (autotag, zoom filter, 3D). Clicking opens the
+     * config dialog; the highlight is then re-read from settings so Cancel does
+     * not leave a stuck selected look.
+     */
+    internal fun buildHighlightButton(item: ActionSlot): JToggleButton {
+        val btn = JToggleButton()
+        btn.text = item.toolbarLabel
+        Icons.icon(item.iconName)?.let { btn.icon = it }
+        btn.toolTipText = tooltipFor(item)
+        markSelectionVisibly(btn)
+        val highlight = item.toolbarHighlight
+        btn.addActionListener {
+            try {
+                item.action.actionPerformed(
+                    java.awt.event.ActionEvent(btn, java.awt.event.ActionEvent.ACTION_PERFORMED, item.id),
+                )
+            } finally {
+                btn.isSelected = highlight?.invoke() == true
+            }
+        }
+        btn.isSelected = highlight?.invoke() == true
+        return btn
+    }
+
     internal fun buildToggleButtons(items: List<ActionSlot>): ToggleButtons {
         val bg = ButtonGroup()
         val buttons = ArrayList<JToggleButton>(items.size)
@@ -291,6 +327,9 @@ object MenuInstaller {
                 }
             }
         }
+        for (hb in highlightButtons) {
+            hb.button.isSelected = hb.isActive()
+        }
     }
 
     private fun registerDefaultUiListener() {
@@ -317,5 +356,10 @@ object MenuInstaller {
         val buttonGroup: ButtonGroup,
         val byValue: Map<String, JToggleButton>,
         val kind: String,
+    )
+
+    private data class HighlightButton(
+        val button: JToggleButton,
+        val isActive: () -> Boolean,
     )
 }

@@ -47,8 +47,15 @@ class Viewer3dActionsTest {
         val slot = Viewer3dActions.slot()
         assertEquals(tuple.displayName, slot.action.getValue(Action.NAME))
         assertEquals(tuple.toolbarLabel, slot.toolbarLabel)
-        assertEquals(tuple.iconPath, slot.iconName)
         assertEquals(tuple.shortcutKey, null)
+        // Jython shipped no icon; the plugin adds one so the toolbar button
+        // can show the same selected-state highlight as autotag / zoom filter.
+        assertEquals(null, tuple.iconPath)
+        assertEquals(Viewer3dActions.ICON_PATH, slot.iconName)
+        assertTrue(slot.toolbarHighlight != null)
+        assertFalse(slot.toolbarHighlight!!())
+        Viewer3dSettings.saveConfig(enabled = true, host = "127.0.0.1", ingestPort = 8766)
+        assertTrue(slot.toolbarHighlight!!())
     }
 
     @Test

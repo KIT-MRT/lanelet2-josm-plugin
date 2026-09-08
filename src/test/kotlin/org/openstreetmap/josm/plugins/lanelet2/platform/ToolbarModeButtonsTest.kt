@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.platform
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -85,4 +86,47 @@ class ToolbarModeButtonsTest {
         assertTrue(road.border is EmptyBorder, "the previous mode must drop its highlight")
         assertTrue(!road.isOpaque)
     }
+
+    @Test
+    fun hookButtonsHighlightIndependentlyFromSettings() {
+        var autotag = false
+        var zoom = true
+        val at = highlightSlot("hooks.autotag_new_elements", "AT") { autotag }
+        val zf = highlightSlot("hooks.zoom_filter_window", "ZFi") { zoom }
+
+        val atBtn = MenuInstaller.buildHighlightButton(at)
+        val zfBtn = MenuInstaller.buildHighlightButton(zf)
+
+        assertFalse(atBtn.isSelected)
+        assertTrue(zfBtn.isSelected)
+        assertTrue(atBtn.border is EmptyBorder)
+        assertTrue(zfBtn.border is CompoundBorder)
+
+        autotag = true
+        atBtn.doClick()
+        assertTrue(atBtn.isSelected, "after the dialog the highlight follows the setting")
+        assertTrue(atBtn.border is CompoundBorder)
+        assertTrue(zfBtn.isSelected, "turning autotag on must not clear zoom filter")
+    }
+
+    @Test
+    fun cancellingAHookDialogDoesNotLeaveTheButtonStuckOn() {
+        var enabled = false
+        val slot = highlightSlot("ll2_viewer3d_window", "3D") { enabled }
+        val btn = MenuInstaller.buildHighlightButton(slot)
+
+        btn.doClick()
+        assertFalse(btn.isSelected, "Cancel / no setting change must drop the click toggle")
+        assertTrue(btn.border is EmptyBorder)
+    }
+
+    private fun highlightSlot(id: String, label: String, active: () -> Boolean): ActionSlot =
+        ActionSlot(
+            id = id,
+            action = DummyAction(),
+            toolbarLabel = label,
+            iconName = null,
+            toolbarHighlight = active,
+            menu = MenuId.UTILS,
+        )
 }

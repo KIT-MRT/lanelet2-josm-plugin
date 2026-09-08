@@ -14,6 +14,7 @@ object Viewer3dActions {
     const val SLOT_ID = "ll2_viewer3d_window"
     const val DISPLAY_NAME = "Live 3D Viewer (browser, Three.js)"
     const val TOOLBAR_LABEL = "3D"
+    const val ICON_PATH = "icons/viewer3d.svg"
 
     fun registerAll(registry: ActionRegistry = ActionRegistry.INSTANCE) {
         registry.register(slot())
@@ -21,14 +22,15 @@ object Viewer3dActions {
     }
 
     fun slot(): ActionSlot {
-        val action = object : LaneletAction(DISPLAY_NAME, null, DISPLAY_NAME, null) {
+        val action = object : LaneletAction(DISPLAY_NAME, ICON_PATH, DISPLAY_NAME, null) {
             override fun actionPerformed(e: ActionEvent) = Viewer3dWindow.run()
         }
         return ActionSlot(
             id = SLOT_ID,
             action = action,
             toolbarLabel = TOOLBAR_LABEL,
-            iconName = null,
+            iconName = ICON_PATH,
+            toolbarHighlight = { Viewer3dSettings.isEnabled() },
             menu = MenuId.UTILS,
         )
     }
