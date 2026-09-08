@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version='0.6' generator='lanelet2_notes'>
+  <node id='1' visible='true' version='1' lat='49.012345678' lon='8.400000001'>
+    <tag k='ll2_note' v='yes' />
+    <tag k='note_anchor' v='yes' />
+    <tag k='note_author' v='tester' />
+    <tag k='note_created' v='2024-01-02T03:04:05' />
+    <tag k='note_done' v='no' />
+    <tag k='note_id' v='abcd1234' />
+    <tag k='note_refs' v='w123 n456' />
+    <tag k='note_severity' v='major' />
+    <tag k='note_text' v='Hello &amp; &lt;world&gt;&#10;line2&#9;&apos;quote&apos; &quot;q&quot;' />
+    <tag k='note_type' v='issue' />
+  </node>
+  <node id='2' visible='true' version='1' lat='49.000000000' lon='8.400000000' />
+  <node id='3' visible='true' version='1' lat='49.000001000' lon='8.400001000' />
+  <node id='5' visible='true' version='1' lat='48.500000000' lon='8.250000000'>
+    <tag k='note_done' v='no' />
+    <tag k='note_id' v='abcd1234' />
+    <tag k='note_member' v='yes' />
+    <tag k='note_severity' v='major' />
+    <tag k='note_type' v='issue' />
+  </node>
+  <way id='4' visible='true' version='1'>
+    <nd ref='2' />
+    <nd ref='3' />
+    <tag k='ll2_note' v='yes' />
+    <tag k='note_done' v='no' />
+    <tag k='note_id' v='abcd1234' />
+    <tag k='note_severity' v='major' />
+    <tag k='note_type' v='issue' />
+  </way>
+</osm>

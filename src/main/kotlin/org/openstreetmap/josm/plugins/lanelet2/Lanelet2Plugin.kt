@@ -11,6 +11,7 @@ import org.openstreetmap.josm.plugins.lanelet2.internal.CommitReminder
 import org.openstreetmap.josm.plugins.lanelet2.internal.InternalActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dHook
+import org.openstreetmap.josm.plugins.lanelet2.notes.NotesActions
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.plugins.lanelet2.regulatory.RegulatoryActions
 import org.openstreetmap.josm.plugins.lanelet2.selection.SelectionActions
@@ -34,6 +35,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             SmoothSplitActions.registerAll()
             RegulatoryActions.registerAll()
             SelectionActions.registerAll()
+            NotesActions.registerAll()
             DependentActions.registerAll()
             RoutingSettings.registerAll()
             InternalActions.registerAll()
@@ -57,9 +59,11 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             ScriptingVisibility.exposeOurClassesToScriptingPlugin()
             if (newFrame != null) {
                 MenuInstaller.install()
+                NotesActions.installDialog(newFrame)
             } else {
                 MenuInstaller.uninstall()
                 Viewer3dHook.uninstall()
+                NotesActions.uninstallDialog()
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")
