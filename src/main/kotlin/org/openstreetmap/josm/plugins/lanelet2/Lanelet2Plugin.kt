@@ -7,6 +7,10 @@ import org.openstreetmap.josm.plugins.lanelet2.dependent.DependentActions
 import org.openstreetmap.josm.plugins.lanelet2.dependent.RoutingSettings
 import org.openstreetmap.josm.plugins.lanelet2.edit.EditActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.SmoothSplitActions
+import org.openstreetmap.josm.plugins.lanelet2.hooks.AutotagHook
+import org.openstreetmap.josm.plugins.lanelet2.hooks.HooksActions
+import org.openstreetmap.josm.plugins.lanelet2.hooks.RoutingRefreshHook
+import org.openstreetmap.josm.plugins.lanelet2.hooks.ZoomFilterHook
 import org.openstreetmap.josm.plugins.lanelet2.internal.CommitReminder
 import org.openstreetmap.josm.plugins.lanelet2.internal.InternalActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions
@@ -34,12 +38,18 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             SmoothSplitActions.registerAll()
             RegulatoryActions.registerAll()
             SelectionActions.registerAll()
+            HooksActions.registerAll()
             DependentActions.registerAll()
             RoutingSettings.registerAll()
             InternalActions.registerAll()
             Viewer3dActions.registerAll()
             CommitReminder.install()
             Viewer3dHook.installIfEnabled()
+            AutotagHook.installIfEnabled()
+            AutotagHook.installDeleteOverride()
+            AutotagHook.installAnchorProtection()
+            ZoomFilterHook.installIfEnabled()
+            RoutingRefreshHook.install()
             ExampleScript.registerAll()
             // Scripting plugin may already be loaded; injection is idempotent.
             ScriptingVisibility.exposeOurClassesToScriptingPlugin()
@@ -60,6 +70,9 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             } else {
                 MenuInstaller.uninstall()
                 Viewer3dHook.uninstall()
+                AutotagHook.uninstall()
+                ZoomFilterHook.uninstall()
+                RoutingRefreshHook.cancel()
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")

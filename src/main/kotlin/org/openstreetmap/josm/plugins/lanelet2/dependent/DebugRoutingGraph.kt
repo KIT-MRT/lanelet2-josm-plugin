@@ -11,6 +11,7 @@ import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.CheckLaneletBorders
 import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
+import org.openstreetmap.josm.plugins.lanelet2.hooks.RoutingRefreshHook
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
@@ -284,6 +285,32 @@ object DebugRoutingGraph {
         }
     }
 
+    /**
+     * Auto-trigger path from `run_update_auto`: no border check, silent
+     * precondition failures. Viewport subset unless
+     * [LaneletSettings.getRoutingHookFullMap] is on.
+     */
+    fun runUpdateAuto(onFinished: (() -> Unit)? = null, ui: UserPrompts = Dialogs): Boolean {
+        val ctx = validateLayer(showErrors = false, ui = ui)
+        if (ctx == null) {
+            try {
+                onFinished?.invoke()
+            } catch (_: Exception) {
+            }
+            return false
+        }
+        val small = !LaneletSettings.getRoutingHookFullMap()
+        return runUpdateCore(
+            ctx.layer,
+            ctx.inputPath,
+            ctx.participant,
+            showErrors = false,
+            small = small,
+            ui = ui,
+            onFinished = onFinished,
+        )
+    }
+
     fun run(small: Boolean = false, ui: UserPrompts = Dialogs) {
         if (!Sidecar.ensureUsable(if (small) SMALL_TITLE else TITLE, ui)) return
         if (!small) {
@@ -395,6 +422,9 @@ object DebugRoutingGraph {
             return
         }
         try {
+            if (small && RoutingRefreshHook.hasPendingRerun()) {
+                return
+            }
             val ds = OsmIo.parse(File(outputPath)) ?: return
             addRoutingLayer(ds, layerName, editLayer, participant, small)
         } catch (e: Exception) {
