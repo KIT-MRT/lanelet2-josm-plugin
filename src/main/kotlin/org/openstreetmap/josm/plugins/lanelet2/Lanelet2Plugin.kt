@@ -64,7 +64,11 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
     }
 
     override fun mapFrameInitialized(oldFrame: MapFrame?, newFrame: MapFrame?) {
-        Logging.info("lanelet2: mapFrameInitialized old=$oldFrame new=$newFrame")
+        // Log presence, not the frames: MapFrame.toString() dumps the whole
+        // Swing hierarchy and throws headless (Component.getObjectLock() null).
+        Logging.info(
+            "lanelet2: mapFrameInitialized oldPresent=${oldFrame != null} newPresent=${newFrame != null}",
+        )
         try {
             // All plugins have loaded by the first map-frame callback, so this
             // is the reliable point to reach into the Scripting plugin.
