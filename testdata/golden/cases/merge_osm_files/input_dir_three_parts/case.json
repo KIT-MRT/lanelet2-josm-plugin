@@ -1,0 +1,4 @@
+{
+  "backend": "merge_osm_files",
+  "output_files": ["merged.osm"]
+}

@@ -1,0 +1,4 @@
+# Plugin invocation (ll2_make_positive_ids.py): positive_ids -i <file>
+# Input already contains JOSM-style negative ids (drivable_space.osm).
+-i
+inputs/drivable_space.osm

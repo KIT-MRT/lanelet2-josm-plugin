@@ -1,0 +1,5 @@
+{
+  "backend": "positive_ids",
+  "inplace": true,
+  "output_files": ["inputs/drivable_space.osm"]
+}

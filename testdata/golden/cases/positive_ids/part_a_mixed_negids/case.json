@@ -1,0 +1,4 @@
+{
+  "backend": "positive_ids",
+  "output_files": ["out.osm"]
+}

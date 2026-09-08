@@ -1,0 +1,8 @@
+# Plugin invocation (ll2_merge_input_osm_files_launcher.py "Choose files"):
+#   merge_osm_files --output <out> --files <a> <b> <c>
+--files
+inputs/merge_dir/part_a.osm
+inputs/merge_dir/part_b.osm
+inputs/merge_dir/part_c.osm
+--output
+merged.osm

@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<osm version="0.6" upload="false" generator="lanelet2">
+  <node id="1000" visible="true" version="1" lat="49.01506621959" lon="8.41838171689">
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_boarder" />
+  </node>
+  <node id="1001" visible="true" version="1" lat="49.01511426649" lon="8.41849973409">
+    <tag k="drivable_space_border" v="true" />
+  </node>
+  <node id="1002" visible="true" version="1" lat="49.01504207965" lon="8.4183811019">
+    <tag k="drivable_space_border" v="true" />
+  </node>
+  <node id="1003" visible="true" version="1" lat="49.01504223104" lon="8.41850301475">
+    <tag k="drivable_space_border" v="true" />
+  </node>
+  <node id="1004" visible="true" version="1" lat="49.01508721872" lon="8.41844139616" />
+  <node id="1005" visible="true" version="1" lat="49.01504549385" lon="8.41844307242" />
+  <node id="1006" visible="true" version="1" lat="49.01518243772" lon="8.41849779126" />
+  <node id="1007" visible="true" version="1" lat="49.0151805092" lon="8.41838188402" />
+  <node id="1008" visible="true" version="1" lat="49.01517743047" lon="8.4184388813" />
+  <node id="1009" visible="true" version="1" lat="49.01500063546" lon="8.4185049307" />
+  <node id="1010" visible="true" version="1" lat="49.01533817264" lon="8.41838087853" />
+  <node id="1011" visible="true" version="1" lat="49.01534169094" lon="8.41848481413" />
+  <node id="1012" visible="true" version="1" lat="49.01499777683" lon="8.41841457378" />
+  <node id="1013" visible="true" version="1" lat="49.01514472108" lon="8.41843544497" />
+  <node id="1014" visible="true" version="1" lat="49.0153397119" lon="8.41843720492" />
+  <node id="1015" visible="true" version="1" lat="49.01514433626" lon="8.41844592235" />
+  <node id="1016" visible="true" version="1" lat="49.01516945616" lon="8.41843886193" />
+  <node id="1017" visible="true" version="1" lat="49.01510695431" lon="8.41845447181" />
+  <node id="1018" visible="true" version="1" lat="49.01511404659" lon="8.41838188453">
+    <tag k="drivable_space_border" v="true" />
+  </node>
+  <node id="1019" visible="true" version="1" lat="49.01499821662" lon="8.41847727042" />
+  <node id="1020" visible="true" version="1" lat="49.01543074759" lon="8.41839931872" />
+  <node id="1021" visible="true" version="1" lat="49.01547648593" lon="8.41837853059" />
+  <node id="1022" visible="true" version="1" lat="49.01523504263" lon="8.41849420186" />
+  <node id="1023" visible="true" version="1" lat="49.01506720912" lon="8.41850107519">
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_boarder" />
+  </node>
+  <node id="1024" visible="true" version="1" lat="49.01498062504" lon="8.41847760569" />
+  <node id="1025" visible="true" version="1" lat="49.01540260131" lon="8.41840133037" />
+  <node id="1026" visible="true" version="1" lat="49.01523306359" lon="8.41838221963" />
+  <node id="1027" visible="true" version="1" lat="49.01547161699" lon="8.41847337734" />
+  <node id="1028" visible="true" version="1" lat="49.01511640976" lon="8.41845363362" />
+  <node id="1029" visible="true" version="1" lat="49.0149579761" lon="8.41838322513" />
+  <node id="1030" visible="true" version="1" lat="49.01546769022" lon="8.41842681035" />
+  <node id="1031" visible="true" version="1" lat="49.0152326238" lon="8.41843854602" />
+  <node id="1032" visible="true" version="1" lat="49.01509916748" lon="8.41844133679" />
+  <node id="1033" visible="true" version="1" lat="49.01510035749" lon="8.4184496103" />
+  <node id="1034" visible="true" version="1" lat="49.01509947791" lon="8.41843536107" />
+  <node id="1035" visible="true" version="1" lat="49.01510508521" lon="8.41842278821" />
+  <node id="1036" visible="true" version="1" lat="49.01496479262" lon="8.41850761291" />
+  <node id="1037" visible="true" version="1" lat="49.0150153684" lon="8.41841423851" />
+  <node id="1038" visible="true" version="1" lat="49.01512146733" lon="8.4184496103" />
+  <node id="1039" visible="true" version="1" lat="49.01503010134" lon="8.41844357517" />
+  <node id="1040" visible="true" version="1" lat="49.01512196209" lon="8.41843309795" />
+  <node id="1041" visible="true" version="1" lat="49.01496347325" lon="8.4184459221" />
+  <way id="1042" visible="true" version="1">
+    <nd ref="1000" />
+    <nd ref="1018" />
+    <nd ref="1007" />
+    <nd ref="1026" />
+    <nd ref="1010" />
+    <nd ref="1021" />
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="1043" visible="true" version="1">
+    <nd ref="1036" />
+    <nd ref="1009" />
+    <nd ref="1003" />
+    <nd ref="1023" />
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="1044" visible="true" version="1">
+    <nd ref="1023" />
+    <nd ref="1001" />
+    <nd ref="1006" />
+    <nd ref="1022" />
+    <nd ref="1011" />
+    <nd ref="1027" />
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="1045" visible="true" version="1">
+    <nd ref="1041" />
+    <nd ref="1039" />
+    <nd ref="1005" />
+    <nd ref="1004" />
+    <nd ref="1032" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="1046" visible="true" version="1">
+    <nd ref="1024" />
+    <nd ref="1019" />
+    <tag k="subtype" v="forward_only" />
+    <tag k="type" v="symbol" />
+  </way>
+  <way id="1047" visible="true" version="1">
+    <nd ref="1038" />
+    <nd ref="1015" />
+    <nd ref="1016" />
+    <nd ref="1013" />
+    <nd ref="1040" />
+    <nd ref="1035" />
+    <nd ref="1034" />
+    <nd ref="1032" />
+    <nd ref="1033" />
+    <nd ref="1017" />
+    <nd ref="1028" />
+    <nd ref="1038" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="1048" visible="true" version="1">
+    <nd ref="1029" />
+    <nd ref="1002" />
+    <nd ref="1000" />
+    <tag k="drivable_space_border" v="true" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="1049" visible="true" version="1">
+    <nd ref="1030" />
+    <nd ref="1014" />
+    <nd ref="1031" />
+    <nd ref="1008" />
+    <nd ref="1016" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="1050" visible="true" version="1">
+    <nd ref="1020" />
+    <nd ref="1025" />
+    <tag k="subtype" v="forward_only" />
+    <tag k="type" v="symbol" />
+  </way>
+  <way id="1051" visible="true" version="1">
+    <nd ref="1037" />
+    <nd ref="1012" />
+    <tag k="subtype" v="forward_only" />
+    <tag k="type" v="symbol" />
+  </way>
+</osm>

@@ -1,0 +1,7 @@
+# Plugin invocation (ll2_debug_routing_graph.py):
+#   server_create_debug_routing_graph_dataset --once --participant <p> <in> <out>
+--once
+--participant
+vehicle
+inputs/mapping_example.osm
+routing_vehicle_mapping_example.osm

@@ -1,0 +1,12 @@
+<TIMESTAMP> - INFO - Loading merged map <WORK>/merged.osm
+<TIMESTAMP> - INFO - [split debug] after grouping: tagged=317 untagged=0 distinct_origins=3
+<TIMESTAMP> - INFO - [split debug] FILE_ORIGIN_TAG='file_origin' output_mode=staging
+<TIMESTAMP> - INFO - [split debug] buckets=3 (includes __unassigned__ if any untagged elements)
+<TIMESTAMP> - INFO - [split debug] bucket key='inputs/merge_dir/part_c.osm' elements=119 target=<WORK>/split_out/part_c.osm exists=False
+<TIMESTAMP> - INFO - [split debug] bucket key='inputs/merge_dir/part_a.osm' elements=120 target=<WORK>/split_out/part_a.osm exists=False
+<TIMESTAMP> - INFO - [split debug] bucket key='inputs/merge_dir/part_b.osm' elements=78 target=<WORK>/split_out/part_b.osm exists=False
+<TIMESTAMP> - INFO - [split debug] in-place target_paths=3: ['<WORK>/split_out/part_c.osm', '<WORK>/split_out/part_a.osm', '<WORK>/split_out/part_b.osm']
+<TIMESTAMP> - INFO - Wrote <WORK>/split_out/part_c.osm (from inputs/merge_dir/part_c.osm)
+<TIMESTAMP> - INFO - Wrote <WORK>/split_out/part_a.osm (from inputs/merge_dir/part_a.osm)
+<TIMESTAMP> - INFO - Wrote <WORK>/split_out/part_b.osm (from inputs/merge_dir/part_b.osm)
+<TIMESTAMP> - INFO - Split into 3 files

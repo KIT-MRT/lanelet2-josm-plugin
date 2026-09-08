@@ -1,0 +1,11 @@
+Merge → split round-trip for inputs/merge_dir/part_{a,b,c}.osm.
+
+These three files were written by the lanelet2 OSM writer (not JOSM), have
+positive ids, and include areas (part_a) and regulatory elements (part_c).
+
+Result (this case, also_compare in case.json): byte-identical reconstruction
+of all three parts. file_origin / original_id / git tags are stripped on
+split as designed.
+
+Not true in general — see ../../README.md (JOSM formatting, negative ids
+positivised, area outer-ring rotation on a full mapping_example merge/split).

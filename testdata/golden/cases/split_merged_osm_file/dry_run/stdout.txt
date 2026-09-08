@@ -1,0 +1,3 @@
+SPLIT_TARGET=<WORK>/split_out/part_c.osm
+SPLIT_TARGET=<WORK>/split_out/part_a.osm
+SPLIT_TARGET=<WORK>/split_out/part_b.osm

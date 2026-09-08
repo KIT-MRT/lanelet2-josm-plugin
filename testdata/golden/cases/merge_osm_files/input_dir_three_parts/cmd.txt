@@ -1,0 +1,8 @@
+# Plugin invocation (ll2_merge_input_osm_files_launcher.py "Choose directory"):
+#   merge_osm_files --output <out> --input-dir <dir>
+# Same three files as files_three_parts; file_origin paths match because glob
+# yields inputs/merge_dir/*.osm.
+--input-dir
+inputs/merge_dir
+--output
+merged.osm

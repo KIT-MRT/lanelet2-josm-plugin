@@ -1,0 +1,3 @@
+# Explicit output path (README alternative to -i). Mixed positive + negative ids.
+inputs/part_a_negids.osm
+out.osm

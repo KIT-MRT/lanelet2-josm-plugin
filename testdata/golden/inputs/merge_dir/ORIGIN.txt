@@ -1,0 +1,11 @@
+Extracted from Lanelet2 lanelet2_maps/res/mapping_example.osm using the
+lanelet2 Python bindings (UtmProjector origin 49, 8) and lanelet2.io.write:
+
+- part_a.osm: first 8 lanelets plus the first 3 areas
+- part_b.osm: next 8 lanelets
+- part_c.osm: the 10 lanelets that reference regulatory elements (8 unique
+  regulatory elements are pulled in with them)
+
+These are canonical lanelet2 OSM files, so merge→split is byte-lossless
+against them. Some node ids are large (lanelet2-generated inverted/centerline
+geometry present after load); they are stable across extractions.

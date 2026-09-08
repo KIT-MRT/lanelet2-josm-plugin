@@ -1,0 +1,9 @@
+# Plugin invocation (append onto an already-merged map):
+#   merge_osm_files --output <out> --base <merged> --files <new...>
+# Setup (not shown in argv) first merges part_a+part_b into merged_ab.osm.
+--base
+merged_ab.osm
+--files
+inputs/merge_dir/part_c.osm
+--output
+merged_abc.osm

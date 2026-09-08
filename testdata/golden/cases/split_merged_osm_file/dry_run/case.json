@@ -1,0 +1,17 @@
+{
+  "backend": "split_merged_osm_file",
+  "setup": [
+    {
+      "backend": "merge_osm_files",
+      "argv": [
+        "--files",
+        "inputs/merge_dir/part_a.osm",
+        "inputs/merge_dir/part_b.osm",
+        "inputs/merge_dir/part_c.osm",
+        "--output",
+        "merged.osm"
+      ]
+    }
+  ],
+  "output_dirs": ["split_out"]
+}

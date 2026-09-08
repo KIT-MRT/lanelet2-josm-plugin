@@ -1,0 +1,15 @@
+<TIMESTAMP> - INFO - Appending 1 file(s) onto base <WORK>/merged_ab.osm:
+<TIMESTAMP> - INFO -   inputs/merge_dir/part_c.osm
+<TIMESTAMP> - INFO - Loading <WORK>/merged_ab.osm
+<TIMESTAMP> - INFO - Loading inputs/merge_dir/part_c.osm
+<TIMESTAMP> - INFO - Preserving tags/ids on 1 base map(s); new ids start after 199
+<TIMESTAMP> - INFO - Processing <WORK>/merged_ab.osm
+<TIMESTAMP> - INFO -   keeping existing merge tags and ids
+<TIMESTAMP> - INFO - Processing inputs/merge_dir/part_c.osm
+<TIMESTAMP> - INFO - Merged map statistics:
+<TIMESTAMP> - INFO -   nodes_n: 191
+<TIMESTAMP> - INFO -   ways_n: 89
+<TIMESTAMP> - INFO -   regulatoryElements_n: 8
+<TIMESTAMP> - INFO -   lanelets_n: 26
+<TIMESTAMP> - INFO -   areas_n: 3
+<TIMESTAMP> - INFO -   polygons_n: 0

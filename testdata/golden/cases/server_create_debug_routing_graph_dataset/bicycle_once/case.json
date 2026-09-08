@@ -1,0 +1,4 @@
+{
+  "backend": "server_create_debug_routing_graph_dataset",
+  "output_files": ["routing_bicycle_mapping_example.osm"]
+}

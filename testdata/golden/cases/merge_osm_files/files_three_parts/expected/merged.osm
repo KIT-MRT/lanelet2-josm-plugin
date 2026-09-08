@@ -1,0 +1,1933 @@
+<?xml version="1.0"?>
+<osm version="0.6" upload="false" generator="lanelet2">
+  <node id="2" visible="true" version="1" lat="49.00274835607" lon="8.42463143103">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="8364662130329052059" />
+  </node>
+  <node id="3" visible="true" version="1" lat="49.00306485175" lon="8.42480333117">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="6898069442728959913" />
+  </node>
+  <node id="4" visible="true" version="1" lat="49.00270612588" lon="8.42466764085">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="6278297474485987146" />
+  </node>
+  <node id="5" visible="true" version="1" lat="49.00268281128" lon="8.42469043963">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="5505420973757823747" />
+  </node>
+  <node id="6" visible="true" version="1" lat="49.00903206018" lon="8.4260300805">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41794" />
+  </node>
+  <node id="7" visible="true" version="1" lat="49.00918364234" lon="8.42628031835">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="43092" />
+  </node>
+  <node id="8" visible="true" version="1" lat="49.00902456562" lon="8.42606935503">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41788" />
+  </node>
+  <node id="9" visible="true" version="1" lat="49.00897098184" lon="8.4263501555">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41786" />
+  </node>
+  <node id="10" visible="true" version="1" lat="49.00902090056" lon="8.42663302951">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41904" />
+  </node>
+  <node id="11" visible="true" version="1" lat="49.00939784388" lon="8.4241023653">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41704" />
+  </node>
+  <node id="12" visible="true" version="1" lat="49.00902529898" lon="8.42660419576">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41940" />
+  </node>
+  <node id="13" visible="true" version="1" lat="49.00290068189" lon="8.42402232451">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39444" />
+  </node>
+  <node id="14" visible="true" version="1" lat="49.00310011729" lon="8.42482078311">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39208" />
+  </node>
+  <node id="15" visible="true" version="1" lat="49.00912097" lon="8.4255592949">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41804" />
+  </node>
+  <node id="16" visible="true" version="1" lat="49.00287749522" lon="8.42455966603">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="8232158229591461890" />
+  </node>
+  <node id="17" visible="true" version="1" lat="49.00905887886" lon="8.42588953974">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41796" />
+  </node>
+  <node id="18" visible="true" version="1" lat="49.00914151297" lon="8.4265171315">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="43094" />
+  </node>
+  <node id="19" visible="true" version="1" lat="49.00309200057" lon="8.42465731537">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39360" />
+  </node>
+  <node id="20" visible="true" version="1" lat="49.00305516495" lon="8.42460080835">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39124" />
+  </node>
+  <node id="21" visible="true" version="1" lat="49.00913877813" lon="8.42546291582">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41720" />
+  </node>
+  <node id="22" visible="true" version="1" lat="49.0029258389" lon="8.42437358964">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="5326793094802324736" />
+  </node>
+  <node id="23" visible="true" version="1" lat="49.00272988036" lon="8.42464819483">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="7158129546726092750" />
+  </node>
+  <node id="24" visible="true" version="1" lat="49.00265255536" lon="8.42390534703">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39250" />
+  </node>
+  <node id="25" visible="true" version="1" lat="49.00938508855" lon="8.42416539721">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41710" />
+  </node>
+  <node id="26" visible="true" version="1" lat="49.00286137279" lon="8.42401937098">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39448" />
+  </node>
+  <node id="27" visible="true" version="1" lat="49.00315120868" lon="8.42461619058">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39014" />
+  </node>
+  <node id="28" visible="true" version="1" lat="49.00890654191" lon="8.4265941368">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41808" />
+  </node>
+  <node id="29" visible="true" version="1" lat="49.00292146259" lon="8.42397510048">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39042" />
+  </node>
+  <node id="30" visible="true" version="1" lat="49.00943826434" lon="8.42390876745">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="42818" />
+  </node>
+  <node id="31" visible="true" version="1" lat="49.00907072343" lon="8.42582746939">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41802" />
+  </node>
+  <node id="32" visible="true" version="1" lat="49.00930151908" lon="8.42458046906">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41712" />
+  </node>
+  <node id="33" visible="true" version="1" lat="49.00287902825" lon="8.42397468042">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39044" />
+  </node>
+  <node id="34" visible="true" version="1" lat="49.00178611814" lon="8.42350159017">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39252" />
+  </node>
+  <node id="35" visible="true" version="1" lat="49.00278403273" lon="8.42454592512">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39140" />
+  </node>
+  <node id="36" visible="true" version="1" lat="49.00945062452" lon="8.4238495671">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41702" />
+  </node>
+  <node id="37" visible="true" version="1" lat="49.00296292453" lon="8.42440039083">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39342" />
+  </node>
+  <node id="38" visible="true" version="1" lat="49.00290671872" lon="8.42442557182">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="4019527216230123894" />
+  </node>
+  <node id="39" visible="true" version="1" lat="49.00288251662" lon="8.42447391873">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39338" />
+  </node>
+  <node id="40" visible="true" version="1" lat="49.00307662514" lon="8.42392559459">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39238" />
+  </node>
+  <node id="41" visible="true" version="1" lat="49.0026430938" lon="8.42398922761">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39446" />
+  </node>
+  <node id="42" visible="true" version="1" lat="49.00281456446" lon="8.42407524669">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39272" />
+  </node>
+  <node id="43" visible="true" version="1" lat="49.00908951633" lon="8.42632993922">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41868" />
+  </node>
+  <node id="44" visible="true" version="1" lat="49.00300202665" lon="8.42402111213">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39432" />
+  </node>
+  <node id="45" visible="true" version="1" lat="49.00928304581" lon="8.42468708686">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41718" />
+  </node>
+  <node id="46" visible="true" version="1" lat="49.00290710017" lon="8.4245239668">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="39340" />
+  </node>
+  <node id="47" visible="true" version="1" lat="49.00305923197" lon="8.42465893442">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="771232807036413564" />
+  </node>
+  <node id="48" visible="true" version="1" lat="49.00909391475" lon="8.42625483736">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41866" />
+  </node>
+  <node id="49" visible="true" version="1" lat="49.00912558333" lon="8.42650830612">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41870" />
+  </node>
+  <node id="50" visible="true" version="1" lat="49.00910391064" lon="8.42640112525">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41902" />
+  </node>
+  <node id="51" visible="true" version="1" lat="49.00903717472" lon="8.4266162657">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41942" />
+  </node>
+  <node id="52" visible="true" version="1" lat="49.00917484553" lon="8.42633262143">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41976" />
+  </node>
+  <node id="53" visible="true" version="1" lat="49.00892325182" lon="8.4266002797">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="43096" />
+  </node>
+  <node id="54" visible="true" version="1" lat="49.00279960389" lon="8.42457946356">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="6411741691581393309" />
+  </node>
+  <node id="55" visible="true" version="1" lat="49.00306377117" lon="8.42477631973">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="243508496483758493" />
+  </node>
+  <node id="56" visible="true" version="1" lat="49.002738551" lon="8.42403756656">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="272767166817599525" />
+  </node>
+  <node id="57" visible="true" version="1" lat="49.00293621992" lon="8.42446380673">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="7290924679062194777" />
+  </node>
+  <node id="58" visible="true" version="1" lat="49.00900418656" lon="8.42663437061">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41906" />
+  </node>
+  <node id="59" visible="true" version="1" lat="49.00277562971" lon="8.42460662059">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="3304798362867098349" />
+  </node>
+  <node id="60" visible="true" version="1" lat="49.00267072863" lon="8.42464631507">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2263813546481148434" />
+  </node>
+  <node id="61" visible="true" version="1" lat="49.00901166388" lon="8.42660821907">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41938" />
+  </node>
+  <node id="62" visible="true" version="1" lat="49.00298288254" lon="8.42396278357">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2545393339108486801" />
+  </node>
+  <node id="63" visible="true" version="1" lat="49.00943435093" lon="8.42380732164">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41810" />
+  </node>
+  <node id="64" visible="true" version="1" lat="49.00273204879" lon="8.42407955213">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2794329745027527703" />
+  </node>
+  <node id="65" visible="true" version="1" lat="49.00286421047" lon="8.42450341467">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="6610091610055677243" />
+  </node>
+  <node id="66" visible="true" version="1" lat="49.00275236375" lon="8.42400767006">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="4555952977085267451" />
+  </node>
+  <node id="67" visible="true" version="1" lat="49.00309608478" lon="8.42477887854">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="4320263415177601228" />
+  </node>
+  <node id="68" visible="true" version="1" lat="49.00903189662" lon="8.42665381663">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="41922" />
+  </node>
+  <node id="69" visible="true" version="1" lat="49.00280713514" lon="8.42411541501">
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="5492587017139782234" />
+  </node>
+  <node id="122" visible="true" version="1" lat="49.00328326307" lon="8.42363638309">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="8306741836270208165" />
+  </node>
+  <node id="123" visible="true" version="1" lat="49.00350548716" lon="8.42451350711">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="8032117907055903221" />
+  </node>
+  <node id="124" visible="true" version="1" lat="49.00331054201" lon="8.4235069149">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="7822448796097725420" />
+  </node>
+  <node id="125" visible="true" version="1" lat="49.00349299242" lon="8.42439236198">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="7778723713793902769" />
+  </node>
+  <node id="126" visible="true" version="1" lat="49.00347680876" lon="8.42374968198">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="7356786028057223581" />
+  </node>
+  <node id="127" visible="true" version="1" lat="49.00374757318" lon="8.42432130095">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5687795797085585181" />
+  </node>
+  <node id="128" visible="true" version="1" lat="49.00378804293" lon="8.42440813746">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5144124585502996117" />
+  </node>
+  <node id="129" visible="true" version="1" lat="49.00302760402" lon="8.42434754967">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5092834017878320153" />
+  </node>
+  <node id="130" visible="true" version="1" lat="49.00374999257" lon="8.42446446385">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4576883733852456380" />
+  </node>
+  <node id="131" visible="true" version="1" lat="49.00357538851" lon="8.424577811">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4135990036724361056" />
+  </node>
+  <node id="132" visible="true" version="1" lat="49.00377308673" lon="8.42435650494">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3774205221829444153" />
+  </node>
+  <node id="133" visible="true" version="1" lat="49.00373107735" lon="8.4244047847">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3511636957405440744" />
+  </node>
+  <node id="134" visible="true" version="1" lat="49.0037110624" lon="8.42440042611">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3132453469306666309" />
+  </node>
+  <node id="135" visible="true" version="1" lat="49.00309211529" lon="8.42471437785">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3285662113055517887" />
+  </node>
+  <node id="136" visible="true" version="1" lat="49.00374207457" lon="8.4244259071">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3064369339389169109" />
+  </node>
+  <node id="137" visible="true" version="1" lat="49.00296292453" lon="8.42440039083">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39342" />
+  </node>
+  <node id="138" visible="true" version="1" lat="49.00369076108" lon="8.4244090135">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39226" />
+  </node>
+  <node id="139" visible="true" version="1" lat="49.00369023278" lon="8.42431947209">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39052" />
+  </node>
+  <node id="140" visible="true" version="1" lat="49.00349639607" lon="8.42365812477">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3340595335822158291" />
+  </node>
+  <node id="141" visible="true" version="1" lat="49.00316842682" lon="8.42390076547">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39328" />
+  </node>
+  <node id="142" visible="true" version="1" lat="49.00359190884" lon="8.42452347269">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39198" />
+  </node>
+  <node id="143" visible="true" version="1" lat="49.00353136739" lon="8.42350222137">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="229725001122710020" />
+  </node>
+  <node id="144" visible="true" version="1" lat="49.00300353401" lon="8.42444530663">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39120" />
+  </node>
+  <node id="145" visible="true" version="1" lat="49.00375037436" lon="8.42449263796">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5691303282440797333" />
+  </node>
+  <node id="146" visible="true" version="1" lat="49.00353846298" lon="8.42454186074">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39410" />
+  </node>
+  <node id="147" visible="true" version="1" lat="49.00355577517" lon="8.42448457704">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5123057974750444291" />
+  </node>
+  <node id="148" visible="true" version="1" lat="49.00325382758" lon="8.42362897965">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39322" />
+  </node>
+  <node id="149" visible="true" version="1" lat="49.00317591325" lon="8.42395699048">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39296" />
+  </node>
+  <node id="150" visible="true" version="1" lat="49.00360362647" lon="8.42450623514">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4309647433701264319" />
+  </node>
+  <node id="151" visible="true" version="1" lat="49.00379809385" lon="8.42449010233">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="40166" />
+  </node>
+  <node id="152" visible="true" version="1" lat="49.00351421165" lon="8.4235789996">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="1969743320692259226" />
+  </node>
+  <node id="153" visible="true" version="1" lat="49.00356612633" lon="8.4244248046">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39058" />
+  </node>
+  <node id="154" visible="true" version="1" lat="49.00309608478" lon="8.42477887854">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4320263415177601228" />
+  </node>
+  <node id="155" visible="true" version="1" lat="49.00298169842" lon="8.42434770121">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39348" />
+  </node>
+  <node id="156" visible="true" version="1" lat="49.00300263854" lon="8.42427230125">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4178248808544971958" />
+  </node>
+  <node id="157" visible="true" version="1" lat="49.00322918441" lon="8.42388753408">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39286" />
+  </node>
+  <node id="158" visible="true" version="1" lat="49.00304650226" lon="8.42426561582">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39008" />
+  </node>
+  <node id="159" visible="true" version="1" lat="49.00301914928" lon="8.42421831833">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39346" />
+  </node>
+  <node id="160" visible="true" version="1" lat="49.00306377117" lon="8.42477631973">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="243508496483758493" />
+  </node>
+  <node id="161" visible="true" version="1" lat="49.00347050338" lon="8.42448883583">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39368" />
+  </node>
+  <node id="162" visible="true" version="1" lat="49.00352971474" lon="8.4244024635">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="6981973664132332280" />
+  </node>
+  <node id="163" visible="true" version="1" lat="49.0035201702" lon="8.42445940529">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39394" />
+  </node>
+  <node id="164" visible="true" version="1" lat="49.00344513153" lon="8.42372592148">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39088" />
+  </node>
+  <node id="165" visible="true" version="1" lat="49.00306658654" lon="8.4240058411">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39442" />
+  </node>
+  <node id="166" visible="true" version="1" lat="49.00352278952" lon="8.42354044285">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="9205694161876915621" />
+  </node>
+  <node id="167" visible="true" version="1" lat="49.00308739658" lon="8.42397796444">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39330" />
+  </node>
+  <node id="168" visible="true" version="1" lat="49.00354038846" lon="8.4234625134">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="39920" />
+  </node>
+  <node id="169" visible="true" version="1" lat="49.0032838077" lon="8.42349198992">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="2051160037147231622" />
+  </node>
+  <node id="170" visible="true" version="1" lat="49.00348423785" lon="8.42444218333">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="8047403787857310581" />
+  </node>
+  <node id="171" visible="true" version="1" lat="49.00306002996" lon="8.42471258528">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="404453759186930087" />
+  </node>
+  <node id="172" visible="true" version="1" lat="49.00348803814" lon="8.42369466987">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="549435833981579722" />
+  </node>
+  <node id="173" visible="true" version="1" lat="49.00350519389" lon="8.42361923274">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="2483898688287220209" />
+  </node>
+  <node id="174" visible="true" version="1" lat="49.00350860359" lon="8.42343879431">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="53692168671339269" />
+  </node>
+  <node id="175" visible="true" version="1" lat="49.00371568124" lon="8.42431459542">
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="1712707026868609560" />
+  </node>
+  <node id="200" visible="true" version="1" lat="49.00518834471" lon="8.41525002385">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85896" />
+  </node>
+  <node id="201" visible="true" version="1" lat="49.00518759025" lon="8.41524964048">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85887" />
+  </node>
+  <node id="202" visible="true" version="1" lat="49.00514122665" lon="8.41524104201">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85884" />
+  </node>
+  <node id="203" visible="true" version="1" lat="49.00514011293" lon="8.4152405217">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85875" />
+  </node>
+  <node id="204" visible="true" version="1" lat="49.00511729937" lon="8.41523137556">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85843" />
+  </node>
+  <node id="205" visible="true" version="1" lat="49.00493153905" lon="8.41560683275">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85838" />
+  </node>
+  <node id="206" visible="true" version="1" lat="49.00493114385" lon="8.41560864007">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85823" />
+  </node>
+  <node id="207" visible="true" version="1" lat="49.00492882656" lon="8.41560483374">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85820" />
+  </node>
+  <node id="208" visible="true" version="1" lat="49.00492835951" lon="8.41560686013">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85806" />
+  </node>
+  <node id="209" visible="true" version="1" lat="49.00539235171" lon="8.41574887672">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40908" />
+  </node>
+  <node id="210" visible="true" version="1" lat="49.00487830919" lon="8.41552906991">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41026" />
+  </node>
+  <node id="211" visible="true" version="1" lat="49.00542180052" lon="8.41564400223">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40906" />
+  </node>
+  <node id="212" visible="true" version="1" lat="49.00525623446" lon="8.41594683581">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40904" />
+  </node>
+  <node id="213" visible="true" version="1" lat="49.0049508049" lon="8.41551003157">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85803" />
+  </node>
+  <node id="214" visible="true" version="1" lat="49.00492926744" lon="8.41560283829">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40900" />
+  </node>
+  <node id="215" visible="true" version="1" lat="49.00511889869" lon="8.41523202941">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40898" />
+  </node>
+  <node id="216" visible="true" version="1" lat="49.0051799019" lon="8.41590797069">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77714" />
+  </node>
+  <node id="217" visible="true" version="1" lat="49.00514210935" lon="8.41524146203">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40896" />
+  </node>
+  <node id="218" visible="true" version="1" lat="49.00517943485" lon="8.41590766947">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77712" />
+  </node>
+  <node id="219" visible="true" version="1" lat="49.00511806279" lon="8.41523164944">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85872" />
+  </node>
+  <node id="220" visible="true" version="1" lat="49.00522994291" lon="8.41612525465">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40914" />
+  </node>
+  <node id="221" visible="true" version="1" lat="49.00490382279" lon="8.41554259345">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40508" />
+  </node>
+  <node id="222" visible="true" version="1" lat="49.00526049804" lon="8.41599636001">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40272" />
+  </node>
+  <node id="223" visible="true" version="1" lat="49.00542091657" lon="8.4156469497">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45641" />
+  </node>
+  <node id="224" visible="true" version="1" lat="49.00543271631" lon="8.41572099027">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40482" />
+  </node>
+  <node id="225" visible="true" version="1" lat="49.0051092095" lon="8.41519529856">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40234" />
+  </node>
+  <node id="226" visible="true" version="1" lat="49.00520222024" lon="8.41611055095">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40588" />
+  </node>
+  <node id="227" visible="true" version="1" lat="49.00520464258" lon="8.4159680865">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40590" />
+  </node>
+  <node id="228" visible="true" version="1" lat="49.0052769402" lon="8.41595687788">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="81734" />
+  </node>
+  <node id="229" visible="true" version="1" lat="49.00523036779" lon="8.41598110836">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40586" />
+  </node>
+  <node id="230" visible="true" version="1" lat="49.00518105817" lon="8.41513926798">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40238" />
+  </node>
+  <node id="231" visible="true" version="1" lat="49.0051752739" lon="8.4160970946">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40592" />
+  </node>
+  <node id="232" visible="true" version="1" lat="49.00491211413" lon="8.41550415726">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40356" />
+  </node>
+  <node id="233" visible="true" version="1" lat="49.0051733806" lon="8.41590518017">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40932" />
+  </node>
+  <node id="234" visible="true" version="1" lat="49.0049505624" lon="8.41551104475">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85772" />
+  </node>
+  <node id="235" visible="true" version="1" lat="49.00542159268" lon="8.4157621188">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40480" />
+  </node>
+  <node id="236" visible="true" version="1" lat="49.00544283016" lon="8.41568359525">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40478" />
+  </node>
+  <node id="237" visible="true" version="1" lat="49.00517872786" lon="8.415907339">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40910" />
+  </node>
+  <node id="238" visible="true" version="1" lat="49.00486865056" lon="8.4155671483">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41028" />
+  </node>
+  <node id="239" visible="true" version="1" lat="49.00514877271" lon="8.41608451204">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40912" />
+  </node>
+  <node id="240" visible="true" version="1" lat="49.00517838964" lon="8.41595479751">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40274" />
+  </node>
+  <node id="241" visible="true" version="1" lat="49.00539260631" lon="8.41574799541">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="49638" />
+  </node>
+  <node id="242" visible="true" version="1" lat="49.00516203476" lon="8.41522393854">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40240" />
+  </node>
+  <node id="243" visible="true" version="1" lat="49.00489552778" lon="8.41558088412">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40358" />
+  </node>
+  <node id="244" visible="true" version="1" lat="49.00494966968" lon="8.41550866939">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40920" />
+  </node>
+  <node id="245" visible="true" version="1" lat="49.00521982961" lon="8.41592978437">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40902" />
+  </node>
+  <node id="246" visible="true" version="1" lat="49.00518906778" lon="8.41525040533">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41156" />
+  </node>
+  <node id="247" visible="true" version="1" lat="49.00493189198" lon="8.41560508506">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40922" />
+  </node>
+  <node id="248" visible="true" version="1" lat="49.00495101207" lon="8.41550913883">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40924" />
+  </node>
+  <node id="249" visible="true" version="1" lat="49.00527577834" lon="8.4159563678">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40930" />
+  </node>
+  <node id="250" visible="true" version="1" lat="49.00518916876" lon="8.41523864965">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40236" />
+  </node>
+  <node id="251" visible="true" version="1" lat="49.00522256502" lon="8.41593119199">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77701" />
+  </node>
+  <node id="252" visible="true" version="1" lat="49.00550291119" lon="8.41574535894">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40998" />
+  </node>
+  <node id="253" visible="true" version="1" lat="49.00539300151" lon="8.41574690006">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="49640" />
+  </node>
+  <node id="254" visible="true" version="1" lat="49.00513434186" lon="8.41520892443">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40242" />
+  </node>
+  <node id="255" visible="true" version="1" lat="49.00512987572" lon="8.41511402994">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41004" />
+  </node>
+  <node id="256" visible="true" version="1" lat="49.00515527331" lon="8.41512528045">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40244" />
+  </node>
+  <node id="257" visible="true" version="1" lat="49.00520759239" lon="8.41515136662">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41006" />
+  </node>
+  <node id="258" visible="true" version="1" lat="49.00548862246" lon="8.41578483548">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41076" />
+  </node>
+  <node id="259" visible="true" version="1" lat="49.00547322689" lon="8.41581936892">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="41078" />
+  </node>
+  <node id="260" visible="true" version="1" lat="49.00488577129" lon="8.41549040782">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="40342" />
+  </node>
+  <node id="261" visible="true" version="1" lat="49.00541994701" lon="8.41565013855">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43136" />
+  </node>
+  <node id="262" visible="true" version="1" lat="49.00517578828" lon="8.4159062729">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="81722" />
+  </node>
+  <node id="263" visible="true" version="1" lat="49.00525818648" lon="8.41594744413">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="69689" />
+  </node>
+  <node id="264" visible="true" version="1" lat="49.00525723435" lon="8.41594717039">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77684" />
+  </node>
+  <node id="265" visible="true" version="1" lat="49.00522123573" lon="8.41593048002">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77706" />
+  </node>
+  <node id="266" visible="true" version="1" lat="49.0049494756" lon="8.41550949759">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85789" />
+  </node>
+  <node id="267" visible="true" version="1" lat="49.00527643722" lon="8.41595663143">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="81745" />
+  </node>
+  <node id="268" visible="true" version="1" lat="49.00494926903" lon="8.41551036016">
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85774" />
+  </node>
+  <way id="70" visible="true" version="1">
+    <nd ref="5" />
+    <nd ref="4" />
+    <nd ref="23" />
+    <nd ref="2" />
+    <nd ref="59" />
+    <nd ref="54" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="8537768764427223288" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="71" visible="true" version="1">
+    <nd ref="56" />
+    <nd ref="42" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="7546618800081767594" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="72" visible="true" version="1">
+    <nd ref="16" />
+    <nd ref="46" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="4904524019485688634" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="73" visible="true" version="1">
+    <nd ref="39" />
+    <nd ref="65" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="4551142249909907342" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="74" visible="true" version="1">
+    <nd ref="46" />
+    <nd ref="57" />
+    <nd ref="37" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2785499205350414700" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="75" visible="true" version="1">
+    <nd ref="55" />
+    <nd ref="67" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2757326693420322496" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="76" visible="true" version="1">
+    <nd ref="40" />
+    <nd ref="62" />
+    <nd ref="29" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2216115017118688772" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="77" visible="true" version="1">
+    <nd ref="33" />
+    <nd ref="24" />
+    <nd ref="34" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="1729046099968656320" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="78" visible="true" version="1">
+    <nd ref="47" />
+    <nd ref="19" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="1370552761789839826" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="79" visible="true" version="1">
+    <nd ref="22" />
+    <nd ref="38" />
+    <nd ref="39" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="3395222675177818162" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="80" visible="true" version="1">
+    <nd ref="50" />
+    <nd ref="49" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44500" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="81" visible="true" version="1">
+    <nd ref="63" />
+    <nd ref="36" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44476" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="82" visible="true" version="1">
+    <nd ref="6" />
+    <nd ref="8" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44882" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="83" visible="true" version="1">
+    <nd ref="64" />
+    <nd ref="69" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="452984144889804318" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="84" visible="true" version="1">
+    <nd ref="9" />
+    <nd ref="53" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44906" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="85" visible="true" version="1">
+    <nd ref="30" />
+    <nd ref="11" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44434" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="86" visible="true" version="1">
+    <nd ref="36" />
+    <nd ref="30" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44428" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="87" visible="true" version="1">
+    <nd ref="48" />
+    <nd ref="43" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44498" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="88" visible="true" version="1">
+    <nd ref="26" />
+    <nd ref="66" />
+    <nd ref="41" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="6937946819898808252" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="89" visible="true" version="1">
+    <nd ref="14" />
+    <nd ref="3" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="2764641530780420290" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="90" visible="true" version="1">
+    <nd ref="44" />
+    <nd ref="13" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="997750960516616982" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="91" visible="true" version="1">
+    <nd ref="28" />
+    <nd ref="53" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44904" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="92" visible="true" version="1">
+    <nd ref="21" />
+    <nd ref="15" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44472" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="93" visible="true" version="1">
+    <nd ref="31" />
+    <nd ref="17" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44878" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="94" visible="true" version="1">
+    <nd ref="32" />
+    <nd ref="45" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44108" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="95" visible="true" version="1">
+    <nd ref="43" />
+    <nd ref="50" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44920" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="96" visible="true" version="1">
+    <nd ref="49" />
+    <nd ref="18" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44898" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="97" visible="true" version="1">
+    <nd ref="11" />
+    <nd ref="25" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44426" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="98" visible="true" version="1">
+    <nd ref="68" />
+    <nd ref="51" />
+    <nd ref="12" />
+    <nd ref="61" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44140" />
+    <tag k="type" v="zig-zag" />
+  </way>
+  <way id="99" visible="true" version="1">
+    <nd ref="25" />
+    <nd ref="32" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44062" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="100" visible="true" version="1">
+    <nd ref="52" />
+    <nd ref="18" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44940" />
+    <tag k="type" v="wall" />
+  </way>
+  <way id="101" visible="true" version="1">
+    <nd ref="45" />
+    <nd ref="21" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44468" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="102" visible="true" version="1">
+    <nd ref="15" />
+    <nd ref="31" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44874" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="103" visible="true" version="1">
+    <nd ref="27" />
+    <nd ref="20" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="43260" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="104" visible="true" version="1">
+    <nd ref="8" />
+    <nd ref="9" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44884" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="105" visible="true" version="1">
+    <nd ref="60" />
+    <nd ref="35" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="43168" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="106" visible="true" version="1">
+    <nd ref="68" />
+    <nd ref="10" />
+    <nd ref="58" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44504" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="107" visible="true" version="1">
+    <nd ref="17" />
+    <nd ref="6" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44880" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="108" visible="true" version="1">
+    <nd ref="52" />
+    <nd ref="7" />
+    <nd ref="48" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44896" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="109" visible="true" version="1">
+    <nd ref="28" />
+    <nd ref="63" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44902" />
+    <tag k="type" v="wall" />
+  </way>
+  <way id="110" visible="true" version="1">
+    <nd ref="61" />
+    <nd ref="58" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="original_id" v="44928" />
+    <tag k="type" v="zig-zag" />
+  </way>
+  <way id="176" visible="true" version="1">
+    <nd ref="126" />
+    <nd ref="172" />
+    <nd ref="140" />
+    <nd ref="173" />
+    <nd ref="152" />
+    <nd ref="166" />
+    <nd ref="143" />
+    <nd ref="168" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="9181279454905460716" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="177" visible="true" version="1">
+    <nd ref="124" />
+    <nd ref="122" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="8879257000870018198" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="178" visible="true" version="1">
+    <nd ref="148" />
+    <nd ref="169" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="7489900297690920190" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="179" visible="true" version="1">
+    <nd ref="137" />
+    <nd ref="155" />
+    <nd ref="156" />
+    <nd ref="159" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="43270" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="180" visible="true" version="1">
+    <nd ref="150" />
+    <nd ref="142" />
+    <nd ref="131" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3692040452347410780" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="181" visible="true" version="1">
+    <nd ref="138" />
+    <nd ref="134" />
+    <nd ref="133" />
+    <nd ref="136" />
+    <nd ref="130" />
+    <nd ref="145" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="6274062802884754832" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="182" visible="true" version="1">
+    <nd ref="153" />
+    <nd ref="147" />
+    <nd ref="146" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="43284" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="183" visible="true" version="1">
+    <nd ref="161" />
+    <nd ref="170" />
+    <nd ref="125" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="1455522156257738290" />
+    <tag k="subtype" v="solid" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="184" visible="true" version="1">
+    <nd ref="164" />
+    <nd ref="174" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5488105484998615044" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="185" visible="true" version="1">
+    <nd ref="141" />
+    <nd ref="167" />
+    <nd ref="165" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="1783221735506111068" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="186" visible="true" version="1">
+    <nd ref="123" />
+    <nd ref="163" />
+    <nd ref="162" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3406453887639049662" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="187" visible="true" version="1">
+    <nd ref="139" />
+    <nd ref="175" />
+    <nd ref="127" />
+    <nd ref="132" />
+    <nd ref="128" />
+    <nd ref="151" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="3445456258378253750" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="188" visible="true" version="1">
+    <nd ref="160" />
+    <nd ref="154" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="2757326693420322496" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="189" visible="true" version="1">
+    <nd ref="149" />
+    <nd ref="157" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="4301562055111540984" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="190" visible="true" version="1">
+    <nd ref="171" />
+    <nd ref="135" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="1528137039159487912" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="191" visible="true" version="1">
+    <nd ref="158" />
+    <nd ref="129" />
+    <nd ref="144" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="original_id" v="5214965862031460312" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="269" visible="true" version="1">
+    <nd ref="246" />
+    <nd ref="200" />
+    <nd ref="201" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85888" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="270" visible="true" version="1">
+    <nd ref="217" />
+    <nd ref="202" />
+    <nd ref="203" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85876" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="271" visible="true" version="1">
+    <nd ref="225" />
+    <nd ref="255" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43722" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="272" visible="true" version="1">
+    <nd ref="236" />
+    <nd ref="224" />
+    <nd ref="235" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43606" />
+    <tag k="type" v="stop_line" />
+  </way>
+  <way id="273" visible="true" version="1">
+    <nd ref="222" />
+    <nd ref="229" />
+    <nd ref="227" />
+    <nd ref="240" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43548" />
+    <tag k="type" v="stop_line" />
+  </way>
+  <way id="274" visible="true" version="1">
+    <nd ref="252" />
+    <nd ref="236" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43896" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="275" visible="true" version="1">
+    <nd ref="257" />
+    <nd ref="250" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43720" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="276" visible="true" version="1">
+    <nd ref="215" />
+    <nd ref="219" />
+    <nd ref="204" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85844" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="277" visible="true" version="1">
+    <nd ref="245" />
+    <nd ref="265" />
+    <nd ref="251" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77702" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="278" visible="true" version="1">
+    <nd ref="220" />
+    <nd ref="222" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43836" />
+    <tag k="type" v="road_border" />
+  </way>
+  <way id="279" visible="true" version="1">
+    <nd ref="243" />
+    <nd ref="238" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43772" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="280" visible="true" version="1">
+    <nd ref="230" />
+    <nd ref="242" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43654" />
+    <tag k="type" v="line_thick" />
+  </way>
+  <way id="281" visible="true" version="1">
+    <nd ref="227" />
+    <nd ref="231" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43828" />
+    <tag k="type" v="virtual" />
+  </way>
+  <way id="282" visible="true" version="1">
+    <nd ref="225" />
+    <nd ref="254" />
+    <nd ref="242" />
+    <nd ref="250" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43728" />
+    <tag k="type" v="stop_line" />
+  </way>
+  <way id="283" visible="true" version="1">
+    <nd ref="214" />
+    <nd ref="207" />
+    <nd ref="208" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85807" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="284" visible="true" version="1">
+    <nd ref="210" />
+    <nd ref="221" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43768" />
+    <tag k="subtype" v="dashed" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="285" visible="true" version="1">
+    <nd ref="229" />
+    <nd ref="226" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43650" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="286" visible="true" version="1">
+    <nd ref="224" />
+    <nd ref="258" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43640" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="287" visible="true" version="1">
+    <nd ref="232" />
+    <nd ref="260" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43776" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="288" visible="true" version="1">
+    <nd ref="254" />
+    <nd ref="256" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43658" />
+    <tag k="type" v="line_thin" />
+  </way>
+  <way id="289" visible="true" version="1">
+    <nd ref="240" />
+    <nd ref="239" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43832" />
+    <tag k="type" v="fence" />
+  </way>
+  <way id="290" visible="true" version="1">
+    <nd ref="247" />
+    <nd ref="205" />
+    <nd ref="206" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85824" />
+    <tag k="subtype" v="de205" />
+    <tag k="type" v="traffic_sign" />
+  </way>
+  <way id="291" visible="true" version="1">
+    <nd ref="232" />
+    <nd ref="221" />
+    <nd ref="243" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43584" />
+    <tag k="type" v="stop_line" />
+  </way>
+  <way id="292" visible="true" version="1">
+    <nd ref="259" />
+    <nd ref="235" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="43900" />
+    <tag k="subtype" v="high" />
+    <tag k="type" v="curbstone" />
+  </way>
+  <way id="293" visible="true" version="1">
+    <nd ref="261" />
+    <nd ref="223" />
+    <nd ref="211" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="44960" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="294" visible="true" version="1">
+    <nd ref="249" />
+    <nd ref="267" />
+    <nd ref="228" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="81735" />
+    <tag k="subtype" v="de301" />
+    <tag k="type" v="traffic_sign" />
+  </way>
+  <way id="295" visible="true" version="1">
+    <nd ref="209" />
+    <nd ref="241" />
+    <nd ref="253" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="49639" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="296" visible="true" version="1">
+    <nd ref="248" />
+    <nd ref="213" />
+    <nd ref="234" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85773" />
+    <tag k="subtype" v="de205" />
+    <tag k="type" v="traffic_sign" />
+  </way>
+  <way id="297" visible="true" version="1">
+    <nd ref="212" />
+    <nd ref="264" />
+    <nd ref="263" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="69690" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="298" visible="true" version="1">
+    <nd ref="237" />
+    <nd ref="218" />
+    <nd ref="216" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="77713" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="299" visible="true" version="1">
+    <nd ref="244" />
+    <nd ref="266" />
+    <nd ref="268" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="85775" />
+    <tag k="subtype" v="red_yellow_green" />
+    <tag k="type" v="traffic_light" />
+  </way>
+  <way id="300" visible="true" version="1">
+    <nd ref="233" />
+    <nd ref="262" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="81723" />
+    <tag k="subtype" v="de301" />
+    <tag k="type" v="traffic_sign" />
+  </way>
+  <relation id="111" visible="true" version="1">
+    <member type="way" ref="106" role="outer" />
+    <member type="way" ref="110" role="outer" />
+    <member type="way" ref="98" role="outer" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="45570" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="keepout" />
+    <tag k="type" v="multipolygon" />
+  </relation>
+  <relation id="112" visible="true" version="1">
+    <member type="way" ref="100" role="outer" />
+    <member type="way" ref="96" role="outer" />
+    <member type="way" ref="80" role="outer" />
+    <member type="way" ref="95" role="outer" />
+    <member type="way" ref="87" role="outer" />
+    <member type="way" ref="108" role="outer" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="45568" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="walkway" />
+    <tag k="type" v="multipolygon" />
+  </relation>
+  <relation id="113" visible="true" version="1">
+    <member type="way" ref="99" role="outer" />
+    <member type="way" ref="94" role="outer" />
+    <member type="way" ref="101" role="outer" />
+    <member type="way" ref="92" role="outer" />
+    <member type="way" ref="102" role="outer" />
+    <member type="way" ref="93" role="outer" />
+    <member type="way" ref="107" role="outer" />
+    <member type="way" ref="82" role="outer" />
+    <member type="way" ref="104" role="outer" />
+    <member type="way" ref="84" role="outer" />
+    <member type="way" ref="91" role="outer" />
+    <member type="way" ref="109" role="outer" />
+    <member type="way" ref="81" role="outer" />
+    <member type="way" ref="86" role="outer" />
+    <member type="way" ref="85" role="outer" />
+    <member type="way" ref="97" role="outer" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="45540" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="walkway" />
+    <tag k="type" v="multipolygon" />
+  </relation>
+  <relation id="114" visible="true" version="1">
+    <member type="way" ref="71" role="left" />
+    <member type="way" ref="83" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="9187600893603114095" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="115" visible="true" version="1">
+    <member type="way" ref="90" role="left" />
+    <member type="way" ref="76" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="9178926741377113721" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="116" visible="true" version="1">
+    <member type="way" ref="88" role="left" />
+    <member type="way" ref="77" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="9037740909199276460" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="117" visible="true" version="1">
+    <member type="way" ref="103" role="left" />
+    <member type="way" ref="78" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8770581255578109950" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="118" visible="true" version="1">
+    <member type="way" ref="74" role="left" />
+    <member type="way" ref="79" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="9123153028072835627" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="119" visible="true" version="1">
+    <member type="way" ref="72" role="left" />
+    <member type="way" ref="73" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8607646396414175765" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="120" visible="true" version="1">
+    <member type="way" ref="75" role="left" />
+    <member type="way" ref="89" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8601933696747810962" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="121" visible="true" version="1">
+    <member type="way" ref="70" role="left" />
+    <member type="way" ref="105" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_a.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8410819687057750073" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="192" visible="true" version="1">
+    <member type="way" ref="190" role="left" />
+    <member type="way" ref="188" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7906681650004026038" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="193" visible="true" version="1">
+    <member type="way" ref="183" role="left" />
+    <member type="way" ref="186" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7711382928694550045" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="194" visible="true" version="1">
+    <member type="way" ref="184" role="left" />
+    <member type="way" ref="176" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7697222576222483732" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="195" visible="true" version="1">
+    <member type="way" ref="189" role="left" />
+    <member type="way" ref="185" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8000743559438839841" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="196" visible="true" version="1">
+    <member type="way" ref="187" role="left" />
+    <member type="way" ref="181" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7683991892595990902" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="197" visible="true" version="1">
+    <member type="way" ref="182" role="left" />
+    <member type="way" ref="180" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="8159759251987551368" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="198" visible="true" version="1">
+    <member type="way" ref="177" role="left" />
+    <member type="way" ref="178" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7395562882005622250" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="199" visible="true" version="1">
+    <member type="way" ref="191" role="left" />
+    <member type="way" ref="179" role="right" />
+    <tag k="file_origin" v="inputs/merge_dir/part_b.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="7326074532659563937" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="301" visible="true" version="1">
+    <member type="way" ref="286" role="left" />
+    <member type="way" ref="274" role="right" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="318" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="45136" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="302" visible="true" version="1">
+    <member type="way" ref="285" role="left" />
+    <member type="way" ref="278" role="right" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="312" role="regulatory_element" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="45088" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="303" visible="true" version="1">
+    <member type="way" ref="292" role="left" />
+    <member type="way" ref="286" role="right" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="318" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="45134" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="304" visible="true" version="1">
+    <member type="way" ref="281" role="left" />
+    <member type="way" ref="285" role="right" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="312" role="regulatory_element" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="45082" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="305" visible="true" version="1">
+    <member type="way" ref="289" role="left" />
+    <member type="way" ref="281" role="right" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="313" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="one_way" v="yes" />
+    <tag k="original_id" v="45070" />
+    <tag k="region" v="de" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="306" visible="true" version="1">
+    <member type="way" ref="284" role="left" />
+    <member type="way" ref="279" role="right" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="315" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="45016" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="307" visible="true" version="1">
+    <member type="way" ref="287" role="left" />
+    <member type="way" ref="284" role="right" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="315" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="45014" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="308" visible="true" version="1">
+    <member type="way" ref="275" role="left" />
+    <member type="way" ref="280" role="right" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="317" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="44972" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="309" visible="true" version="1">
+    <member type="way" ref="280" role="left" />
+    <member type="way" ref="288" role="right" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="316" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="44970" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="310" visible="true" version="1">
+    <member type="way" ref="288" role="left" />
+    <member type="way" ref="271" role="right" />
+    <member type="relation" ref="311" role="regulatory_element" />
+    <member type="relation" ref="314" role="regulatory_element" />
+    <member type="relation" ref="316" role="regulatory_element" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="location" v="urban" />
+    <tag k="original_id" v="44968" />
+    <tag k="subtype" v="road" />
+    <tag k="type" v="lanelet" />
+  </relation>
+  <relation id="311" visible="true" version="1">
+    <member type="way" ref="273" role="ref_line" />
+    <member type="way" ref="300" role="refers" />
+    <member type="way" ref="294" role="refers" />
+    <member type="relation" ref="310" role="right_of_way" />
+    <member type="relation" ref="309" role="right_of_way" />
+    <member type="relation" ref="308" role="right_of_way" />
+    <member type="relation" ref="305" role="right_of_way" />
+    <member type="relation" ref="304" role="right_of_way" />
+    <member type="relation" ref="302" role="right_of_way" />
+    <member type="relation" ref="303" role="yield" />
+    <member type="relation" ref="301" role="yield" />
+    <tag k="fallback" v="yes" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45236" />
+    <tag k="subtype" v="right_of_way" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="312" visible="true" version="1">
+    <member type="way" ref="273" role="ref_line" />
+    <member type="way" ref="277" role="refers" />
+    <member type="way" ref="297" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45234" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="313" visible="true" version="1">
+    <member type="way" ref="273" role="ref_line" />
+    <member type="way" ref="298" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45232" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="314" visible="true" version="1">
+    <member type="way" ref="291" role="ref_line" />
+    <member type="way" ref="296" role="refers" />
+    <member type="way" ref="290" role="refers" />
+    <member type="relation" ref="302" role="right_of_way" />
+    <member type="relation" ref="304" role="right_of_way" />
+    <member type="relation" ref="308" role="right_of_way" />
+    <member type="relation" ref="309" role="right_of_way" />
+    <member type="relation" ref="310" role="right_of_way" />
+    <member type="relation" ref="307" role="yield" />
+    <member type="relation" ref="306" role="yield" />
+    <tag k="fallback" v="yes" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45230" />
+    <tag k="subtype" v="right_of_way" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="315" visible="true" version="1">
+    <member type="way" ref="291" role="ref_line" />
+    <member type="way" ref="299" role="refers" />
+    <member type="way" ref="283" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45226" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="316" visible="true" version="1">
+    <member type="way" ref="282" role="ref_line" />
+    <member type="way" ref="276" role="refers" />
+    <member type="way" ref="270" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45224" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="317" visible="true" version="1">
+    <member type="way" ref="282" role="ref_line" />
+    <member type="way" ref="269" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45222" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+  <relation id="318" visible="true" version="1">
+    <member type="way" ref="272" role="ref_line" />
+    <member type="way" ref="295" role="refers" />
+    <member type="way" ref="293" role="refers" />
+    <tag k="file_origin" v="inputs/merge_dir/part_c.osm" />
+    <tag k="original_id" v="45218" />
+    <tag k="subtype" v="traffic_light" />
+    <tag k="type" v="regulatory_element" />
+  </relation>
+</osm>

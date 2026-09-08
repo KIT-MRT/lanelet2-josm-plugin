@@ -1,0 +1,8 @@
+# Plugin uses --dry-run before in-place overwrite to preview SPLIT_TARGET= paths.
+--merged-file
+merged.osm
+--output
+split_out
+--output-mode
+staging
+--dry-run

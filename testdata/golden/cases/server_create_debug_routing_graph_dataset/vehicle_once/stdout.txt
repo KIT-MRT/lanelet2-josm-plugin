@@ -1,0 +1,10 @@
+Running routing graph generation once...
+loading .osm file for routing: inputs/mapping_example.osm
+generate routing cost
+generate traffic rules
+generate routing graph
+generate routing debug map 
+add more info to debug map lines and nodes
+add oneway info to nodes
+write debug map to osm file
+Wrote routing graph to file: routing_vehicle_mapping_example.osm

@@ -1,0 +1,9 @@
+# Plugin invocation (ll2_split_merged_osm_files_launcher.py staging):
+#   split_merged_osm_file --merged-file <merged> --output <dir> --output-mode staging
+# Setup first merges the three parts so this case is self-contained.
+--merged-file
+merged.osm
+--output
+split_out
+--output-mode
+staging

@@ -1,0 +1,22 @@
+{
+  "backend": "split_merged_osm_file",
+  "setup": [
+    {
+      "backend": "merge_osm_files",
+      "argv": [
+        "--files",
+        "inputs/merge_dir/part_a.osm",
+        "inputs/merge_dir/part_b.osm",
+        "inputs/merge_dir/part_c.osm",
+        "--output",
+        "merged.osm"
+      ]
+    }
+  ],
+  "output_dirs": ["split_out"],
+  "also_compare": {
+    "split_out/part_a.osm": "inputs/merge_dir/part_a.osm",
+    "split_out/part_b.osm": "inputs/merge_dir/part_b.osm",
+    "split_out/part_c.osm": "inputs/merge_dir/part_c.osm"
+  }
+}
