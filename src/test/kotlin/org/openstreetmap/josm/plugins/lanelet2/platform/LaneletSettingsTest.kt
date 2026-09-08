@@ -151,6 +151,19 @@ class LaneletSettingsTest {
     }
 
     @Test
+    fun collectionDialogDefaultsOffAndStoresOneZero() {
+        assertFalse(LaneletSettings.isCollectionDialogEnabled())
+        LaneletSettings.setCollectionDialogEnabled(true)
+        assertTrue(LaneletSettings.isCollectionDialogEnabled())
+        assertEquals("1", Config.getPref().get("lanelet2.collection_dialog.enabled", null))
+        LaneletSettings.setCollectionDialogEnabled(false)
+        assertFalse(LaneletSettings.isCollectionDialogEnabled())
+        assertEquals("0", Config.getPref().get("lanelet2.collection_dialog.enabled", null))
+        LaneletSettings.put(LaneletSettings.KEY_COLLECTION_DIALOG, "true")
+        assertFalse(LaneletSettings.isCollectionDialogEnabled())
+    }
+
+    @Test
     fun gitCommitReminderDefaultsOffAndStoresOneZero() {
         assertFalse(LaneletSettings.getGitCommitReminder())
         LaneletSettings.setGitCommitReminder(true)

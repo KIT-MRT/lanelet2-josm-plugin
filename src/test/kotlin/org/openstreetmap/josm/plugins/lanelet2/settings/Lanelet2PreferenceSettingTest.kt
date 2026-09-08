@@ -79,6 +79,7 @@ class Lanelet2PreferenceSettingTest {
         form.editingDefaults.selectOneWay(LaneletSettings.ONE_WAY_NO)
         form.editingOptions.chkDeleteTagged.isSelected = false
         form.editingOptions.chkProtectAnchors.isSelected = false
+        form.editingOptions.chkCollectionDialog.isSelected = true
         form.mergeGrid.gridCellSpinner.value = 75
         form.routing.participantCombo.selectedItem = "bicycle"
         form.routing.debounceSpinner.value = 2
@@ -100,6 +101,7 @@ class Lanelet2PreferenceSettingTest {
         assertEquals(LaneletSettings.ONE_WAY_NO, LaneletSettings.getLaneletDefaultOneWay())
         assertFalse(LaneletSettings.getDeleteTaggedNodes())
         assertFalse(LaneletSettings.getProtectMergeAnchors())
+        assertTrue(LaneletSettings.isCollectionDialogEnabled())
         assertEquals(75.0, LaneletSettings.getMergeGridCellM(), 0.0)
         assertEquals("bicycle", LaneletSettings.getRoutingDefaultParticipant())
         assertEquals(2000, LaneletSettings.getRoutingAutoDebounceMs())
@@ -135,6 +137,7 @@ class Lanelet2PreferenceSettingTest {
         assertTrue(LaneletSettings.KEY_LANELET_DEFAULT_SUBTYPE in shared)
         assertTrue(LaneletSettings.KEY_LANELET_DEFAULT_LOCATION in shared)
         assertTrue(LaneletSettings.KEY_LANELET_DEFAULT_ONE_WAY in shared)
+        assertTrue(LaneletSettings.KEY_COLLECTION_DIALOG in shared)
         assertTrue(LaneletSettings.KEY_MERGE_GRID_CELL_M in shared)
         assertTrue(LaneletSettings.KEY_ROUTING_DEFAULT_PARTICIPANT in shared)
         assertTrue(LaneletSettings.KEY_ROUTING_AUTO_DEBOUNCE_MS in shared)
@@ -156,6 +159,11 @@ class Lanelet2PreferenceSettingTest {
             standalone.editingOptions.chkProtectAnchors.isSelected,
             tab.editingOptions.chkProtectAnchors.isSelected,
         )
+        assertEquals(
+            standalone.editingOptions.chkCollectionDialog.isSelected,
+            tab.editingOptions.chkCollectionDialog.isSelected,
+        )
+        assertFalse(standalone.editingOptions.chkCollectionDialog.isSelected)
         assertEquals(standalone.mergeGrid.gridCellSpinner.value, tab.mergeGrid.gridCellSpinner.value)
         assertEquals(
             standalone.routing.participantCombo.selectedItem,
@@ -189,6 +197,7 @@ class Lanelet2PreferenceSettingTest {
             LaneletSettings.KEY_LANELET_DEFAULT_ONE_WAY,
             LaneletSettings.KEY_DELETE_TAGGED_NODES,
             LaneletSettings.KEY_PROTECT_MERGE_ANCHORS,
+            LaneletSettings.KEY_COLLECTION_DIALOG,
             LaneletSettings.KEY_MERGE_GRID_CELL_M,
             LaneletSettings.KEY_ROUTING_DEFAULT_PARTICIPANT,
             LaneletSettings.KEY_ROUTING_AUTO_DEBOUNCE_MS,
@@ -201,6 +210,7 @@ class Lanelet2PreferenceSettingTest {
             LaneletSettings.KEY_ZOOMFILTER_FILTERS,
         )
         assertEquals(expected, seen.keys)
+        assertEquals(EditingOptionsControls.ID, seen[LaneletSettings.KEY_COLLECTION_DIALOG])
         assertEquals(AutotagSettingsPanel.ID, seen[LaneletSettings.KEY_AUTOTAG_ENABLED])
         assertEquals(ZoomFilterSettingsPanel.ID, seen[LaneletSettings.KEY_ZOOMFILTER_ENABLED])
         assertEquals(RoutingControls.ID, seen[LaneletSettings.KEY_GIT_COMMIT_REMINDER])

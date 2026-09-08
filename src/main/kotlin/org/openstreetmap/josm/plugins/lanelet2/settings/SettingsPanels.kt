@@ -340,10 +340,12 @@ class EditingDefaultsControls internal constructor(
 class EditingOptionsControls internal constructor(
     val chkDeleteTagged: JCheckBox,
     val chkProtectAnchors: JCheckBox,
+    val chkCollectionDialog: JCheckBox,
 ) {
     fun save() {
         LaneletSettings.setDeleteTaggedNodes(chkDeleteTagged.isSelected)
         LaneletSettings.setProtectMergeAnchors(chkProtectAnchors.isSelected)
+        LaneletSettings.setCollectionDialogEnabled(chkCollectionDialog.isSelected)
     }
 
     companion object {
@@ -351,6 +353,7 @@ class EditingOptionsControls internal constructor(
         val KEYS = setOf(
             LaneletSettings.KEY_DELETE_TAGGED_NODES,
             LaneletSettings.KEY_PROTECT_MERGE_ANCHORS,
+            LaneletSettings.KEY_COLLECTION_DIALOG,
         )
 
         fun addTo(content: JPanel): EditingOptionsControls {
@@ -378,7 +381,19 @@ class EditingOptionsControls internal constructor(
             anchorRow.add(chkProtectAnchors)
             content.add(anchorRow)
 
-            return EditingOptionsControls(chkDeleteTagged, chkProtectAnchors)
+            val chkCollectionDialog = JCheckBox(
+                "Use collection dialog (Select Lanelets / Relations / regulatory wizards)",
+                LaneletSettings.isCollectionDialogEnabled(),
+            )
+            chkCollectionDialog.toolTipText =
+                "When on, Select Lanelets, Select Relations, and the regulatory-element " +
+                    "wizards open the incremental Add / Select / Done collector instead of " +
+                    "using the current JOSM selection."
+            val collectionRow = JPanel(FlowLayout(FlowLayout.LEFT))
+            collectionRow.add(chkCollectionDialog)
+            content.add(collectionRow)
+
+            return EditingOptionsControls(chkDeleteTagged, chkProtectAnchors, chkCollectionDialog)
         }
     }
 }

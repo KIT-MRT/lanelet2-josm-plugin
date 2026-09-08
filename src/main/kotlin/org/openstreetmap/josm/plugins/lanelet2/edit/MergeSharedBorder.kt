@@ -24,12 +24,17 @@ import kotlin.math.sqrt
  * delete that way, then delete nodes that have no remaining referrers.
  * Port of `merge_shared_border_lanelets.py`.
  *
- * The collection dialog is not ported; the action expects exactly two lanelets
- * (or their borders) in the current selection.
+ * With the collection-dialog setting, the action collects exactly two lanelets
+ * interactively; otherwise it expects them (or their borders) in the current
+ * selection.
  */
 object MergeSharedBorder {
     const val TITLE = "Merge Shared Border"
     const val SEQUENCE_NAME = "Merge shared border lanelets"
+    const val HELP_TEXT = """Merge Shared Border
+
+Select exactly two lanelets whose closest pair of borders should become one way.
+The discarded way is deleted after its relation is rewritten."""
 
     data class BorderPair(
         val way1: Way,
@@ -182,12 +187,53 @@ object MergeSharedBorder {
             return
         }
         val data = layer.data
+        if (org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic.shouldOpenCollectionDialog()) {
+            collectTwo(data, ui) { a, b -> finishMerge(data, a, b, layer, ui) }
+            return
+        }
         val collected = LaneletSelection.extractLaneletsOrFromLinestrings(data, data.selected)
         if (collected.size != 2) {
             ui.warn("Select exactly 2 lanelets to merge. Use X to remove extras.", TITLE)
             return
         }
-        when (val plan = apply(data, collected[0], collected[1], layer)) {
+        finishMerge(data, collected[0], collected[1], layer, ui)
+    }
+
+    private fun collectTwo(
+        data: org.openstreetmap.josm.data.osm.DataSet,
+        ui: UserPrompts,
+        initial: List<org.openstreetmap.josm.data.osm.Relation> = emptyList(),
+        onPair: (org.openstreetmap.josm.data.osm.Relation, org.openstreetmap.josm.data.osm.Relation) -> Unit,
+    ) {
+        org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog.showLaneletCollection(
+            data = data,
+            onDone = { collected ->
+                if (collected.size != 2) {
+                    ui.warn("Select exactly 2 lanelets to merge. Use X to remove extras.", TITLE)
+                    collectTwo(data, ui, collected, onPair)
+                    return@showLaneletCollection
+                }
+                onPair(collected[0], collected[1])
+            },
+            title = "Merge Shared Border - Select 2 Lanelets",
+            message = "Select 2 lanelets whose shared border should be merged. Add / Select (S) / Remove (X) / Done.",
+            minCount = 2,
+            initialCollected = initial,
+            helpTitle = TITLE,
+            helpText = HELP_TEXT,
+            helpLinks = listOf("LaneletAndAreaTagging" to "LaneletAndAreaTagging.md"),
+            ui = ui,
+        )
+    }
+
+    private fun finishMerge(
+        data: org.openstreetmap.josm.data.osm.DataSet,
+        ll1: org.openstreetmap.josm.data.osm.Relation,
+        ll2: org.openstreetmap.josm.data.osm.Relation,
+        layer: org.openstreetmap.josm.gui.layer.OsmDataLayer,
+        ui: UserPrompts,
+    ) {
+        when (val plan = apply(data, ll1, ll2, layer)) {
             MergePlan.MissingBounds ->
                 ui.warn("Could not find left/right ways for both lanelets.", TITLE)
             MergePlan.AlreadyShared ->

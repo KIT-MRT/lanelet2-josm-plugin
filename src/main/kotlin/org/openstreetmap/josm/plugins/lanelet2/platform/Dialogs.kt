@@ -14,9 +14,10 @@ import javax.swing.JTextArea
 import javax.swing.Timer
 
 /**
- * Minimal Swing prompts used by edit actions. `lanelet2_dialogs.py` / the
- * collection dialog are not ported; this covers message, confirm, and the
- * auto-close toast the Jython used via `show_message_auto_close`.
+ * Minimal Swing prompts used by edit actions. The collection / step dialogs
+ * live in [org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog];
+ * this covers message, confirm, and the auto-close toast the Jython used via
+ * `show_message_auto_close`.
  *
  * Headless (tests, CI): logs instead of opening a window; [confirm] returns
  * false so an accidental GUI path cannot mutate data.

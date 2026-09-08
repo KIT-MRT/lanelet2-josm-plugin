@@ -8,6 +8,8 @@ import org.openstreetmap.josm.data.osm.RelationMember
 import org.openstreetmap.josm.data.osm.Way
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionDialog
+import org.openstreetmap.josm.plugins.lanelet2.infra.CollectionLogic
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletSelection
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.plugins.lanelet2.infra.RegulatoryElements
@@ -23,8 +25,8 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
  *
  * One SequenceCommand. Port of `create_traffic_light_relation.py`.
  *
- * The Jython 3-step collection wizard is not ported; [run] uses the current
- * selection (stop line + traffic-light ways + lanelets or their border ways).
+ * With the collection-dialog setting, [run] is the Jython 3-step wizard
+ * (stop line, traffic lights, lanelets). Off: current selection.
  *
  * **lanelet2 C++:** `TrafficLight` puts `refers` first and treats the stop line
  * (`ref_line`) as optional. The Jython requires a stop line and emits `ref_line`
@@ -39,6 +41,24 @@ object CreateTrafficLightRelation {
     const val TITLE = "Create Traffic Light Relation"
     const val SEQUENCE_NAME = "Create traffic light regulatory element"
     const val SUBTYPE = "traffic_light"
+
+    const val HELP_TEXT = """Traffic Light Regulatory Element (Lanelet2)
+
+Tags: type=regulatory_element, subtype=traffic_light
+
+Roles:
+- ref_line: Stop line (type=stop_line) where vehicles stop. If absent, implicitly at lanelet end.
+- refers: Traffic light(s) (type=traffic_light) that vehicles must observe.
+
+Traffic lights: type=traffic_light, optionally subtype (red_yellow_green, red_yellow, red, etc.).
+Stop line: type=stop_line (symbol on road).
+
+All affected lanelets must reference this regulatory element."""
+
+    val HELP_LINKS: List<Pair<String, String>> = listOf(
+        "RegulatoryElementTagging" to "RegulatoryElementTagging.md",
+        "LinestringTagging" to "LinestringTagging.md",
+    )
 
     /**
      * Ways tagged `traffic_light`, `traffic_light_bicycle`, or
@@ -80,6 +100,53 @@ object CreateTrafficLightRelation {
             return
         }
         val data = layer.data
+        if (CollectionLogic.shouldOpenCollectionDialog()) {
+            CollectionDialog.clearSelection(data)
+            CollectionDialog.showStep(
+                title = "Traffic Light - Step 1/3",
+                message = "Select the ref_line (stop line, type=stop_line).\n\nClick OK when done.",
+                onOk = {
+                    val (stopLine, err) = RegulatoryElements.extractStopLine(data.selected)
+                    if (err != null || stopLine == null) {
+                        ui.warn(err ?: "Select exactly 1 stop line (type=stop_line).", TITLE)
+                        return@showStep
+                    }
+                    CollectionDialog.clearSelection(data)
+                    CollectionDialog.showStepMulti(
+                        title = "Traffic Light - Step 2/3",
+                        message = "Select traffic lights (type=traffic_light).\n\nClick Add to add them, Done when finished.",
+                        data = data,
+                        extract = { extractTrafficLights(it) },
+                        onDone = { lights ->
+                            CollectionDialog.clearSelection(data)
+                            CollectionDialog.showLaneletCollection(
+                                data = data,
+                                onDone = { lanelets ->
+                                    apply(data, stopLine, lights.filterIsInstance<Way>(), lanelets, layer)
+                                    ui.info(createdMessage(lanelets.size), TITLE)
+                                },
+                                title = "Traffic Light - Step 3/3",
+                                message = "Select lanelets or linestrings (lane boundaries). Linestrings infer lanelets (Mode B).",
+                                minCount = 1,
+                                helpTitle = "Traffic Light - Lanelet2 Tagging",
+                                helpText = HELP_TEXT,
+                                helpLinks = HELP_LINKS,
+                                ui = ui,
+                            )
+                        },
+                        minCount = 1,
+                        itemNamePlural = "traffic light(s)",
+                        highlight = "traffic lights",
+                        ui = ui,
+                    )
+                },
+                highlight = "ref_line",
+                helpTitle = "Traffic Light - Lanelet2 Tagging",
+                helpText = HELP_TEXT,
+                helpLinks = HELP_LINKS,
+            )
+            return
+        }
         val selection = data.selected
         val (stopLine, err) = RegulatoryElements.extractStopLine(selection)
         if (err != null || stopLine == null) {
@@ -97,11 +164,11 @@ object CreateTrafficLightRelation {
             return
         }
         apply(data, stopLine, lights, lanelets, layer)
-        ui.info(
-            "Created traffic light regulatory element.\n" +
-                "Added to ${lanelets.size} lanelet(s).\n" +
-                "Review in Properties dialog (Alt+O if not visible).",
-            TITLE,
-        )
+        ui.info(createdMessage(lanelets.size), TITLE)
     }
+
+    fun createdMessage(laneletCount: Int): String =
+        "Created traffic light regulatory element.\n" +
+            "Added to $laneletCount lanelet(s).\n" +
+            "Review in Properties dialog (Alt+O if not visible)."
 }

@@ -9,8 +9,8 @@ import java.io.File
 /**
  * Shared load/save/find logic for "select lanelets / relations from linestrings".
  *
- * Port of `select_relations_core.py` minus `run_select_relations_flow` (that
- * function opens the collection dialog, which is a separate GUI task).
+ * Port of `select_relations_core.py` minus the collection-dialog shell
+ * ([CollectionDialog] + [org.openstreetmap.josm.plugins.lanelet2.selection.SelectFromLinestrings]).
  *
  * File I/O failures are logged instead of shown in a `JOptionPane`.
  */
