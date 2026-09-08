@@ -35,6 +35,7 @@ object LaneletSettings {
     const val KEY_PROTECT_MERGE_ANCHORS = "merge_anchor.protect"
     const val KEY_DELETE_TAGGED_NODES = "delete.tagged_nodes"
     const val KEY_MERGE_GRID_CELL_M = "merge.grid_cell_m"
+    const val KEY_HIGHLIGHT_GROUP_TAG = "highlight_file_boundaries.group_tag"
     const val KEY_MERGE_LAST_INPUT_DIR = "merge.last_input_dir"
     const val KEY_MERGE_LAST_OUTPUT_DIR = "merge.last_output_dir"
     const val KEY_SPLIT_LAST_OUTPUT_DIR = "split.last_output_dir"
@@ -408,6 +409,22 @@ object LaneletSettings {
         val raw = pref().get(prefKey(KEY_MERGE_GRID_CELL_M), null) ?: return default
         val m = raw.toDoubleOrNull() ?: return default
         return m.coerceIn(MERGE_GRID_CELL_M_MIN, MERGE_GRID_CELL_M_MAX)
+    }
+
+    /**
+     * Tag used to group hull points in Highlight File Boundaries.
+     * Empty / missing → `file_origin` (Jython `v or DEFAULT_GROUP_TAG`).
+     * Mismatch detection still always reads the literal `file_origin` tag.
+     */
+    fun getHighlightGroupTag(default: String = "file_origin"): String {
+        val raw = pref().get(prefKey(KEY_HIGHLIGHT_GROUP_TAG), null)
+        val v = if (raw.isNullOrEmpty()) default else raw
+        return v.ifEmpty { default }
+    }
+
+    fun setHighlightGroupTag(tag: String?) {
+        val v = tag?.trim().orEmpty().ifEmpty { "file_origin" }
+        put(KEY_HIGHLIGHT_GROUP_TAG, v)
     }
 
     fun setMergeGridCellM(meters: Double) {
