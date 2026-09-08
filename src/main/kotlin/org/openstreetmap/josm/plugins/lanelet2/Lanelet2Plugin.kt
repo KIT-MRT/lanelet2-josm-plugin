@@ -28,6 +28,7 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.TaggingPresetsInstaller
 import org.openstreetmap.josm.plugins.lanelet2.scripting.ExampleScript
 import org.openstreetmap.josm.plugins.lanelet2.scripting.ScriptingVisibility
 import org.openstreetmap.josm.tools.Logging
+import javax.swing.SwingUtilities
 
 class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
 
@@ -59,9 +60,25 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             ExampleScript.registerAll()
             // Scripting plugin may already be loaded; injection is idempotent.
             ScriptingVisibility.exposeOurClassesToScriptingPlugin()
+            // Menus must not wait for a data layer: JOSM has no MapFrame until
+            // one is opened. The menu bar is already there. Retry on the EDT
+            // in case this constructor ran before MainApplication.getMenu().
+            installMenusNowAndLater()
         } catch (e: Exception) {
             Logging.error("lanelet2: initialization failed")
             Logging.error(e)
+        }
+    }
+
+    private fun installMenusNowAndLater() {
+        MenuInstaller.installMenus()
+        if (java.awt.GraphicsEnvironment.isHeadless()) return
+        SwingUtilities.invokeLater {
+            try {
+                MenuInstaller.installMenus()
+            } catch (e: Exception) {
+                Logging.debug("lanelet2: deferred menu install skipped: {0}", e.message)
+            }
         }
     }
 
@@ -81,13 +98,12 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
                 MenuInstaller.install()
                 NotesActions.installDialog(newFrame)
             } else {
-                MenuInstaller.uninstall()
+                MenuInstaller.uninstallToolbar()
                 NotesActions.uninstallDialog()
-                // Autotag / zoom-filter / routing-refresh / viewer3d persist for
-                // the session (Jython installs them once). Do not uninstall them
-                // here: JOSM fires newFrame==null when the last layer closes,
-                // then a new frame when a file is opened. Tearing the 3D bridge
-                // down here left it dead for the rest of the session.
+                // Menus stay. Autotag / zoom-filter / routing-refresh / viewer3d
+                // persist for the session (Jython installs them once). JOSM
+                // fires newFrame==null when the last layer closes, then a new
+                // frame when a file is opened.
             }
         } catch (e: Exception) {
             Logging.error("lanelet2: menu/toolbar update failed")

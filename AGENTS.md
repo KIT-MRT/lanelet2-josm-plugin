@@ -194,8 +194,19 @@ Ported in `hooks/`. Quirks to keep:
   JOSM calls it with `newFrame == null` when the last layer closes, then
   again with a new frame when a file is opened. Autotag re-attaches via
   `ActiveLayerChangeListener` and its HUD `MapFrameListener`; the zoom
-  listener is process-global; routing keeps its timer. Viewer3dHook is
-  unrelated and still uninstalls with the frame.
+  listener is process-global; routing keeps its timer. Viewer3dHook is the
+  same: installed once, never from `newFrame == null`.
+- **Menus install at plugin startup, not when the first layer opens.** JOSM
+  has no `MapFrame` until a dataset is loaded; the menu bar exists earlier.
+  `MenuInstaller.installMenus()` runs from the plugin constructor (and again
+  on the EDT). The extra toolbars and the notes dialog wait for
+  `mapFrameInitialized(newFrame != null)`. Closing the last layer must call
+  `uninstallToolbar()` only — never `uninstall()`, or both menus vanish until
+  the next file is opened.
+- **Extra toolbar rows are optional.** A highlighted `LL2` toggle sits on
+  JOSM's own (presets) toolbar — not on the extra rows, which is what it
+  hides. Preference `toolbar.extra_visible` defaults on. Closing the last
+  layer unwraps the extra rows but must leave that toggle in place.
 
 ## Action metadata lives in three registries, not one
 

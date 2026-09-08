@@ -28,6 +28,7 @@ class SettingsDefaultsTest {
         assertTrue(LaneletSettings.getDeleteTaggedNodes())
         assertTrue(LaneletSettings.getProtectMergeAnchors())
         assertFalse(LaneletSettings.isCollectionDialogEnabled())
+        assertTrue(LaneletSettings.isExtraToolbarVisible())
     }
 
     @Test

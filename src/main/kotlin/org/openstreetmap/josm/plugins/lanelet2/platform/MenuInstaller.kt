@@ -2,15 +2,20 @@ package org.openstreetmap.josm.plugins.lanelet2.platform
 
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.plugins.lanelet2.tools.QuickTagModal
+import org.openstreetmap.josm.spi.preferences.Config
+import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener
 import org.openstreetmap.josm.tools.Logging
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.Component
+import java.awt.Container
 import java.awt.event.KeyEvent
 import javax.swing.Action
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.ButtonGroup
 import javax.swing.JButton
+import javax.swing.JCheckBoxMenuItem
 import javax.swing.JMenu
 import javax.swing.JMenuItem
 import javax.swing.JPanel
@@ -21,48 +26,103 @@ import javax.swing.UIManager
 
 object MenuInstaller {
     const val TOOLBAR_CONTAINER_NAME = "Lanelet2ToolbarContainer"
+    const val MAIN_TOGGLE_NAME = "Lanelet2ExtraToolbarToggle"
     const val UTILS_MENU_TITLE = "Lanelet2 Utils"
     const val MAP_MENU_TITLE = "Lanelet2"
+    const val EXTRA_TOOLBAR_MENU_LABEL = "Show Lanelet2 toolbars"
 
     private val menuTitles = setOf(UTILS_MENU_TITLE, MAP_MENU_TITLE)
 
     private var defaultUiListener: Runnable? = null
     private val toggleGroups = mutableListOf<ToggleGroupState>()
     private val highlightButtons = mutableListOf<HighlightButton>()
-    private var installed = false
+    private var menusInstalled = false
+    private var toolbarInstalled = false
+    private var extraUtilsBar: JToolBar? = null
+    private var extraMapBar: JToolBar? = null
+    private var mainToggle: JToggleButton? = null
+    private var extraToolbarMenuItem: JCheckBoxMenuItem? = null
+    private var josmToolbarRebuildListener: PreferenceChangedListener? = null
 
+    /** Menus + toolbar + Space shortcut. Used once a map frame exists. */
     fun install() {
-        uninstall()
         installMenus()
         installToolbar()
         QuickTagModal.installShortcut()
-        installed = true
+    }
+
+    /**
+     * Lanelet2 / Lanelet2 Utils in the menu bar, with no toolbar.
+     *
+     * JOSM has no map frame until a data layer is opened; waiting for that
+     * left both menus empty at startup. The menu bar exists earlier.
+     */
+    fun installMenus() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) return
+        try {
+            installMenusNow()
+        } catch (e: Exception) {
+            Logging.debug("lanelet2: menu install skipped: {0}", e.message)
+        }
     }
 
     fun uninstall() {
+        uninstallToolbar()
+        removeMainToolbarToggle()
+        unregisterJosmToolbarRebuildListener()
+        removeMenus()
+        menusInstalled = false
+    }
+
+    /**
+     * Drop the extra toolbars when the last layer closes. Keep the menus so
+     * Settings / 3D / hooks stay reachable with no dataset open.
+     */
+    fun uninstallToolbar() {
         unregisterDefaultUiListener()
         toggleGroups.clear()
         highlightButtons.clear()
-        removeMenus()
+        extraUtilsBar = null
+        extraMapBar = null
         removeToolbar()
-        installed = false
+        toolbarInstalled = false
     }
+
+    fun setExtraToolbarVisible(visible: Boolean) {
+        LaneletSettings.setExtraToolbarVisible(visible)
+        applyExtraToolbarVisibility()
+    }
+
+    fun applyExtraToolbarVisibility() {
+        val show = LaneletSettings.isExtraToolbarVisible()
+        extraUtilsBar?.isVisible = show
+        extraMapBar?.isVisible = show
+        mainToggle?.isSelected = show
+        extraToolbarMenuItem?.isSelected = show
+        extraUtilsBar?.parent?.revalidate()
+        extraUtilsBar?.parent?.repaint()
+        mainToggle?.parent?.revalidate()
+    }
+
+    internal fun menusAreInstalled(): Boolean = menusInstalled
+
+    internal fun toolbarIsInstalled(): Boolean = toolbarInstalled
 
     /**
      * Rebuild menus after a script [org.openstreetmap.josm.plugins.lanelet2.api.Lanelet2Extensions.register]s
      * a new slot. No-op when menus are not up (plugin init, headless tests).
      */
     fun refreshIfInstalled() {
-        if (!installed) return
+        if (!menusInstalled) return
         if (java.awt.GraphicsEnvironment.isHeadless()) return
         try {
-            install()
+            if (toolbarInstalled) install() else installMenus()
         } catch (e: Exception) {
             Logging.debug("lanelet2: menu refresh skipped: {0}", e.message)
         }
     }
 
-    private fun installMenus() {
+    private fun installMenusNow() {
         val mainMenu = MainApplication.getMenu() ?: return
         removeMenus()
         val utilsMenu = mainMenu.addMenu(
@@ -81,6 +141,15 @@ object MenuInstaller {
             null,
         )
         addMenuItems(mapMenu, ActionRegistry.INSTANCE.build(MenuId.MAP))
+        extraToolbarMenuItem = JCheckBoxMenuItem(EXTRA_TOOLBAR_MENU_LABEL).also { item ->
+            item.isSelected = LaneletSettings.isExtraToolbarVisible()
+            item.addActionListener { setExtraToolbarVisible(item.isSelected) }
+            utilsMenu.insert(item, 0)
+            utilsMenu.insertSeparator(1)
+        }
+        menusInstalled = true
+        installMainToolbarToggle()
+        registerJosmToolbarRebuildListener()
     }
 
     private fun addMenuItems(menu: JMenu, slots: List<ActionSlot?>) {
@@ -95,6 +164,7 @@ object MenuInstaller {
     }
 
     private fun removeMenus() {
+        extraToolbarMenuItem = null
         val menuBar = MainApplication.getMenu() ?: return
         for (i in menuBar.menuCount - 1 downTo 0) {
             val m = menuBar.getMenu(i)
@@ -105,6 +175,7 @@ object MenuInstaller {
     }
 
     private fun installToolbar() {
+        if (toolbarInstalled) uninstallToolbar()
         val frame = MainApplication.getMainFrame() ?: return
         val cp = frame.contentPane
         val layout = cp.layout
@@ -120,6 +191,11 @@ object MenuInstaller {
         tb2.isFloatable = false
         tb2.name = "Lanelet2"
         addButtonsToToolbar(tb2, ActionRegistry.INSTANCE.build(MenuId.MAP))
+        extraUtilsBar = tb1
+        extraMapBar = tb2
+        val show = LaneletSettings.isExtraToolbarVisible()
+        tb1.isVisible = show
+        tb2.isVisible = show
 
         val wrapper = JPanel()
         wrapper.layout = BoxLayout(wrapper, BoxLayout.Y_AXIS)
@@ -134,6 +210,8 @@ object MenuInstaller {
 
         applyToolbarSelectionFromSettings()
         registerDefaultUiListener()
+        installMainToolbarToggle()
+        toolbarInstalled = true
     }
 
     private fun removeToolbar() {
@@ -330,6 +408,7 @@ object MenuInstaller {
         for (hb in highlightButtons) {
             hb.button.isSelected = hb.isActive()
         }
+        applyExtraToolbarVisibility()
     }
 
     private fun registerDefaultUiListener() {
@@ -350,6 +429,99 @@ object MenuInstaller {
         val listener = defaultUiListener ?: return
         LaneletSettings.unregisterLaneletDefaultUiListener(listener)
         defaultUiListener = null
+    }
+
+    /**
+     * A highlighted toggle on JOSM's own toolbar (presets row). It must not
+     * live on the extra Lanelet2 rows — those are what it hides.
+     */
+    private fun installMainToolbarToggle() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) return
+        try {
+            val tb = findJosmToolBar() ?: return
+            val existing = tb.components.firstOrNull { it.name == MAIN_TOGGLE_NAME } as? JToggleButton
+            val btn = existing ?: buildMainToolbarToggle().also { tb.add(it) }
+            mainToggle = btn
+            btn.isSelected = LaneletSettings.isExtraToolbarVisible()
+            tb.revalidate()
+            tb.repaint()
+        } catch (e: Exception) {
+            Logging.debug("lanelet2: main toolbar toggle skipped: {0}", e.message)
+        }
+    }
+
+    internal fun buildMainToolbarToggle(): JToggleButton {
+        val btn = JToggleButton()
+        btn.name = MAIN_TOGGLE_NAME
+        btn.text = "LL2"
+        Icons.icon("icons/extra_toolbar.svg")?.let { btn.icon = it }
+        btn.toolTipText = "Show or hide the Lanelet2 toolbars"
+        markSelectionVisibly(btn)
+        btn.addActionListener {
+            setExtraToolbarVisible(btn.isSelected)
+        }
+        btn.isSelected = LaneletSettings.isExtraToolbarVisible()
+        return btn
+    }
+
+    private fun removeMainToolbarToggle() {
+        val btn = mainToggle
+        mainToggle = null
+        if (btn == null) return
+        try {
+            (btn.parent as? Container)?.remove(btn)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun findJosmToolBar(): JToolBar? {
+        val frame = MainApplication.getMainFrame() ?: return null
+        val cp = frame.contentPane
+        val layout = cp.layout
+        if (layout !is BorderLayout) return null
+        val north = layout.getLayoutComponent(cp, BorderLayout.NORTH) ?: return null
+        return findJosmToolBar(north)
+    }
+
+    private fun findJosmToolBar(root: Component): JToolBar? {
+        if (root is JToolBar && root.name != "Lanelet2Utils" && root.name != "Lanelet2") {
+            return root
+        }
+        if (root is Container) {
+            if (root.name?.contains(TOOLBAR_CONTAINER_NAME) == true && root.componentCount > 0) {
+                return findJosmToolBar(root.getComponent(0))
+            }
+            for (child in root.components) {
+                findJosmToolBar(child)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun registerJosmToolbarRebuildListener() {
+        if (josmToolbarRebuildListener != null) return
+        val listener = PreferenceChangedListener {
+            SwingUtilities.invokeLater {
+                try {
+                    installMainToolbarToggle()
+                } catch (_: Exception) {
+                }
+            }
+        }
+        josmToolbarRebuildListener = listener
+        try {
+            Config.getPref().addKeyPreferenceChangeListener("toolbar", listener)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unregisterJosmToolbarRebuildListener() {
+        val listener = josmToolbarRebuildListener ?: return
+        try {
+            Config.getPref().removeKeyPreferenceChangeListener("toolbar", listener)
+        } catch (_: Exception) {
+        }
+        josmToolbarRebuildListener = null
     }
 
     private data class ToggleGroupState(

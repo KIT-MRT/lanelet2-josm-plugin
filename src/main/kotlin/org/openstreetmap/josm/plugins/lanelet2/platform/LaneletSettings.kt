@@ -54,6 +54,7 @@ object LaneletSettings {
     const val KEY_ZOOMFILTER_THRESHOLD = "zoomfilter.threshold"
     const val KEY_ZOOMFILTER_FILTERS = "zoomfilter.filters"
     const val KEY_COLLECTION_DIALOG = "collection_dialog.enabled"
+    const val KEY_EXTRA_TOOLBAR_VISIBLE = "toolbar.extra_visible"
 
     const val ROUTING_AUTO_DEBOUNCE_MS_DEFAULT = 4000
     const val ROUTING_AUTO_DEBOUNCE_MS_MIN = 0
@@ -368,6 +369,18 @@ object LaneletSettings {
 
     fun setCollectionDialogEnabled(enabled: Boolean) {
         putBoolean(KEY_COLLECTION_DIALOG, enabled)
+    }
+
+    /**
+     * Whether the extra Lanelet2 toolbar rows are shown. Default on. The
+     * toggle lives on JOSM's own (top) toolbar, not on those extra rows.
+     */
+    fun isExtraToolbarVisible(default: Boolean = true): Boolean =
+        getBoolean(KEY_EXTRA_TOOLBAR_VISIBLE, default)
+
+    fun setExtraToolbarVisible(visible: Boolean) {
+        putBoolean(KEY_EXTRA_TOOLBAR_VISIBLE, visible)
+        notifyLaneletDefaultUiChanged()
     }
 
     /** Same `"1"`-only contract as [isAutotagEnabled]. */

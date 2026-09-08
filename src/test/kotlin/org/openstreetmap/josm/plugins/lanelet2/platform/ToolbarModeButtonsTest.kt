@@ -5,7 +5,10 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.openstreetmap.josm.spi.preferences.Config
+import org.openstreetmap.josm.spi.preferences.MemoryPreferences
 import org.openstreetmap.josm.actions.JosmAction
 import java.awt.event.ActionEvent
 import javax.swing.border.CompoundBorder
@@ -20,6 +23,11 @@ import javax.swing.border.EmptyBorder
  * ImageProvider, which cannot initialise in a headless test.
  */
 class ToolbarModeButtonsTest {
+
+    @BeforeEach
+    fun setUp() {
+        Config.setPreferencesInstance(MemoryPreferences())
+    }
 
     private class DummyAction : JosmAction(false) {
         override fun actionPerformed(e: ActionEvent) {}
@@ -118,6 +126,25 @@ class ToolbarModeButtonsTest {
         btn.doClick()
         assertFalse(btn.isSelected, "Cancel / no setting change must drop the click toggle")
         assertTrue(btn.border is EmptyBorder)
+    }
+
+    @Test
+    fun extraToolbarToggleStartsOnAndKeepsTheHighlightLook() {
+        assertTrue(LaneletSettings.isExtraToolbarVisible())
+        val btn = MenuInstaller.buildMainToolbarToggle()
+        assertEquals("LL2", btn.text)
+        assertEquals(MenuInstaller.MAIN_TOGGLE_NAME, btn.name)
+        assertTrue(btn.isSelected)
+        assertTrue(btn.border is CompoundBorder)
+
+        MenuInstaller.setExtraToolbarVisible(false)
+        assertFalse(LaneletSettings.isExtraToolbarVisible())
+        MenuInstaller.applyExtraToolbarVisibility()
+        // The live toolbar button is a different instance; this builder
+        // snapshot only checks the control we can construct headless.
+        val hidden = MenuInstaller.buildMainToolbarToggle()
+        assertFalse(hidden.isSelected)
+        assertTrue(hidden.border is EmptyBorder)
     }
 
     private fun highlightSlot(id: String, label: String, active: () -> Boolean): ActionSlot =
