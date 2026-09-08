@@ -1,7 +1,10 @@
 package org.openstreetmap.josm.plugins.lanelet2.infra
 
+import org.openstreetmap.josm.data.UndoRedoHandler
 import org.openstreetmap.josm.data.coor.LatLon
+import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
+import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.Relation
 import org.openstreetmap.josm.data.osm.RelationMember
 import org.openstreetmap.josm.data.osm.Way
@@ -33,5 +36,42 @@ internal object OsmFixtures {
         rel.addMember(RelationMember("left", left))
         rel.addMember(RelationMember("right", right))
         return rel
+    }
+
+    fun relation(
+        type: String,
+        subtype: String? = null,
+        vararg members: Pair<String, OsmPrimitive>,
+    ): Relation {
+        ensurePrefs()
+        val rel = Relation()
+        rel.put("type", type)
+        if (subtype != null) rel.put("subtype", subtype)
+        for ((role, mem) in members) {
+            rel.addMember(RelationMember(role, mem))
+        }
+        return rel
+    }
+
+    fun dataSet(vararg primitives: OsmPrimitive): DataSet {
+        ensurePrefs()
+        val ds = DataSet()
+        for (p in primitives) {
+            if (p.dataSet !== ds) {
+                ds.addPrimitiveRecursive(p)
+            }
+        }
+        return ds
+    }
+
+    fun withUndo(block: (UndoRedoHandler) -> Unit) {
+        ensurePrefs()
+        val undo = UndoRedoHandler.getInstance()
+        undo.clean()
+        try {
+            block(undo)
+        } finally {
+            undo.clean()
+        }
     }
 }

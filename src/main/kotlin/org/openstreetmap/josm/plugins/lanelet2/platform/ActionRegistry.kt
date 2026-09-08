@@ -86,6 +86,7 @@ class ActionRegistry(
             "josm_tools.quick_tag_modal",
             null,
             "settings_ui.lanelet2_settings_window",
+            "scripting.copy_example_script",
             "settings_ui.set_lanelet_default_subtype::road",
             "settings_ui.set_lanelet_default_subtype::bicycle_lane",
             "settings_ui.set_lanelet_default_subtype::crosswalk",

@@ -10,3 +10,4 @@ out/
 .settings/
 bin/
 .DS_Store
+*pyc

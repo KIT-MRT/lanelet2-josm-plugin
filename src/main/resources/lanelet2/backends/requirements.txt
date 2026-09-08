@@ -1,0 +1,9 @@
+# Core runtime dependencies for the open-source Lanelet2 backend scripts.
+# These scripts call the upstream lanelet2 Python bindings (liblanelet2).
+lanelet2
+# numpy < 2 is required for compatibility with the lanelet2 / pyproj stack.
+numpy<2
+# requests is only needed by the file-watch server loop (loop_and_process) in
+# server_create_debug_routing_graph_dataset.py. The JOSM `--once` code path
+# (the one used by the Jython launchers) does NOT require it.
+requests

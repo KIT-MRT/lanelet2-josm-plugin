@@ -29,6 +29,7 @@ tasks.test {
     // JarResourceLoadingTest inspects the packaged jar rather than the class
     // output, so that resource paths are verified as JOSM will see them.
     dependsOn("dist")
+    systemProperty("java.awt.headless", "true")
     systemProperty(
         "lanelet2.jar",
         layout.buildDirectory.file("dist/lanelet2.jar").get().asFile.absolutePath,
@@ -39,6 +40,15 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("module-info.class")
     exclude("META-INF/versions/*/module-info.class")
+}
+
+// Source of truth is examples/jython/; the jar serves the same files so the
+// "Copy example script to..." action can extract them without a checkout.
+tasks.processResources {
+    from("examples/jython") {
+        into("lanelet2/examples")
+        include("*.py")
+    }
 }
 
 josm {

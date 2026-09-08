@@ -11,7 +11,7 @@ without it.
 
 `testdata/golden/` holds a regression corpus that pins the behaviour of the Python
 lanelet2 backends. `examples/jython/` holds example scripts for users who want to
-script against the plugin.
+script against the plugin (also shipped inside the jar; see [Scripting](#scripting)).
 
 ## Building
 
@@ -53,3 +53,62 @@ python3 testdata/golden/run_golden.py            # Python backend regression cor
 The JVM tests deliberately avoid needing a running JOSM GUI, so they can run in CI.
 Anything that genuinely requires a live JOSM instance is listed in the release
 checklist instead.
+
+## Scripting
+
+Users can keep writing small ad-hoc scripts against this plugin via the
+[JOSM Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting).
+The supported engine is **Jython 2.7** (Python 2 syntax). Scripting plugin v0.4.x
+is GraalVM-based and does **not** bundle Jython; add a `jython-standalone` jar
+under *Preferences → Scripting → Script engines* first.
+
+### Enable it
+
+1. Install this plugin and the Scripting plugin.
+2. Add a Jython 2.7 engine jar as above.
+3. Restart JOSM (or load both plugins at runtime). This plugin injects its
+   classloader into the Scripting plugin so `import` can see our classes. If
+   the Scripting plugin is absent, startup still succeeds; only script imports
+   of our API will fail.
+
+### Example script
+
+`examples/jython/hello_lanelet2.py` registers a **Hello Lanelet2 (example)**
+item on the *Lanelet2 Utils* menu. Clicking it reports how many lanelets are
+in the current selection (including those inferred from selected linestrings),
+their combined centerline length in metres, and the plugin's default subtype.
+
+The same file ships inside the plugin jar. Extract it with
+*Lanelet2 Utils → Copy example script to...* (toolbar short label **Copy Ex**),
+then run the copy via *Scripting → Run Script*. Running the script once adds
+the menu item; it does not need to stay open.
+
+This script is also the manual acceptance test for classloader injection: if
+it imports `Lanelet2Extensions` and the new menu item appears, the bridge
+works. Automating that would require a live JOSM plus Jython in CI.
+
+### The `Lanelet2Extensions` facade
+
+```
+from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
+```
+
+| Method | Purpose |
+| --- | --- |
+| `register(slotId, title, callback, anchor)` | Add a menu item. `callback` is a Jython function (SAM). |
+| `unregister(slotId)` | Remove a previously registered item. |
+| `after(slotId)` / `before(slotId)` | Anchor relative to a first-party slot. |
+| `anchors()` | Stable slot-ids you can pass to `after` / `before`. |
+| `settings().get/put/getBoolean/putBoolean/getInt/putInt` | Plugin prefs. Booleans are `"1"` / `"0"`. |
+| `geometry().centerlineOf(lanelet)` | Centerline vertices (lon, lat). |
+| `geometry().centerlineLengthMeters(lanelet)` | Great-circle length in metres. |
+| `geometry().calculateCenterlinePoints(left, right)` | Centerline from two polylines. |
+| `geometry().wayMiddlePoint(pts)` | Middle vertex (Jython index `len // 2` quirk). |
+| `lanelets().fromSelection(data)` | Lanelets from the dataset's current selection. |
+| `lanelets().fromCurrentSelection()` | Same, on the active edit layer. |
+| `lanelets().wrap(relation)` | Wrap a `type=lanelet` relation. |
+
+Do not use Python 3 syntax (`f"..."`, `async`, walrus `:=`, type annotations).
+`print x` is a statement in Jython 2.7; prefer Swing dialogs as the example
+does. JOSM's own `getBoolean` treats only `"true"` as true — always go through
+`Lanelet2Extensions.settings()` for plugin keys.

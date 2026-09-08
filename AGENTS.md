@@ -1,0 +1,258 @@
+# Working on this plugin
+
+Kotlin JOSM plugin porting the Jython 2.7 script collection at
+`/ll2_tooling_root/JOSM_lanelet2_editing_scripts/` (read-only; read its own
+`AGENTS.md` for the tier layout). Ships as **one** plugin, `lanelet2`.
+
+## Reference sources (read them, do not guess)
+
+- **JOSM:** `/ll2_tooling_root/josm/src/` (read-only)
+- **lanelet2 C++ upstream:** `/ll2_tooling_root/ws_ll2_mapping_hiwis/src/lanelet2/`
+  (read-only). The authority for *map semantics*. Several Jython modules are
+  hand-ports of it, so it settles questions the Jython alone cannot — most
+  usefully `lanelet2_core/src/Lanelet.cpp` (`calculateCenterline`,
+  `BoundChecker`, `findClosestNonintersectingPoint`) and
+  `lanelet2_core/include/lanelet2_core/primitives/Lanelet.h`. Also useful:
+  `lanelet2_routing/`, `lanelet2_traffic_rules/`, `lanelet2_validation/`.
+
+  Verified against it so far:
+  - `calculateCenterline` matches our port 1:1, including the trailing
+    `makeCenterpoint(leftBound.back(), rightBound.back())` when the walk did not
+    finish at both last points. The duplicated tail vertex on misaligned bounds
+    is therefore **upstream behaviour**, not a Jython bug.
+  - `ConstLanelet::invert()` only flips an `inverted_` flag, exactly like our
+    `Lanelet.invert()`. **The divergence is in the accessors:** C++
+    `leftBound3d()` returns `constData()->rightBound().invert()` when inverted,
+    so bounds *and* `centerline3d()` come back with reversed point order. Our
+    port swaps left/right but does **not** reverse. Anything direction-sensitive
+    (smoothing, splitting on the centerline, routing) must not assume our
+    `invert()` behaves like lanelet2's.
+
+## Read the JOSM source instead of guessing
+
+**The JOSM source is checked out at `/ll2_tooling_root/josm/src/` (read-only).**
+
+Guessing JOSM APIs is the single largest source of wasted work here. Method
+signatures, null contracts and lookup order are frequently not what they seem,
+and a wrong guess usually fails silently at runtime rather than at compile time.
+Before using an unfamiliar JOSM API, open it. Prefer `Grep` for the class or
+method name over inference from the name.
+
+Every item in the next section was a wrong assumption caught only by reading
+the source, most of them after they had already shipped a silent bug.
+
+## Verified JOSM API facts
+
+- **`IPreferences.get(key, def)` accepts a null `def`** and returns it
+  unchanged. The contract also requires *the same default for every call with a
+  given key*. `LaneletSettings` therefore always passes `null` and applies its
+  own default afterwards. Do not pass real defaults into JOSM here.
+- **`AbstractProperty` captures `Config.getPref()` in its constructor** into a
+  `final` field. Statics like `TaggingPresets.ICON_SOURCES` bind to whatever
+  preferences existed at class-load, so `Config.setPreferencesInstance(...)`
+  does **not** isolate them in tests. Reset such properties through the property
+  itself in `@BeforeEach`. See `TaggingPresetsInstallerTest`.
+- **Preset icons need `TaggingPresets.ICON_SOURCES`.** JOSM resolves a preset's
+  relative icon via `ImageProvider(name).setDirs(ICON_SOURCES.get())`. Without a
+  registered source, every `style_images/...` reference silently fails to render.
+- **`ImageProvider` understands `resource://` in `dirs`.**
+  `getImageUrl(path, name)` strips the scheme and calls
+  `ResourceProvider.getResource(path + name)`, so `resource://lanelet2/` plus
+  `style_images/x.png` resolves to `lanelet2/style_images/x.png` in our jar.
+  The trailing slash is load-bearing.
+- **`ImageProvider` throws `JosmRuntimeException` on a missing icon** unless
+  `setOptional(true)`. See `LaneletAction`.
+- **`ResourceProvider`'s additional-classloader registry is append-only** and
+  static: there is no remove. Do not close a loader you have registered.
+- **`MainApplication.getMenu()` *is* the `JMenuBar`** (`MainMenu extends
+  JMenuBar`). Use it directly rather than `getMainFrame().getJMenuBar()`.
+- **`MapPaintStyles.addStyle` persists**, so registration must be idempotent.
+  `MapStyles` matches on title *or* url against both `MapPaintPrefHelper` and
+  the live style sources, which also prevents duplicating JOSM's own
+  `elemstyles.mapcss`.
+- **Shortcuts:** the Jython `ctrl shift <key>` maps to `Shortcut.CTRL_SHIFT`,
+  not `ALT_CTRL_SHIFT`. Register via `Shortcut.registerShortcut`; never
+  hardcode `KeyStroke`s.
+  - **`LayerManager` has only `addLayer(Layer)` and
+    `addLayer(Layer, boolean initialZoom)`** — there is no positional-insert
+    overload. The Jython `lm.addLayer(new_layer, old_idx)` therefore never
+    inserted at an index: Jython coerced the int to a boolean, so the new layer
+    got an initial zoom whenever the old one was not at index 0. Ported
+    faithfully as `addLayer(newLayer, oldIdx != 0)`; see `OsmIo`.
+  - **JOSM's own `getBoolean` treats only `"true"` as true.** Plugin keys store
+  `"1"`/`"0"` to stay compatible with the legacy settings file, so use
+  `LaneletSettings`, not `Config.getPref().getBoolean`, for plugin prefs.
+
+## Build
+
+Requires JDK 21, compiles against JOSM 19555.
+
+```bash
+./gradlew build     # compile + test
+./gradlew runJosm   # launch one JOSM with the plugin
+```
+
+**The repo must have at least one git commit.** `generateManifest` reads
+`HEAD` via jgit for `Plugin-Date`; on a repo with zero commits `resolve("HEAD")`
+returns null and the task fails with a confusing NPE.
+
+## Porting rules
+
+- **Preserve observable behaviour**, including quirks. Where the original has a
+  latent bug, replicate it and note it in a KDoc comment rather than silently
+  fixing it. Examples already in the tree: `wayMiddlePoint` returns vertex
+  `n // 2` despite a docstring promising a centroid; `Lanelet.invert()` swaps
+  bounds without reversing point order, unlike lanelet2 (see above).
+- **Check the C++ before calling something a Jython bug.** The centerline tail
+  quirk looked like a porting artifact and turned out to be faithful to
+  upstream. Parity with the Jython is the contract, but knowing whether the
+  Jython itself diverged from lanelet2 changes how much a difference matters.
+- **Watch for Python 2 semantics.** The originals are Jython 2.7, where `/` on
+  two ints truncates. Check every division when porting.
+- **Tests must run headless** — no JOSM GUI, no display, so they work in CI.
+- **Pin numerics differentially.** Geometry ports are verified against the
+  original Python, not against hand-written expectations: see
+  `testdata/centerline/gen_centerline_corpus.py` and `CenterlineCorpusTest`
+  (228 generated cases at 1e-12). Reuse that approach for new geometry.
+- The Python `lanelet2` library is kept for positive-IDs, merge, split and the
+  debug routing graph. `testdata/golden/` pins those backends; see its README,
+  in particular that production passes **absolute** paths (`file_origin`).
+
+## Action metadata lives in three registries, not one
+
+Metadata parity is checked mechanically against the Jython registries, but they
+are **split by tier** and `core/launcher/registry.py` is core-only. Check the
+right file or the comparison silently finds nothing:
+
+| Tier | File |
+| --- | --- |
+| `core/` (lanelet_edit, regulatory, selection, josm_tools, hooks) | `core/launcher/registry.py` |
+| `ll2_dependent/` (positive ids, merge, split, routing graph) | `ll2_dependent/ll2_script_registry.py` |
+| `internal/` (filter-broken, git commit, 3D viewer) | `internal/internal_script_registry.py` |
+
+Parity tests read those registry files **live** rather than copying their tuples
+into a fixture that would rot. Because the collection is a sibling checkout and
+not part of this repo, always go through
+`testutil.JythonSources.readText(relPath)`, which skips the test when the source
+is absent (verified: 7 tests skip, build stays green). Never `File("/ll2_tooling_root/...")`
+directly from a test — that fails in a CI checkout of this repo alone. Override
+the location with `-Dlanelet2.jythonSource=` or `LL2_JYTHON_SOURCE`.
+
+Two shape gotchas: slot ids can contain `::` for variants
+(`scripts.ll2_debug_routing_graph::small`), so a key regex of `[a-z0-9_.]+`
+silently skips them; and variant entries carry a **sixth** tuple element (the
+variant argument) after `icon_path`, so compare the first five positionally
+rather than requiring a 5-tuple.
+
+## Shipped 3D viewer
+
+`src/main/resources/lanelet2/viewer3d/` is the live 3D viewer, vendored from
+`/ll2_tooling_root/ll2_3d_viewer/` so the plugin can ship it. Verified facts:
+
+- **`server.py` is stdlib-only** (`argparse`, `json`, `queue`, `socketserver`,
+  `threading`, `http.server`, ...), Python 3.7+. It therefore runs on the
+  **system python3 and needs no venv and no `lanelet2`** — do not couple it to
+  the sidecar's virtualenv.
+- **The browser side did need the network.** Upstream `index.html` resolved
+  `three` and `three/addons/` from `unpkg.com` via an importmap, so the viewer
+  broke without internet. three.js 0.160.0, `OrbitControls` and
+  `TransformControls` are now vendored under `static/vendor/` (~1.4 MB) and the
+  importmap points at `/vendor/`. Keep the addons at
+  `vendor/controls/<name>.js`: they import bare `"three"`, and the
+  `"three/addons/" -> "/vendor/"` prefix mapping is what resolves them.
+- **`server.py`'s static routing is a hardcoded whitelist**, not a directory
+  server. `/vendor/` needed its own route (`_serve_vendor`, with containment
+  checks against `..`). Adding a static asset means adding a route.
+- **`--icons-dir` auto-detects from the tooling root when omitted**, which is
+  wrong for a shipped plugin. Always pass it explicitly, pointing at the
+  extracted `style_images`.
+
+Offline self-containment is verified by fetching `/`, `/app.js` and all three
+`/vendor/` modules with the server running and no network.
+
+## In-scope `internal/` features
+
+Only three of `internal/` are being ported (explicit user decision; the rest,
+including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
+`ll2_filter_broken_lanelets_regElements`, `ll2_git_commit`, `ll2_viewer3d_window`
+(plus `ll2_viewer3d_hook`, which the 3D bridge needs).
+
+- **Their metadata is NOT in `core/launcher/registry.py`** — that file has zero
+  references to them. It lives in `internal/internal_script_registry.py`, spliced
+  in by `internal_launcher.py` via `internal/order_extensions.py`. Same tuple
+  shape `(module, display_name, shortcut, toolbar_short, icon_path)`; all three
+  have shortcut `None`. Check parity against *that* file.
+
+### 3D bridge protocol (verified against the source)
+
+- **JOSM -> server:** TCP client to the ingest port (**8766**), newline-delimited
+  JSON, `type` in `snapshot` | `patch`. `patch` ops are `upsert`/`remove`.
+  Features carry `id: "way/<uniqueId>"`, local ENU metre `points`, and a parallel
+  `nodes` array. **The hook never sends `clear`** even though the protocol docs
+  list it; an emptied layer is a `snapshot` with `features: []`.
+- **server -> browser:** SSE `GET /events`, bootstrapped with a full snapshot.
+  `GET /state` returns the same; `GET /healthz` returns `{"ok": true}`.
+- **browser -> JOSM:** `POST /command` (HTTP port **8765**), which the server
+  only *forwards* to connected bridges. Ops the hook applies: `move_node`,
+  `set_tag`, `set_view`. **The browser only ever sends `move_node` and
+  `set_view`** — `set_tag` is implemented but dead. Unknown ops are skipped
+  silently.
+- `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
+  on the undo stack, so Ctrl+Z works. `set_view` is a camera move, not a command.
+- **No selection listener and no undo listener.** Undo appears to work only
+  because dataset mutation fires `DataSetListener`. Pushes are triggered by
+  `DataSetListener` (200 ms debounce), `ActiveLayerChangeListener` (re-snapshot)
+  and `ZoomChangeListener` (1 s, viewport overlay).
+- Threading: all DataSet/MapView reads and command application on the **EDT**;
+  JSON serialisation and socket writes on a `viewer3d-sender` daemon thread with
+  a bounded queue that resyncs on overflow; a separate reader thread.
+- **`_MAX_WAYS_PER_CYCLE` is 999**, not the 3000 the upstream `AGENTS.md`
+  claims. Trust the code.
+
+### Approved divergences from the Jython (do NOT "restore parity")
+
+The default rule in this repo is to preserve observable behaviour including
+quirks. These two are **explicit, user-approved exceptions** because both risk
+silent data loss. Keep them, and keep this note.
+
+1. **Filter-broken gets a confirmation dialog and a backup.** The Jython
+   overwrites the layer's `.osm` in place with no confirm, no backup, and no
+   undo (the reload swaps the `OsmDataLayer` instead of issuing a Command).
+   The port must ask first and write a backup before running the binary,
+   mirroring what `ll2_git_commit` already does before it rewrites IDs. The
+   *filtering result itself* stays byte-identical.
+2. **Git commit stages the current file by default.** The Jython menu entry is
+   named "Git Commit (current file)" but defaults to `git add -u` across the
+   whole repo, which also means a new untracked `.osm` is silently never
+   staged. The port defaults to staging **only the active file**, with a
+   checkbox to stage **everything in the repo that is not gitignored**
+   (`git add -A`). For the merged-map workflow, where the active file lives
+   outside the repo, there is no current file to stage, so that case defaults
+   to the repo-wide option.
+
+### Porting hazards for these three
+
+- **Server lifecycle cannot be reused as-is.** The Jython stop path greps
+  `pgrep -f 'll2_3d_viewer/server.py'` and probes only the HTTP port; neither
+  survives extraction to a plugin path. The plugin must own the process.
+- `resolve_icons_dir` and the maps-repo/tooling-root fallbacks walk for sibling
+  directories like `ws_ll2_mapping_hiwis/` and hardcode `~/ll2_tooling_root`.
+  All of it breaks from a jar. Pass paths explicitly.
+- Jython-only constructs to translate, not transcribe: `import Queue`, `long()`,
+  `unicode()`, `Thread.isAlive()`. `round()` is Python 2
+  round-half-away-from-zero and is applied to ENU millimetres.
+- `ele` is formatted with `%g`, which can emit `1e-05`.
+- `git_helpers.run_git` decodes stdout **without** the `AttributeError` fallback
+  its siblings have, so a decode failure is reported as the git call failing.
+- Filter-broken picks its binary with `sorted(...)[-1]`, which is
+  lexicographic rather than newest, so a stale Conan deploy can win.
+
+## Layout
+
+- `src/main/kotlin/.../platform/` — settings, action registry, menu/toolbar,
+  style and preset installers.
+- `src/main/kotlin/.../infra/` — pure geometry and the lanelet data model over
+  JOSM primitives.
+- `src/main/resources/lanelet2/` — MapCSS, presets, shared `style_images/`.
+- `src/main/resources/images/lanelet2/` — action icons, where `ImageProvider`
+  looks them up.

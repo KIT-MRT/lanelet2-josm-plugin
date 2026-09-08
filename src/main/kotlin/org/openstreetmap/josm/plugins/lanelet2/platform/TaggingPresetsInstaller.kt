@@ -10,6 +10,15 @@ import org.openstreetmap.josm.tools.Logging
 object TaggingPresetsInstaller {
     const val PRESET_URL = "resource://lanelet2/ll2_editor_presets.xml"
 
+    /**
+     * Icon search root handed to JOSM for the presets' relative `style_images/...`
+     * references. `ImageProvider.getImageUrl` understands the `resource://` scheme
+     * and strips it before asking `ResourceProvider`, so a preset icon named
+     * `style_images/stop_line.png` resolves to `lanelet2/style_images/stop_line.png`
+     * inside the plugin jar.
+     */
+    const val ICON_SOURCE = "resource://lanelet2/"
+
     fun installOnLaunch() {
         if (!LaneletSettings.getPresetsAutoInstallOnLaunch()) return
         installPresets()
@@ -17,8 +26,32 @@ object TaggingPresetsInstaller {
 
     fun isInstalled(): Boolean = persistedSources().any { isOurSource(it) }
 
+    /**
+     * Register [ICON_SOURCE] with JOSM's preset icon search path. Idempotent.
+     *
+     * Without this, every relative icon reference in the bundled presets fails to
+     * resolve, because JOSM only looks in `TaggingPresets.ICON_SOURCES` plus its
+     * own stock locations. The Jython equivalent registered a filesystem
+     * directory; the bundled copy lives in the jar instead.
+     *
+     * @return true if the search path was modified.
+     */
+    fun ensureIconSource(): Boolean {
+        val current = iconSources()
+        if (ICON_SOURCE in current) return false
+        return try {
+            TaggingPresets.ICON_SOURCES.put(current + ICON_SOURCE)
+            true
+        } catch (e: Exception) {
+            Logging.error("lanelet2: failed to register preset icon source")
+            Logging.error(e)
+            false
+        }
+    }
+
     fun installPresets(): Boolean {
-        var changed = false
+        // Must precede loading, so icons resolve on the first pass.
+        var changed = ensureIconSource()
         if (!isInstalled()) {
             val entries = ArrayList(persistedSources())
             entries.add(
@@ -56,6 +89,12 @@ object TaggingPresetsInstaller {
 
     private fun persistedSources(): List<SourceEntry> = try {
         PresetPrefHelper.INSTANCE.get()
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun iconSources(): List<String> = try {
+        TaggingPresets.ICON_SOURCES.get().orEmpty().filter { it.isNotBlank() }
     } catch (_: Exception) {
         emptyList()
     }

@@ -28,6 +28,7 @@ object LaneletSettings {
 
     const val KEY_ROUTING_AUTO_DEBOUNCE_MS = "routing.auto_debounce_ms"
     const val KEY_ROUTING_HOOK_FULL_MAP = "routing.hook_full_map"
+    const val KEY_ROUTING_DEFAULT_PARTICIPANT = "routing.default_participant"
     const val KEY_LANELET_DEFAULT_SUBTYPE = "lanelet.default_subtype"
     const val KEY_LANELET_DEFAULT_LOCATION = "lanelet.default_location"
     const val KEY_LANELET_DEFAULT_ONE_WAY = "lanelet.default_one_way"
@@ -40,6 +41,7 @@ object LaneletSettings {
     const val KEY_BACKENDS_PYTHON = "backends.python"
     const val KEY_BACKENDS_DIR = "backends.dir"
     const val KEY_BACKENDS_ENV_SCRIPT = "backends.env_script"
+    const val KEY_GIT_COMMIT_REMINDER = "git.commit_reminder"
     const val KEY_MAPSTYLE_AUTO_APPLY_ON_LAUNCH = "mapstyle.auto_apply_on_launch"
     const val KEY_MAPSTYLE_LAST_PRESET = "mapstyle.last_preset"
     const val KEY_PRESETS_AUTO_INSTALL_ON_LAUNCH = "presets.auto_install_on_launch"
@@ -66,6 +68,8 @@ object LaneletSettings {
 
     const val PRESETS_FILE_NAME = "ll2_editor_presets.xml"
     const val PRESETS_SOURCE_TITLE = "LL2 Editor Presets"
+
+    val ROUTING_PARTICIPANTS = listOf("vehicle", "bicycle", "pedestrian", "train")
 
     val LANELET_ONE_WAY_VALUES = listOf(ONE_WAY_YES, ONE_WAY_NO)
     val LANELET_LOCATIONS = listOf(LOC_URBAN, LOC_NONURBAN)
@@ -287,6 +291,52 @@ object LaneletSettings {
 
     fun setRoutingHookFullMap(enabled: Boolean) {
         putBoolean(KEY_ROUTING_HOOK_FULL_MAP, enabled)
+    }
+
+    fun getRoutingDefaultParticipant(default: String = "vehicle"): String {
+        val raw = pref().get(prefKey(KEY_ROUTING_DEFAULT_PARTICIPANT), null)
+        val v = if (raw.isNullOrEmpty()) default else raw
+        return if (v in ROUTING_PARTICIPANTS) v else default
+    }
+
+    fun setRoutingDefaultParticipant(participant: String?) {
+        var p = participant?.trim().orEmpty()
+        if (p !in ROUTING_PARTICIPANTS) p = "vehicle"
+        put(KEY_ROUTING_DEFAULT_PARTICIPANT, p)
+    }
+
+    fun getBackendsPython(): String = get(KEY_BACKENDS_PYTHON, "")
+
+    fun setBackendsPython(path: String?) {
+        put(KEY_BACKENDS_PYTHON, path?.trim().orEmpty())
+    }
+
+    fun getBackendsDir(): String = get(KEY_BACKENDS_DIR, "")
+
+    fun setBackendsDir(path: String?) {
+        put(KEY_BACKENDS_DIR, path?.trim().orEmpty())
+    }
+
+    /**
+     * 60-minute commit/push reminder. Off by default — the Jython always-on
+     * timer is an approved settings-gated change. Hooks/lifecycle remain a
+     * separate task.
+     */
+    fun getGitCommitReminder(default: Boolean = false): Boolean =
+        getBoolean(KEY_GIT_COMMIT_REMINDER, default)
+
+    fun setGitCommitReminder(enabled: Boolean) {
+        putBoolean(KEY_GIT_COMMIT_REMINDER, enabled)
+    }
+
+    /**
+     * Persist a resolved interpreter the way `setup_backends.sh` writes
+     * `~/.lanelet2_settings`: python path, backends dir, env_script=none.
+     */
+    fun persistBackendInterpreter(python: String, backendsDir: String) {
+        put(KEY_BACKENDS_PYTHON, python)
+        put(KEY_BACKENDS_DIR, backendsDir)
+        put(KEY_BACKENDS_ENV_SCRIPT, "none")
     }
 
     fun subtypeUsesLocation(subtype: String?): Boolean = subtype in SUBTYPES_WITH_LOCATION

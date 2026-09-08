@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.openstreetmap.josm.plugins.lanelet2.scripting.assertPython2Safe
 import org.openstreetmap.josm.tools.ResourceProvider
 import java.io.File
 import java.net.URLClassLoader
@@ -53,9 +54,29 @@ class JarResourceLoadingTest {
     }
 
     @Test
+    fun `lanelet2 backend scripts ship under lanelet2 backends`() {
+        jarOnlyLoader().use { loader ->
+            listOf(
+                "positive_ids.py",
+                "merge_osm_files.py",
+                "merge_anchor_utils.py",
+                "split_merged_osm_file.py",
+                "split_safety_utils.py",
+                "server_create_debug_routing_graph_dataset.py",
+                "requirements.txt",
+            ).forEach { name ->
+                assertNotNull(
+                    loader.getResource("lanelet2/backends/$name"),
+                    "backend lanelet2/backends/$name must ship in the plugin jar",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `action icons ship under the images prefix ImageProvider searches`() {
         jarOnlyLoader().use { loader ->
-            listOf("create_lanelet", "split_way", "routing_graph").forEach { icon ->
+            listOf("create_lanelet", "split_way", "routing_graph", "filter_broken", "git_commit").forEach { icon ->
                 assertNotNull(
                     loader.getResource("images/lanelet2/$icon.svg"),
                     "icon images/lanelet2/$icon.svg must ship in the plugin jar"
@@ -64,20 +85,25 @@ class JarResourceLoadingTest {
         }
     }
 
+    /**
+     * Checks the `resource://` lookup JOSM performs for styles and presets.
+     *
+     * The origin is deliberately not asserted: these resources are also on this
+     * module's classpath and `ResourceProvider` may legitimately serve that copy.
+     * Packaging is covered by the jar-only tests above.
+     */
     @Test
-    fun `ResourceProvider serves plugin resources once the loader is registered`() {
-        jarOnlyLoader().use { loader ->
-            ResourceProvider.addAdditionalClassLoader(loader)
-            try {
-                val url = ResourceProvider.getResource("$STYLE_DIR/$PRESETS_FILE")
-                assertNotNull(url, "presets must resolve through ResourceProvider")
-                assertTrue(
-                    url!!.toString().contains(pluginJar.name),
-                    "must be served from ${pluginJar.name}, not the test classpath, but was $url"
-                )
-            } finally {
-                ResourceProvider.removeAdditionalClassLoader(loader)
-            }
+    fun `ResourceProvider resolves plugin resources once the loader is registered`() {
+        // ResourceProvider's registry is append-only and static, so this loader is
+        // deliberately left open: closing it would leave a dead entry behind.
+        val loader = jarOnlyLoader()
+        ResourceProvider.addAdditionalClassLoader(loader)
+
+        (MAPCSS_FILES + PRESETS_FILE).forEach { name ->
+            assertNotNull(
+                ResourceProvider.getResource("$STYLE_DIR/$name"),
+                "resource://$STYLE_DIR/$name must resolve through ResourceProvider"
+            )
         }
     }
 
@@ -138,12 +164,63 @@ class JarResourceLoadingTest {
         }
     }
 
+    /**
+     * Reproduces JOSM's own preset icon lookup: `ImageProvider.getImageUrl`
+     * strips `resource://` from the configured icon source and appends the icon
+     * name verbatim. Asserting on that concatenation catches a mismatch between
+     * the registered source and the actual jar layout, which is invisible at
+     * runtime beyond a log line.
+     */
+    @Test
+    fun `preset icon names resolve through the registered icon source`() {
+        val prefix = TaggingPresetsInstaller.ICON_SOURCE.removePrefix("resource://")
+
+        jarOnlyLoader().use { loader ->
+            listOf(
+                "style_images/stop_line.png",
+                "style_images/bike_lane.png",
+                "style_images/traffic_light_bikes.svg",
+            ).forEach { iconName ->
+                assertNotNull(
+                    loader.getResource(prefix + iconName),
+                    "preset icon '$iconName' must resolve to '$prefix$iconName' in the jar"
+                )
+            }
+        }
+    }
+
     @Test
     fun `kotlin stdlib is packed because JOSM does not provide it`() {
         JarFile(pluginJar).use { jar ->
             assertTrue(
                 jar.entries().asSequence().any { it.name.startsWith("kotlin/") },
                 "the plugin must pack the Kotlin stdlib, JOSM does not provide it"
+            )
+        }
+    }
+
+    @Test
+    fun `hello_lanelet2 example ships in the jar and is Python 2`() {
+        jarOnlyLoader().use { loader ->
+            val url = loader.getResource("lanelet2/examples/hello_lanelet2.py")
+            assertNotNull(url, "examples/jython/hello_lanelet2.py must ship as lanelet2/examples/")
+            val text = url!!.openStream().bufferedReader().use { it.readText() }
+            assertPython2Safe(text)
+            assertTrue(
+                "Lanelet2Extensions" in text,
+                "example must call the public facade",
+            )
+        }
+    }
+
+    @Test
+    fun `Lanelet2Extensions class ships in the jar`() {
+        jarOnlyLoader().use { loader ->
+            assertNotNull(
+                loader.getResource(
+                    "org/openstreetmap/josm/plugins/lanelet2/api/Lanelet2Extensions.class",
+                ),
+                "the scripting facade must be packaged in the plugin jar",
             )
         }
     }

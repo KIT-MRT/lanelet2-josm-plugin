@@ -2,6 +2,7 @@ package org.openstreetmap.josm.plugins.lanelet2.platform
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -79,6 +80,26 @@ class LaneletSettingsTest {
     }
 
     @Test
+    fun persistBackendInterpreterUsesPrefixedKeysAndNoneEnvScript() {
+        LaneletSettings.persistBackendInterpreter("/tmp/venv/bin/python", "/tmp/backends")
+        assertEquals("/tmp/venv/bin/python", LaneletSettings.getBackendsPython())
+        assertEquals("/tmp/backends", LaneletSettings.getBackendsDir())
+        assertEquals("none", LaneletSettings.get("backends.env_script", ""))
+        assertEquals("/tmp/venv/bin/python", Config.getPref().get("lanelet2.backends.python", null))
+        assertNull(Config.getPref().get("backends.python", null))
+    }
+
+    @Test
+    fun routingDefaultParticipantFallsBackWhenUnknown() {
+        assertEquals("vehicle", LaneletSettings.getRoutingDefaultParticipant())
+        LaneletSettings.setRoutingDefaultParticipant("bicycle")
+        assertEquals("bicycle", LaneletSettings.getRoutingDefaultParticipant())
+        LaneletSettings.setRoutingDefaultParticipant("spaceship")
+        assertEquals("vehicle", LaneletSettings.getRoutingDefaultParticipant())
+        assertEquals("vehicle", Config.getPref().get("lanelet2.routing.default_participant", null))
+    }
+
+    @Test
     fun getAndPutUseLanelet2Prefix() {
         LaneletSettings.put("backends.dir", "/tmp/backends")
         assertEquals("/tmp/backends", LaneletSettings.get("backends.dir", ""))
@@ -127,5 +148,16 @@ class LaneletSettingsTest {
                 assertEquals("walkway", LaneletSettings.get("lanelet.default_subtype", ""))
             }
         }
+    }
+
+    @Test
+    fun gitCommitReminderDefaultsOffAndStoresOneZero() {
+        assertFalse(LaneletSettings.getGitCommitReminder())
+        LaneletSettings.setGitCommitReminder(true)
+        assertTrue(LaneletSettings.getGitCommitReminder())
+        assertEquals("1", Config.getPref().get("lanelet2.git.commit_reminder", null))
+        LaneletSettings.setGitCommitReminder(false)
+        assertFalse(LaneletSettings.getGitCommitReminder())
+        assertEquals("0", Config.getPref().get("lanelet2.git.commit_reminder", null))
     }
 }

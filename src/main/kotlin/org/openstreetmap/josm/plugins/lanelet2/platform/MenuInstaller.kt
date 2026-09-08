@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.platform
 
 import org.openstreetmap.josm.gui.MainApplication
+import org.openstreetmap.josm.tools.Logging
 import java.awt.BorderLayout
 import java.awt.event.KeyEvent
 import javax.swing.Action
@@ -23,11 +24,13 @@ object MenuInstaller {
 
     private var defaultUiListener: Runnable? = null
     private val toggleGroups = mutableListOf<ToggleGroupState>()
+    private var installed = false
 
     fun install() {
         uninstall()
         installMenus()
         installToolbar()
+        installed = true
     }
 
     fun uninstall() {
@@ -35,6 +38,21 @@ object MenuInstaller {
         toggleGroups.clear()
         removeMenus()
         removeToolbar()
+        installed = false
+    }
+
+    /**
+     * Rebuild menus after a script [org.openstreetmap.josm.plugins.lanelet2.api.Lanelet2Extensions.register]s
+     * a new slot. No-op when menus are not up (plugin init, headless tests).
+     */
+    fun refreshIfInstalled() {
+        if (!installed) return
+        if (java.awt.GraphicsEnvironment.isHeadless()) return
+        try {
+            install()
+        } catch (e: Exception) {
+            Logging.debug("lanelet2: menu refresh skipped: {0}", e.message)
+        }
     }
 
     private fun installMenus() {
@@ -63,6 +81,7 @@ object MenuInstaller {
             if (slot == null) {
                 menu.addSeparator()
             } else {
+                (slot.action as? LaneletAction)?.bindShortcutToWindow()
                 menu.add(JMenuItem(slot.action))
             }
         }
@@ -158,6 +177,7 @@ object MenuInstaller {
             }
             flushToggle()
             toggleGroup = null
+            (item.action as? LaneletAction)?.bindShortcutToWindow()
             val btn = JButton(item.action)
             btn.text = item.toolbarLabel
             Icons.icon(item.iconName)?.let { btn.icon = it }
