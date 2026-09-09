@@ -1,17 +1,27 @@
 # Working on this plugin
 
-Kotlin JOSM plugin porting the Jython 2.7 script collection at
-`/ll2_tooling_root/JOSM_lanelet2_editing_scripts/` (read-only; read its own
-`AGENTS.md` for the tier layout). Ships as **one** plugin, `lanelet2`.
+Kotlin JOSM plugin porting a Jython 2.7 script collection. Ships as **one**
+plugin, `lanelet2`. Requires JDK 21 and compiles against JOSM 19555.
+
+The original Jython collection, a JOSM source tree, and the lanelet2 C++
+sources are optional. None of them have to live next to this repo. When a
+parity test needs the Jython tree, point it at a checkout with
+`-Dlanelet2.jythonSource=` or `LL2_JYTHON_SOURCE` (default: a sibling
+directory named `JOSM_lanelet2_editing_scripts`). Tests skip if that tree
+is absent.
 
 ## Reference sources (read them, do not guess)
 
-- **JOSM:** `/ll2_tooling_root/josm/src/` (read-only)
-- **lanelet2 C++ upstream:** `/ll2_tooling_root/ws_ll2_mapping_hiwis/src/lanelet2/`
-  (read-only). The authority for *map semantics*. Several Jython modules are
-  hand-ports of it, so it settles questions the Jython alone cannot — most
-  usefully `lanelet2_core/src/Lanelet.cpp` (`calculateCenterline`,
-  `BoundChecker`, `findClosestNonintersectingPoint`) and
+- **JOSM sources.** Guessing JOSM APIs is the largest source of wasted work
+  here. Method signatures, null contracts and lookup order are frequently
+  not what they seem, and a wrong guess usually fails silently at runtime
+  rather than at compile time. Before using an unfamiliar JOSM API, open it.
+  Prefer searching for the class or method name over inference from the name.
+- **lanelet2 C++ upstream.** The authority for *map semantics*. Several
+  Jython modules are hand-ports of it, so it settles questions the Jython
+  alone cannot — most usefully `lanelet2_core/src/Lanelet.cpp`
+  (`calculateCenterline`, `BoundChecker`,
+  `findClosestNonintersectingPoint`) and
   `lanelet2_core/include/lanelet2_core/primitives/Lanelet.h`. Also useful:
   `lanelet2_routing/`, `lanelet2_traffic_rules/`, `lanelet2_validation/`.
 
@@ -28,18 +38,8 @@ Kotlin JOSM plugin porting the Jython 2.7 script collection at
     (smoothing, splitting on the centerline, routing) must not assume our
     `invert()` behaves like lanelet2's.
 
-## Read the JOSM source instead of guessing
-
-**The JOSM source is checked out at `/ll2_tooling_root/josm/src/` (read-only).**
-
-Guessing JOSM APIs is the single largest source of wasted work here. Method
-signatures, null contracts and lookup order are frequently not what they seem,
-and a wrong guess usually fails silently at runtime rather than at compile time.
-Before using an unfamiliar JOSM API, open it. Prefer `Grep` for the class or
-method name over inference from the name.
-
 Every item in the next section was a wrong assumption caught only by reading
-the source, most of them after they had already shipped a silent bug.
+the JOSM source, most of them after they had already shipped a silent bug.
 
 ## Verified JOSM API facts
 
@@ -96,9 +96,17 @@ the source, most of them after they had already shipped a silent bug.
   `"1"`/`"0"` to stay compatible with the legacy settings file, so use
   `LaneletSettings`, not `Config.getPref().getBoolean`, for plugin prefs.
 
+## Companion GraalPy plugin
+
+Ad-hoc Python 3 scripts use a separate `graalpy` plugin, not this jar.
+This plugin injects its classloader into hosts named `scripting` and
+`graalpy`. That checkout is optional.
+
 ## Build
 
-Requires JDK 21, compiles against JOSM 19555.
+Requires JDK 21, compiles against JOSM 19555. A GitHub release is a tag
+`v0.1.0` (plugin version `0.1.0`, no `v`). Override the version with
+`RELEASE_VERSION` when building the tagged jar.
 
 ```bash
 ./gradlew build     # compile + test
@@ -110,11 +118,12 @@ Requires JDK 21, compiles against JOSM 19555.
 plugin writes there lands inside Gradle's build directory. The sidecar venv did,
 and broke the dev loop twice: `initJosmPrefs` fails with "Couldn't follow
 symbolic link .../venv/bin/python" (a venv's `bin/python` is a relative symlink
-to `bin/python3`), and `clean` deletes a ~116 MB pip install. The venv therefore
-lives at `$XDG_DATA_HOME/josm-lanelet2/venv` instead; see
-`BackendStore.defaultVenvDir`. Extracted *scripts* stay in JOSM user data —
-they are small and regenerate from the jar. If `initJosmPrefs` ever fails on a
-symlink again, something new is writing into `build/.josm`.
+to `bin/python3`), and `clean` deletes a ~116 MB pip install. The venv therefore lives at
+`$XDG_DATA_HOME/josm-lanelet2/venv` (`~/.local/share/josm-lanelet2/venv`
+when unset); see `BackendStore.defaultVenvDir`. Extracted *scripts* stay in
+JOSM user data — they are small and regenerate from the jar. If
+`initJosmPrefs` ever fails on a symlink again, something new is writing
+into `build/.josm`.
 
 **The repo must have at least one git commit.** `generateManifest` reads
 `HEAD` via jgit for `Plugin-Date`; on a repo with zero commits `resolve("HEAD")`
@@ -221,12 +230,11 @@ right file or the comparison silently finds nothing:
 | `internal/` (filter-broken, git commit, 3D viewer) | `internal/internal_script_registry.py` |
 
 Parity tests read those registry files **live** rather than copying their tuples
-into a fixture that would rot. Because the collection is a sibling checkout and
-not part of this repo, always go through
-`testutil.JythonSources.readText(relPath)`, which skips the test when the source
-is absent (verified: 7 tests skip, build stays green). Never `File("/ll2_tooling_root/...")`
-directly from a test — that fails in a CI checkout of this repo alone. Override
-the location with `-Dlanelet2.jythonSource=` or `LL2_JYTHON_SOURCE`.
+into a fixture that would rot. The collection is not part of this repo, so
+always go through `testutil.JythonSources.readText(relPath)`, which skips the
+test when the source is absent. Do not hardcode an absolute path to that
+tree from a test — a CI checkout of this repo alone will not have it.
+Override the location with `-Dlanelet2.jythonSource=` or `LL2_JYTHON_SOURCE`.
 
 Two shape gotchas: slot ids can contain `::` for variants
 (`scripts.ll2_debug_routing_graph::small`), so a key regex of `[a-z0-9_.]+`
@@ -236,8 +244,9 @@ rather than requiring a 5-tuple.
 
 ## Shipped 3D viewer
 
-`src/main/resources/lanelet2/viewer3d/` is the live 3D viewer, vendored from
-`/ll2_tooling_root/ll2_3d_viewer/` so the plugin can ship it. Verified facts:
+`src/main/resources/lanelet2/viewer3d/` is the live 3D viewer, vendored in
+this repo so the plugin can ship offline. three.js r160 under
+`static/vendor/` is MIT (Copyright 2010–2023 Three.js Authors). Verified facts:
 
 - **`server.py` is stdlib-only** (`argparse`, `json`, `queue`, `socketserver`,
   `threading`, `http.server`, ...), Python 3.7+. It therefore runs on the
@@ -253,16 +262,16 @@ rather than requiring a 5-tuple.
 - **`server.py`'s static routing is a hardcoded whitelist**, not a directory
   server. `/vendor/` needed its own route (`_serve_vendor`, with containment
   checks against `..`). Adding a static asset means adding a route.
-- **`--icons-dir` auto-detects from the tooling root when omitted**, which is
-  wrong for a shipped plugin. Always pass it explicitly, pointing at the
-  extracted `style_images`.
+- **`--icons-dir` must be passed explicitly**, pointing at the extracted
+  `style_images`. Any auto-detect that walks a local maps checkout or a
+  hardcoded home directory breaks once the viewer runs from a jar.
 
 Offline self-containment is verified by fetching `/`, `/app.js` and all three
 `/vendor/` modules with the server running and no network.
 
 ## In-scope `internal/` features
 
-Only three of `internal/` are being ported (explicit user decision; the rest,
+Only three of the original `internal/` features are in this repo (the rest,
 including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
 `ll2_filter_broken_lanelets_regElements`, `ll2_git_commit`, `ll2_viewer3d_window`
 (plus `ll2_viewer3d_hook`, which the 3D bridge needs).
@@ -327,8 +336,8 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
 ### Approved divergences from the Jython (do NOT "restore parity")
 
 The default rule in this repo is to preserve observable behaviour including
-quirks. These two are **explicit, user-approved exceptions** because both risk
-silent data loss. Keep them, and keep this note.
+quirks. These two are **approved exceptions** because both risk silent data
+loss. Keep them, and keep this note.
 
 1. **Filter-broken gets a confirmation dialog and a backup.** The Jython
    overwrites the layer's `.osm` in place with no confirm, no backup, and no
@@ -350,9 +359,9 @@ silent data loss. Keep them, and keep this note.
 - **Server lifecycle cannot be reused as-is.** The Jython stop path greps
   `pgrep -f 'll2_3d_viewer/server.py'` and probes only the HTTP port; neither
   survives extraction to a plugin path. The plugin must own the process.
-- `resolve_icons_dir` and the maps-repo/tooling-root fallbacks walk for sibling
-  directories like `ws_ll2_mapping_hiwis/` and hardcode `~/ll2_tooling_root`.
-  All of it breaks from a jar. Pass paths explicitly.
+- The original viewer resolved icons by walking sibling map-repo directories
+  and a hardcoded home-folder name. That breaks from a jar. Pass paths
+  explicitly.
 - Jython-only constructs to translate, not transcribe: `import Queue`, `long()`,
   `unicode()`, `Thread.isAlive()`. `round()` is Python 2
   round-half-away-from-zero and is applied to ENU millimetres.
@@ -429,8 +438,9 @@ Jython quirks to keep (do not "fix"):
   fractional stored values for display (Jython `SpinnerNumberModel` uses `int(...)`).
 - **Routing debounce spinner uses integer division** (`ms / 1000`) in
   [RoutingPanel].
-- **Settings window fixed size 520×720** like the Jython dialog (`pack()` is
-  not used).
+- **Settings window is resizable** with a vertical scroll pane. Height is
+  about 85% of the screen (capped at 900 px), not the old Jython fixed
+  520×720. OK/Cancel stay south of the scroll area.
 - **Map Styles / Presets sub-dialog errors** show via [Dialogs.error] when
   opened from the settings window (Jython used `JOptionPane` on the parent).
 - **Backend setup button label** is “Set up Lanelet2 backends” with

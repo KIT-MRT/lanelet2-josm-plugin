@@ -14,7 +14,7 @@ point of use if that sidecar is missing. Everything else works without it.
 |---|---|
 | Core editing, styles, presets, 3D viewer, notes, git helpers | [JOSM](https://josm.openstreetmap.de/) **19555** or newer |
 | Positive IDs, OSM merge/split, debug routing graph | The above, plus Python **3.8–3.12** and the upstream [`lanelet2`](https://github.com/fzi-forschungszentrum-informatik/Lanelet2) wheel (Linux) |
-| Ad-hoc **Python 3** scripts against this plugin | The sibling [GraalPy plugin](../JOSM_GraalPy_Plugin/) (`graalpy`) |
+| Ad-hoc **Python 3** scripts against this plugin | The companion GraalPy plugin (`graalpy`) |
 | Ad-hoc **Jython 2.7** scripts against this plugin | The [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) with a Jython 2.7 engine |
 
 ## Install
@@ -26,8 +26,8 @@ jar **must** keep that name — JOSM keys plugins off the filename.
 # After a local build (./gradlew dist → build/dist/lanelet2.jar)
 ./install.sh
 
-# A downloaded GitHub (or other) release jar
-./install.sh /path/to/downloaded-lanelet2.jar
+# A downloaded GitHub release jar (must stay named lanelet2.jar)
+./install.sh /path/to/lanelet2.jar
 ```
 
 The script follows JOSM's own user-data rule:
@@ -101,7 +101,10 @@ install on launch. Choose the style preset from the settings window.
 
 *Lanelet2 Utils → Live 3D Viewer* starts a local stdlib `python3` server and
 opens a Three.js view of the loaded map. It does **not** need the `lanelet2`
-Python package.
+Python package. The browser client vendors [three.js](https://threejs.org/)
+r160 (MIT, Copyright 2010–2023 Three.js Authors) under
+`src/main/resources/lanelet2/viewer3d/static/vendor/` so the viewer works
+offline.
 
 ### Needs the `lanelet2` sidecar
 
@@ -131,6 +134,11 @@ reads `HEAD` when writing the plugin manifest.
 ./install.sh             # copy build/dist/lanelet2.jar into the real JOSM plugins dir
 ```
 
+A GitHub release is a tag `v0.1.0` (no `v` in the plugin version itself).
+That runs `.github/workflows/release.yml`, which builds with
+`RELEASE_VERSION` from the tag and uploads `lanelet2.jar`. Keep that
+filename — JOSM keys plugins off it.
+
 `runJosm` uses `build/.josm/userdata`, so it does not touch your everyday JOSM
 profile. The sidecar venv stays outside that tree on purpose (`./gradlew clean`
 must not delete a 100+ MB pip install).
@@ -154,7 +162,7 @@ Ad-hoc scripts can call this plugin's `Lanelet2Extensions` facade. Two
 in-process engines work; they share the live JOSM `DataSet`, not a file
 round-trip.
 
-| | [GraalPy plugin](../JOSM_GraalPy_Plugin/) | [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) |
+| | Companion GraalPy plugin (`graalpy`) | [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) |
 |---|---|---|
 | Language | **Python 3** (GraalPy 25, currently 3.13) | **Jython 2.7** only |
 | How to run | *Tools → Run Python file…* (also bundled hello / centroid) | *Scripting → Run Script* after adding a Jython engine jar |
@@ -172,10 +180,9 @@ from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
 
 ### Python 3 via GraalPy
 
-The sibling [JOSM GraalPy plugin](../JOSM_GraalPy_Plugin/) evals Python 3
-inside the same JVM (Polyglot / GraalPy), with `from org.openstreetmap.josm…`
-imports and optional NumPy. It is a separate plugin (`graalpy`); this one
-does not embed GraalVM.
+The companion GraalPy plugin evals Python 3 inside the same JVM (Polyglot /
+GraalPy), with `from org.openstreetmap.josm…` imports and optional NumPy.
+It is a separate plugin (`graalpy`); this one does not embed GraalVM.
 
 1. Load **lanelet2** and **graalpy** in the same JOSM.
 2. Open a data layer, then *Tools → Run Python file…* and pick
@@ -183,12 +190,11 @@ does not embed GraalVM.
 
 That example is Python 3 (`f"…"`, generator expressions). It imports
 `Lanelet2Extensions` the same way as the Jython script and reports the
-current selection. `./gradlew runJosm` in the GraalPy repo is the supported
-way to launch that plugin today (GraalPy must sit on `java.class.path`; a
-plain plugin-manager install is still a PoC limitation — see that README).
+current selection. Load both plugins in one JOSM (`./install.sh` in each
+repository).
 
-Ideas that need SciPy / Shapely / NetworkX live under
-[`JOSM_GraalPy_Plugin/inspiration/`](../JOSM_GraalPy_Plugin/inspiration/).
+Ideas that need SciPy / Shapely / NetworkX ship with the GraalPy plugin
+under its `inspiration/` directory.
 
 ### Jython 2.7 via the Scripting plugin
 
@@ -225,3 +231,16 @@ from org.openstreetmap.josm.plugins.lanelet2.api import Lanelet2Extensions
 Jython scripts must stay on Python 2 syntax. GraalPy scripts use Python 3.
 JOSM's own `getBoolean` treats only `"true"` as true — always go through
 `Lanelet2Extensions.settings()` for plugin keys.
+
+## License
+
+GPL-3.0-or-later (see [LICENSE](LICENSE)), Copyright (C) 2026 Karlsruhe
+Institute of Technology (KIT), Institute of Measurement and Control Systems
+(MRT). This plugin runs inside JOSM (licensed GPL-2.0-or-later), so it is
+licensed GPLv3 to stay compatible with JOSM's "or later" license.
+
+Maintainer: Richard Schwarzkopf (`schwarzkopf@fzi.de`).
+
+The live 3D viewer vendors [three.js](https://threejs.org/) r160 (MIT,
+Copyright 2010–2023 Three.js Authors). Those files keep their own license
+headers under `src/main/resources/lanelet2/viewer3d/static/vendor/`.

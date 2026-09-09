@@ -237,6 +237,12 @@ class JarResourceLoadingTest {
                 attributes.getValue("Plugin-Requires"),
                 "this ships as a single plugin; a Plugin-Requires entry would make JOSM refuse to load it"
             )
+            assertEquals(
+                "Richard Schwarzkopf <schwarzkopf@fzi.de>",
+                attributes.getValue("Author"),
+            )
+            assertEquals("0.1.0", attributes.getValue("Plugin-Version"))
+            assertNotNull(jar.getJarEntry("LICENSE"), "GPL-3 text must ship in the plugin jar")
         }
     }
 }

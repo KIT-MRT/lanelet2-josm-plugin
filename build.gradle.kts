@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "org.openstreetmap.josm.plugins.lanelet2"
-version = "0.1.0-SNAPSHOT"
+version = System.getenv("RELEASE_VERSION")?.removePrefix("v") ?: "0.1.0"
 
 repositories {
     mavenCentral()
@@ -40,6 +40,7 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("module-info.class")
     exclude("META-INF/versions/*/module-info.class")
+    from("LICENSE")
 }
 
 // Source of truth is examples/jython/; the jar serves the same files so the
@@ -59,7 +60,7 @@ josm {
         description = "Lanelet2 map editing tools for JOSM."
         mainClass = "org.openstreetmap.josm.plugins.lanelet2.Lanelet2Plugin"
         minJosmVersion = "19555"
-        author = "MRT"
+        author = "Richard Schwarzkopf <schwarzkopf@fzi.de>"
         canLoadAtRuntime = true
     }
 }
