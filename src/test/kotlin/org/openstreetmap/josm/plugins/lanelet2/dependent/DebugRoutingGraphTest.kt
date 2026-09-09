@@ -30,15 +30,19 @@ class DebugRoutingGraphTest {
     }
 
     @Test
-    fun outputPathUsesParticipantAndBasename() {
-        val out = DebugRoutingGraph.routingOutputPath("/maps/mapping_example.osm", "bicycle")
-        assertEquals("/maps/routing_bicycle_mapping_example.osm", out)
+    fun outputPathLivesInScratchDirNotBesideTheMap() {
+        val scratch = File("/tmp/josm-lanelet2/routing")
+        val out = DebugRoutingGraph.routingOutputPath("/maps/mapping_example.osm", "bicycle", scratch)
+        assertEquals(File(scratch, "routing_bicycle_mapping_example.osm").path, out)
+        assertFalse(out.startsWith("/maps/"))
     }
 
     @Test
-    fun smallExtractPathAddsSmallSuffix() {
-        val p = DebugRoutingGraph.smallExtractPath("/maps/foo.osm")
-        assertEquals("/maps/foo_small.osm", p)
+    fun smallExtractPathLivesInScratchDirNotBesideTheMap() {
+        val scratch = File("/tmp/josm-lanelet2/routing")
+        val p = DebugRoutingGraph.smallExtractPath("/maps/foo.osm", scratch)
+        assertEquals(File(scratch, "foo_small.osm").path, p)
+        assertFalse(p.startsWith("/maps/"))
     }
 
     @Test

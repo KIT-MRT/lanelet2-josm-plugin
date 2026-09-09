@@ -39,6 +39,18 @@ class BackendStoreTest {
         assertEquals(File("/home/u/.local/share/josm-lanelet2/venv"), blank)
     }
 
+    @Test
+    fun scratchDirDefaultsUnderTmpNotBesideTheMap() {
+        val dir = BackendStore.defaultScratchDir(tmpDir = "/tmp", outputEnv = null)
+        assertEquals(File("/tmp/josm-lanelet2/routing"), dir)
+    }
+
+    @Test
+    fun scratchDirHonorsLl2OutputDir() {
+        val dir = BackendStore.defaultScratchDir(tmpDir = "/tmp", outputEnv = "/maps/out")
+        assertEquals(File("/maps/out"), dir)
+    }
+
     /**
      * Regression: the venv used to default under JOSM's user data directory,
      * which `runJosm` redirects into `build/.josm`. Gradle then failed to

@@ -76,6 +76,32 @@ object BackendStore {
     }
 
     /**
+     * Scratch directory for generated OSM that must not land next to the
+     * mapper's source file: viewport crops, debug routing graphs.
+     *
+     * Default is `${java.io.tmpdir}/josm-lanelet2/routing` (`/tmp/...` on
+     * Linux) so a reboot cleans it. `LL2_OUTPUT_DIR` still wins when set.
+     */
+    fun defaultScratchDir(
+        tmpDir: String? = System.getProperty("java.io.tmpdir"),
+        outputEnv: String? = System.getenv("LL2_OUTPUT_DIR"),
+    ): File {
+        val override = outputEnv?.trim().orEmpty()
+        if (override.isNotEmpty()) {
+            val expanded = if (override == "~") {
+                System.getProperty("user.home")
+            } else if (override.startsWith("~/") || override.startsWith("~" + File.separator)) {
+                System.getProperty("user.home") + override.substring(1)
+            } else {
+                override
+            }
+            return File(expanded).normalize()
+        }
+        val tmp = tmpDir?.takeIf { it.isNotBlank() } ?: System.getProperty("java.io.tmpdir")
+        return File(File(tmp, BackendScripts.VENV_APP_DIR), BackendScripts.SCRATCH_SUBDIR)
+    }
+
+    /**
      * Ensure [dir] contains the current shipped scripts. Returns [dir].
      * No-op when the version file already matches [shippedVersion] and every
      * shipped file is present.

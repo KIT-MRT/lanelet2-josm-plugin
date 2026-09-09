@@ -18,6 +18,7 @@ import org.openstreetmap.josm.plugins.lanelet2.platform.UserPrompts
 import org.openstreetmap.josm.plugins.lanelet2.sidecar.BackendResult
 import org.openstreetmap.josm.plugins.lanelet2.sidecar.BackendRunner
 import org.openstreetmap.josm.plugins.lanelet2.sidecar.BackendScripts
+import org.openstreetmap.josm.plugins.lanelet2.sidecar.BackendStore
 import org.openstreetmap.josm.plugins.lanelet2.sidecar.Sidecar
 import org.openstreetmap.josm.tools.Logging
 import java.io.File
@@ -44,25 +45,20 @@ object DebugRoutingGraph {
     const val SMALL_VIEW_BUFFER_M = 100.0
     private const val METERS_PER_DEG_LAT = 111320.0
 
-    fun routingOutputPath(inputPath: String, participant: String): String {
-        val outRoot = System.getenv("LL2_OUTPUT_DIR")?.trim().orEmpty()
-        if (outRoot.isNotEmpty()) {
-            val root = File(expandUser(outRoot)).normalize()
-            return File(root, "routing_${participant}_${File(inputPath).name}").path
-        }
-        return File(File(inputPath).parentFile, "routing_${participant}_${File(inputPath).name}").path
-    }
+    fun routingOutputPath(
+        inputPath: String,
+        participant: String,
+        scratchDir: File = BackendStore.defaultScratchDir(),
+    ): String = File(scratchDir, "routing_${participant}_${File(inputPath).name}").path
 
-    fun smallExtractPath(inputPath: String): String {
+    fun smallExtractPath(
+        inputPath: String,
+        scratchDir: File = BackendStore.defaultScratchDir(),
+    ): String {
         val base = File(inputPath)
         val stem = base.nameWithoutExtension
         val ext = if (base.extension.isEmpty()) ".osm" else ".${base.extension}"
-        val smallName = stem + "_small" + ext
-        val outRoot = System.getenv("LL2_OUTPUT_DIR")?.trim().orEmpty()
-        if (outRoot.isNotEmpty()) {
-            return File(File(expandUser(outRoot)).normalize(), smallName).path
-        }
-        return File(base.parentFile, smallName).path
+        return File(scratchDir, stem + "_small" + ext).path
     }
 
     fun routingLayerPrefix(participant: String, small: Boolean): String =
@@ -567,11 +563,4 @@ object DebugRoutingGraph {
         else -> "node"
     }
 
-    private fun expandUser(path: String): String {
-        if (path == "~") return System.getProperty("user.home")
-        if (path.startsWith("~/") || path.startsWith("~" + File.separator)) {
-            return System.getProperty("user.home") + path.substring(1)
-        }
-        return path
-    }
 }

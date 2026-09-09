@@ -12,6 +12,7 @@ object BackendScripts {
     const val VERSION_FILE = ".shipped_version"
     const val EXTRACT_SUBDIR = "backends"
     const val VENV_SUBDIR = "venv"
+    const val SCRATCH_SUBDIR = "routing"
 
     /** Application directory under the XDG data home that holds the venv. */
     const val VENV_APP_DIR = "josm-lanelet2"
