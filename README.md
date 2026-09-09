@@ -1,21 +1,24 @@
 # JOSM Lanelet2 Plugin
 
 Lanelet2 map editing tools for [JOSM](https://josm.openstreetmap.de/), as a
-native Kotlin plugin (`lanelet2.jar`). It replaces the Jython 2.7 script
-collection that previously ran under the JOSM Scripting plugin.
+native Kotlin plugin (`lanelet2.jar`).
+
+![JOSM-LL2-Plugin.png](./docs/res/JOSM-LL2-Plugin.png)
 
 Most tools are self-contained. Four actions (positive IDs, merge, split, debug
 routing graph) also need a local Python `lanelet2` install; they warn at the
 point of use if that sidecar is missing. Everything else works without it.
+if its missing its easy to use the setup wizard for creating a venv with the system python
+or any other python interpreter you might have installed, for example via `uv`.
 
 ## Requirements
 
 | You want… | You need |
 |---|---|
 | Core editing, styles, presets, 3D viewer, notes, git helpers | [JOSM](https://josm.openstreetmap.de/) **19555** or newer |
-| Positive IDs, OSM merge/split, debug routing graph | The above, plus Python **3.8–3.12** and the upstream [`lanelet2`](https://github.com/fzi-forschungszentrum-informatik/Lanelet2) wheel (Linux) |
-| Ad-hoc **Python 3** scripts against this plugin | The companion GraalPy plugin (`graalpy`) |
-| Ad-hoc **Jython 2.7** scripts against this plugin | The [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) with a Jython 2.7 engine |
+| Positive IDs, OSM merge/split, **debug routing graph** | The above, plus Python **3.8–3.12** and the upstream [`lanelet2`](https://github.com/fzi-forschungszentrum-informatik/Lanelet2) wheel (Linux) |
+| Ad-hoc **Python 3** scripts with numpy etc. against this plugin | The companion GraalPy JOSM plugin (`graalpy`) |
+| Ad-hoc **Jython 2.7** scripts against this plugin, pure Jython no numpy| The [Scripting plugin](https://josm.openstreetmap.de/wiki/Help/Plugin/Scripting) with a Jython 2.7 engine |
 
 ## Install
 
@@ -35,8 +38,6 @@ The script follows JOSM's own user-data rule:
 | OS | Plugins directory |
 |---|---|
 | Linux | `~/.josm/plugins` if that legacy home still exists, otherwise `${XDG_DATA_HOME:-~/.local/share}/JOSM/plugins` |
-| macOS | `~/Library/JOSM/plugins` |
-| Windows | `%APPDATA%\JOSM\plugins` |
 
 Override with `--dir DIR` or `JOSM_PLUGIN_DIR`. If the plugins directory (or
 the JOSM user-data home around it) does not exist, the script **warns** —
@@ -44,7 +45,7 @@ JOSM has probably never been started on this account — then creates the
 directory and copies the jar anyway.
 
 Restart JOSM and enable **lanelet2** under *Edit → Preferences → Plugins* on
-the first install.
+the first install (like any other JOSM plugin).
 
 ## What it ships
 
@@ -58,12 +59,9 @@ Settings live in *Lanelet2 Utils → Lanelet2 Settings* and on the native
 
 - Create lanelet(s) from a left/right linestring pair
 - Merge a shared border (two lanelets) or merge swapped left/right bounds
-- Split bidirectional lanelets on the virtual centerline; split ways at selected nodes
-- Smooth the centerline from the borders, or from a selected centerline
 - Revert lanelet direction; check borders (selects broken ones)
 - Delete relations (drop memberships) or purge relations including member ways and nodes
 
-Delete/purge use the **current JOSM selection**, not the collection dialog.
 
 ### Regulatory elements
 
@@ -115,7 +113,7 @@ Use *Set up Lanelet2 backends* in the settings window.
 - Make Positive IDs
 - Merge OSM Files
 - Split Merged OSM File
-- Generate Debug Routing Graph (and the small-graph variant)
+- Generate Debug Routing Graph (and the small and fast debug routing graph variant)
 
 The upstream wheel is Linux-only and supports Python 3.8–3.12. Point the
 wizard's *Advanced* section at another interpreter to use your own.
@@ -145,6 +143,8 @@ must not delete a 100+ MB pip install).
 
 Because a JOSM plugin is a single jar and JOSM does not ship the Kotlin
 runtime, the plugin packs the Kotlin stdlib.
+
+note that the GraalPy Plugin for scripting with Python3 requires JDK25. 
 
 ## Testing
 
