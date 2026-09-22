@@ -103,6 +103,18 @@
     #editBar button:hover { background: rgba(52, 68, 90, 0.95); }
     #editBar button.on { border-color: #ffd23f; color: #ffe38a; }
     #editBar .sep { width: 1px; background: #3d4d63; margin: 2px 3px; }
+    #imageryMenu {
+      position: fixed; top: 44px; right: 12px; z-index: 13;
+      display: flex; flex-direction: column; gap: 3px; min-width: 180px;
+      background: rgba(20, 26, 36, 0.96); border: 1px solid #3d4d63; border-radius: 6px; padding: 5px;
+    }
+    #imageryMenu[hidden] { display: none; }
+    #imageryMenu button {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #e8edf5; text-align: left;
+      background: rgba(36, 46, 62, 0.95); border: 1px solid #3d4d63; border-radius: 5px;
+      padding: 7px 9px; cursor: pointer;
+    }
+    #imageryMenu button:hover { background: rgba(52, 68, 90, 0.95); }
     #toast {
       position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 12;
       font: 12px/1.4 ui-monospace, Menlo, monospace; color: #e8edf5;
@@ -153,6 +165,7 @@
   </div>
   <div id="toolbar">
     <button id="editBtn" type="button" title="Edit mode: select and move nodes / ways (E)">Edit</button>
+    <button id="imageryBtn" type="button" title="Open the selection (or the middle of the view) in Mapillary, Google Street View or Apple Maps">Street view ▾</button>
     <button id="lanesBtn" type="button" title="Lanelet surfaces and direction arrows (L). Yellow double arrows: two-way (one_way=no/false/0)">Lanelets</button>
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
@@ -189,6 +202,7 @@
       <div class="camHint">space / c</div>
     </div>
   </div>
+  <div id="imageryMenu" hidden></div>
   <div id="toast"></div>
   <div id="boxSel"></div>
   <div id="debugHud">

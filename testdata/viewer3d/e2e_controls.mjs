@@ -127,6 +127,29 @@ try {
   t.check("wheel marks its target in the HUD", marker.includes("(10.0, 10.0, 100.0)"), marker);
   await v.shot("zoom_marker.png");
 
+  // ---- street-level imagery ------------------------------------------------------------
+  await v.evaluate("window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }");
+  const clickEl = async (sel) => {
+    const r = await v.evaluate(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`);
+    await v.click(r[0], r[1]);
+  };
+  await clickEl("#imageryBtn");
+  t.check("Street view opens its provider menu", await v.evaluate("!document.getElementById('imageryMenu').hidden"));
+  await clickEl('#imageryMenu [data-provider="google"]');
+  const opened = await v.evaluate("window.__opened");
+  const ps = await nodes(ids);
+  const cx = ps.reduce((a, q) => a + q[0], 0) / ps.length;
+  const cy = ps.reduce((a, q) => a + q[1], 0) / ps.length;
+  const R = 6378137.0;
+  const lat = 49.0 + (cy / R) * 180 / Math.PI;
+  const lon = 8.4 + (cx / (R * Math.cos(49.0 * Math.PI / 180))) * 180 / Math.PI;
+  const m = /viewpoint=([-\d.]+),([-\d.]+)&heading=(\d+)/.exec(opened[0] || "");
+  t.check("Google Street View opens at the selection's centre with the camera heading",
+    m && Math.abs(Number(m[1]) - lat) < 1e-6 && Math.abs(Number(m[2]) - lon) < 1e-6
+      && Number(m[3]) === Math.round((((-(await v.camera()).yaw * 180 / Math.PI) % 360) + 360) % 360) % 360,
+    opened[0]);
+  t.check("the menu closes after a choice", await v.evaluate("document.getElementById('imageryMenu').hidden"));
+
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {
   await v.close();

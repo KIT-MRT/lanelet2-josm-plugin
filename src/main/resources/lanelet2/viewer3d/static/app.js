@@ -8,6 +8,7 @@
 //   nav.js        mouse navigation;  keys.js  keyboard, FPS look
 //   edit.js       selection and the move gizmo;  net.js  SSE in, commands out
 //   josmview.js   JOSM view follow / drive;  hud.js  HUD panels
+//   imagery.js    "Street view" button (Mapillary / Google / Apple)
 //
 // Coordinates arrive as local ENU metres relative to an anchor lat/lon, so the
 // scene is centred near the origin. Z is up.
@@ -27,6 +28,7 @@ import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
 import { connect, onCommandResult } from "./js/net.js";
+import { installImagery } from "./js/imagery.js";
 import { frameAll } from "./js/framing.js";
 import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } from "./js/hud.js";
 
@@ -35,6 +37,7 @@ import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } 
 installNav({ gizmoBusy, pointerLocked: isPointerLocked });
 installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
+installImagery();
 
 // Only auto-frame the first time data appears; later snapshots (e.g. live
 // edits streamed from JOSM) must not yank the camera the user has set. Framed

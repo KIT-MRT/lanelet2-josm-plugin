@@ -22,6 +22,7 @@ import org.openstreetmap.josm.plugins.lanelet2.notes.NotesActions
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import org.openstreetmap.josm.plugins.lanelet2.regulatory.RegulatoryActions
 import org.openstreetmap.josm.plugins.lanelet2.selection.SelectionActions
+import org.openstreetmap.josm.plugins.lanelet2.tools.StreetImagery
 import org.openstreetmap.josm.plugins.lanelet2.tools.ToolsActions
 import org.openstreetmap.josm.plugins.lanelet2.platform.MapStyles
 import org.openstreetmap.josm.plugins.lanelet2.platform.MenuInstaller
@@ -51,6 +52,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             SettingsActions.registerAll()
             InternalActions.registerAll()
             Viewer3dActions.registerAll()
+            StreetImagery.registerAll()
             CommitReminder.install()
             Viewer3dHook.installIfEnabled()
             AutotagHook.installIfEnabled()

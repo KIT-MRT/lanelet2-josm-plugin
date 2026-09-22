@@ -88,7 +88,7 @@ by capturing the mouse and disabling edit mode.
 
 ## 6. Street-level imagery
 
-- [ ] One button in the JOSM toolbar and one in the viewer: open the
+- [x] One button in the JOSM toolbar and one in the viewer: open the
       selection centre (single node: its location; nothing: view centre /
       camera ground point) in Mapillary, Google Street View or Apple Maps.
       Google gets the camera heading from the viewer.
