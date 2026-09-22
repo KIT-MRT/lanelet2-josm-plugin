@@ -14,7 +14,10 @@ export const TEST_HOOKS = params.get("test") === "1";
 export const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 export function plog(...args) {
-  if (PROFILE) console.log("[viewer][perf]", ...args);
+  if (!PROFILE) return;
+  console.log("[viewer][perf]", ...args);
+  // Kept for the headless perf script (testdata/viewer3d/perf_viewer.mjs).
+  (window.__perfLog || (window.__perfLog = [])).push(args.join(" "));
 }
 
 export const round3 = (v) => Math.round(v * 1000) / 1000;

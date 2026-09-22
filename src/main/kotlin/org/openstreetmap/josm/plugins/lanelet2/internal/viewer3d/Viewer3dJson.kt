@@ -114,6 +114,21 @@ object Viewer3dJson {
             }
             sb.append(']')
         }
+        feat.lanelet?.let { l ->
+            sb.append(",\"left\":").append(jsonString(l.left))
+            sb.append(",\"right\":").append(jsonString(l.right))
+            sb.append(",\"lrev\":").append(l.leftReversed)
+            sb.append(",\"rrev\":").append(l.rightReversed)
+            sb.append(",\"two\":").append(l.twoWay)
+            l.arrow?.let { a ->
+                sb.append(",\"arrow\":[")
+                for (i in a.indices) {
+                    if (i > 0) sb.append(',')
+                    appendNum(sb, a[i])
+                }
+                sb.append(']')
+            }
+        }
         if (feat.center != null) {
             sb.append(",\"center\":[")
             feat.center.forEachIndexed { i, v ->

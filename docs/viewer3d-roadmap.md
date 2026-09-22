@@ -78,11 +78,11 @@ by capturing the mouse and disabling edit mode.
 
 ## 5. Lanelet visualisation
 
-- [ ] Stream lanelets (left/right refs aligned with the ported lanelet2
+- [x] Stream lanelets (left/right refs aligned with the ported lanelet2
       `geometry::align` signed-distance logic, `Lanelet(relation)`).
-- [ ] Translucent lanelet surfaces; also give picking a real road surface
+- [x] Translucent lanelet surfaces; also give picking a real road surface
       instead of the ground-plane fallback.
-- [ ] Direction arrow at 35 % of the centerline (`Centerline.kt` port).
+- [x] Direction arrow at 35 % of the centerline (`Centerline.kt` port).
       Double-headed when `one_way` parses as false per lanelet2
       (`no`, `false`, `0`; Karlsruhe uses `0` 3,782 times).
 
@@ -119,7 +119,22 @@ by capturing the mouse and disabling edit mode.
   | culling candidates (EDT) | 125–280 ms (copy every way) | 0.3–0.5 ms (`searchWays`) |
   | encode snapshot JSON | 1.1–1.7 s | 0.13–0.22 s |
   | full snapshot diff (EDT, connect only) | 620–960 ms | 380–810 ms |
-- [ ] Full map viewable without culling at interactive frame rates.
+- [x] Full map viewable without culling at interactive frame rates.
+
+  Real GPU (Intel Iris Xe, `LL2_GPU=1`), full Karlsruhe with lanelet
+  surfaces and 48k arrows (191,582 features, 42.8 MB snapshot):
+
+  | | draw calls | fps |
+  |---|---|---|
+  | per-tile chunks, two-pass transparency | 2,491 | 21–22 |
+  | single-pass flat materials | 1,672 | 40 |
+  | 4×4-tile render chunks | 218 | 40–45 |
+
+  The remaining ~20 ms is GPU work on the whole city (lines with a
+  logarithmic depth buffer, no early-z); an empty scene runs at 60 fps /
+  0.25 ms. One-off build on the first frame: lines 86 ms, surfaces 161 ms,
+  arrows 23 ms. JOSM side with lanelets: full snapshot 1.0–1.25 s on the EDT
+  (connect only), 41.7 MB.
 
 ## Backlog: further improvements found along the way
 
@@ -137,10 +152,13 @@ by capturing the mouse and disabling edit mode.
 - A pending command's revert assumes no second gesture on the same nodes
   before JOSM answers (answers take a few ms locally).
 
-- A full snapshot (connect / layer change) still costs ~0.5–1 s on the EDT
-  for Karlsruhe without culling: `ds.ways.map { toSnapshot() }` plus
-  `computeFull`, dominated by per-node allocations (`Pair`, boxed doubles).
-  Snapshotting on the EDT and building features on the sender thread would
-  take most of it off the UI.
+- A full snapshot (connect / layer change) still costs ~1.5 s on the EDT for
+  Karlsruhe without culling (ways 0.15 s + lanelet alignment 0.3 s +
+  `computeFull` 1.0–1.25 s, of which lanelet centerlines ~0.5 s).
+  Snapshotting on the EDT and building features on a worker thread would take
+  most of it off the UI; with culling on it is small.
+- Draw-distance LOD: hide chunks far beyond the view (or draw them without
+  surfaces / arrows) so a whole-city view at a shallow angle does not pay for
+  the horizon. Currently ~45 fps on an integrated GPU, fine but not free.
 - `one_way:<participant>` overrides (e.g. `one_way:bicycle=no`) could get a
   distinct arrow style; lanelet2 treats them per participant.

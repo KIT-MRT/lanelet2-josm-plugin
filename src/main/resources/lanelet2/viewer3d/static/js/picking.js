@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { store } from "./store.js";
 import { canvas } from "./scene.js";
 import { camera, camRefs } from "./camera.js";
+import { laneletLayer } from "./render/lanelets.js";
 
 export const PICK_RADIUS_PX = 10;    // a line / node this close counts as under the cursor
 export const PICK_TIE_PX = 1.5;      // candidates this close on screen: nearer one wins
@@ -143,9 +144,9 @@ export function cursorRay(clientX, clientY) {
 }
 
 // The map point under the cursor: the nearest line within PICK_RADIUS_PX;
-// else the cursor ray on a level plane at the height of the nearest line
-// (the map height near the cursor, e.g. a lane surface between its bounds);
-// else null (sky). Returns { point, kind: "line" | "ground", featureId, depth }.
+// else the lanelet surface under it; else the cursor ray on a level plane at
+// the height of the nearest line (the map height near the cursor); else null
+// (sky). Returns { point, kind: "line" | "surface" | "ground", featureId, depth }.
 export function pickMapPoint(clientX, clientY) {
   const pr = screenProjector();
   let hit = null;
@@ -174,6 +175,16 @@ export function pickMapPoint(clientX, clientY) {
   }
   if (probe) camRefs.groundZ = probe.z;
   const ray = cursorRay(clientX, clientY);
+  const surfaces = laneletLayer.surfaceMeshes();
+  if (surfaces.length) {
+    const hits = raycaster.intersectObjects(surfaces, false);
+    if (hits.length) {
+      const point = hits[0].point.clone();
+      camRefs.groundZ = point.z;
+      toViewSpace(pr.e, point.x, point.y, point.z, _tmp);
+      return { point, kind: "surface", featureId: null, depth: _tmp[5] };
+    }
+  }
   if (Math.abs(ray.direction.z) < 1e-9) return null;
   const t = (camRefs.groundZ - ray.origin.z) / ray.direction.z;
   if (!(t > camera.near) || t > GROUND_PICK_MAX_M) return null;

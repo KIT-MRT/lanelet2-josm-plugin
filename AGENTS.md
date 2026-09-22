@@ -300,6 +300,16 @@ Browser camera and picking (`app.js`):
   store, never three.js objects. Lines are one indexed `LineSegments` per tile,
   not one `THREE.Line` per way: Karlsruhe has 144k ways. A drag rewrites only
   the moved vertices; a changed tile is rebuilt on the next frame.
+- **Render chunks are 4×4 store tiles (~1 km)**: 218 draw calls for all of
+  Karlsruhe. Flat transparent materials set `forceSinglePass`, otherwise
+  three.js draws transparent double-sided meshes twice.
+- **Lanelets stream as references, not geometry**: `kind: "lanelet"` with
+  `left`/`right` way ids, `lrev`/`rrev` (lanelet2 `geometry::align` via
+  `Lanelet(relation)`), `two` (one_way parses false: `no`/`false`/`0`) and
+  `arrow` (x, y, z, dx, dy, dz, width at 35 % of the `Centerline` port, run on
+  ENU metres). The browser triangulates surfaces from the way features, so a
+  bound change needs its lanelets re-sent (the hook marks node → way →
+  lanelet dirty) and `relationMembersChanged` is no longer ignored.
 - **Picking tolerances are screen pixels** (`pickMapPoint`, `pickNode`).
   three's Line/Points raycast thresholds are world metres, which picked the
   wrong node up close. Lanes between two bounds have no geometry, so a miss

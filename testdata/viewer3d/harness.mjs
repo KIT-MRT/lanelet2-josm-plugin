@@ -92,10 +92,14 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
   const sendScene = (msg) => bridge.write(JSON.stringify(msg) + "\n");
 
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ll2-viewer-e2e-"));
+  // Software GL by default (works anywhere, CPU-bound frame times);
+  // LL2_GPU=1 uses the machine's GPU through ANGLE/OpenGL for real frame rates.
+  const gl = process.env.LL2_GPU === "1"
+    ? ["--enable-gpu", "--use-angle=gl"]
+    : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
   const chrome = spawn(findChrome(), ["--headless=new", `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${profile}`, `--window-size=${width},${height}`, "--no-first-run",
-    "--no-default-browser-check", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
-    "about:blank"], { stdio: "ignore" });
+    "--no-default-browser-check", ...gl, "about:blank"], { stdio: "ignore" });
   let targets = [];
   for (let i = 0; i < 100 && !targets.some((t) => t.type === "page"); i++) {
     try { targets = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json(); } catch (_) { /* starting */ }

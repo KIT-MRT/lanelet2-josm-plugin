@@ -16,6 +16,7 @@ import { edit, setEditMode, editEvents, handleEditKey, keysMoveSelection, nudgeS
 import { frameAll, bevNorth, defaultBevView } from "./framing.js";
 import { requestJosmRecenter } from "./josmview.js";
 import { setLookHud } from "./hud.js";
+import { laneletLayer } from "./render/lanelets.js";
 
 const CAM_PAN_STEP_M = 1;    // metres per pan / height tick (walk)
 const CAM_FAST_STEP_M = 10;  // metres per tick with Shift (WASD / arrows / pad)
@@ -181,6 +182,15 @@ export function installKeys() {
   on("recenterJosmBtn", () => requestJosmRecenter("button", true));
   on("bevBtn", () => bevNorth());
   on("defaultBevBtn", () => defaultBevView());
+  const lanesBtn = document.getElementById("lanesBtn");
+  const toggleLanes = () => {
+    laneletLayer.setVisible(!laneletLayer.visible);
+    if (lanesBtn) lanesBtn.classList.toggle("on", laneletLayer.visible);
+  };
+  if (lanesBtn) {
+    lanesBtn.classList.toggle("on", laneletLayer.visible);
+    lanesBtn.addEventListener("click", toggleLanes);
+  }
   refreshLookHud();
 
   // Modifier state comes from every key event, not only from the modifier's
@@ -202,6 +212,10 @@ export function installKeys() {
     }
     if ((e.key === "b" || e.key === "B") && !e.repeat) {
       bevNorth();
+      return;
+    }
+    if ((e.key === "l" || e.key === "L") && !e.repeat && !e.ctrlKey && !e.metaKey) {
+      document.getElementById("lanesBtn")?.click();
       return;
     }
     if ((e.key === "e" || e.key === "E") && !e.repeat && !e.ctrlKey && !e.metaKey) {

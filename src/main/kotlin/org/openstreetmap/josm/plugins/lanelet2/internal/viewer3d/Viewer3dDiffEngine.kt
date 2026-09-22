@@ -20,6 +20,7 @@ class Viewer3dDiffEngine(
     var cullBoundsKey: List<Double>? = null
     var dirtyAll: Boolean = true
     val dirtyWays: MutableSet<Long> = linkedSetOf()
+    val dirtyLanelets: MutableSet<Long> = linkedSetOf()
     val sent: MutableMap<String, FeatureSignature> = linkedMapOf()
 
     fun resetForLayerChange() {
@@ -29,8 +30,18 @@ class Viewer3dDiffEngine(
         cullBoundsKey = null
         forceSnapshot = true
         dirtyWays.clear()
+        dirtyLanelets.clear()
         dirtyAll = true
     }
+
+    fun markLaneletDirty(relationId: Long) {
+        dirtyLanelets.add(relationId)
+    }
+
+    private fun wayIdOf(fid: String): Long? = if (fid.startsWith("way/")) fid.substring(4).toLongOrNull() else null
+
+    private fun laneletIdOf(fid: String): Long? =
+        if (fid.startsWith("relation/")) fid.substring(9).toLongOrNull() else null
 
     fun markAllDirty() {
         dirtyAll = true
@@ -51,6 +62,7 @@ class Viewer3dDiffEngine(
     fun computeFull(
         ways: List<WaySnapshot>,
         viewCenter: Pair<Double, Double>?,
+        lanelets: List<LaneletSnapshot> = emptyList(),
     ): OutboundMessage.Snapshot? {
         if (anchor == null) {
             anchor = Viewer3dFeatures.computeAnchor(ways)
@@ -61,6 +73,7 @@ class Viewer3dDiffEngine(
                 sent.clear()
                 forceSnapshot = false
                 dirtyWays.clear()
+                dirtyLanelets.clear()
                 dirtyAll = false
                 return OutboundMessage.Snapshot(null, emptyList())
             }
@@ -81,17 +94,29 @@ class Viewer3dDiffEngine(
             val feat = Viewer3dFeatures.featureForWay(w, a) ?: continue
             current[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
         }
+        // Lanelets after their bound ways, which the viewer builds surfaces from.
+        for (l in lanelets) {
+            if (l.deleted) continue
+            if (!Viewer3dFeatures.laneletInCull(l, a, bounds, cullEnabled)) continue
+            val feat = Viewer3dFeatures.featureForLanelet(l, a) ?: continue
+            current[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
+        }
         val feats = current.values.map { it.first }.toMutableList()
         viewportFeature?.let { feats.add(it) }
         sent.clear()
         sent.putAll(current.mapValues { it.value.second })
         forceSnapshot = false
         dirtyWays.clear()
+        dirtyLanelets.clear()
         dirtyAll = false
         return OutboundMessage.Snapshot(a, feats)
     }
 
-    fun seedRescan(ways: List<WaySnapshot>, viewCenter: Pair<Double, Double>?): OutboundMessage.Patch? {
+    fun seedRescan(
+        ways: List<WaySnapshot>,
+        viewCenter: Pair<Double, Double>?,
+        lanelets: List<LaneletSnapshot> = emptyList(),
+    ): OutboundMessage.Patch? {
         val a = anchor ?: return null
         val bounds = if (cullEnabled) Viewer3dFeatures.cullBoundsEnu(viewCenter, a, cullRangeM) else null
         val currentIds = linkedSetOf<Long>()
@@ -101,14 +126,23 @@ class Viewer3dDiffEngine(
                 currentIds.add(w.uniqueId)
             }
         }
+        val currentLanelets = linkedSetOf<Long>()
+        for (l in lanelets) {
+            if (!l.deleted && Viewer3dFeatures.laneletInCull(l, a, bounds, cullEnabled)) currentLanelets.add(l.uniqueId)
+        }
         val removes = ArrayList<PatchOp.Remove>()
         for (fid in sent.keys.toList()) {
-            if (fid == Viewer3dConstants.VIEWPORT_ID) continue
-            val wid = fid.substringAfter("way/").toLongOrNull() ?: continue
-            if (wid !in currentIds) {
+            val wid = wayIdOf(fid)
+            val lid = laneletIdOf(fid)
+            val gone = (wid != null && wid !in currentIds) || (lid != null && lid !in currentLanelets)
+            if (gone) {
                 removes.add(PatchOp.Remove(fid))
                 sent.remove(fid)
             }
+        }
+        for (lid in currentLanelets) {
+            // New ones get sent; known ones are re-checked (cheap, tags may have changed).
+            dirtyLanelets.add(lid)
         }
         var nAdd = 0
         for (wid in currentIds) {
@@ -138,6 +172,7 @@ class Viewer3dDiffEngine(
     fun computeIncremental(
         wayById: (Long) -> WaySnapshot?,
         viewCenter: Pair<Double, Double>?,
+        laneletById: (Long) -> LaneletSnapshot? = { null },
     ): IncrementalResult {
         val a = anchor ?: return IncrementalResult(null, false)
         val bounds = if (cullEnabled) Viewer3dFeatures.cullBoundsEnu(viewCenter, a, cullRangeM) else null
@@ -180,13 +215,35 @@ class Viewer3dDiffEngine(
                 sent[fid] = sig
             }
         }
+        // Lanelets after ways, with their own batch.
+        val lbatch = dirtyLanelets.take(Viewer3dConstants.MAX_WAYS_PER_CYCLE)
+        lbatch.forEach { dirtyLanelets.remove(it) }
+        for (lid in lbatch) {
+            val fid = "relation/$lid"
+            val l = laneletById(lid)
+            val feat = if (l == null || l.deleted || !Viewer3dFeatures.laneletInCull(l, a, bounds, cullEnabled)) {
+                null
+            } else {
+                Viewer3dFeatures.featureForLanelet(l, a)
+            }
+            if (feat == null) {
+                if (sent.remove(fid) != null) ops.add(PatchOp.Remove(fid))
+                continue
+            }
+            val sig = Viewer3dFeatures.featureSignature(feat)
+            if (sent[fid] != sig) {
+                ops.add(PatchOp.Upsert(feat))
+                sent[fid] = sig
+            }
+        }
         val patch = if (ops.isEmpty()) null else OutboundMessage.Patch(ops)
-        return IncrementalResult(patch, more)
+        return IncrementalResult(patch, more || dirtyLanelets.isNotEmpty())
     }
 
     fun syncCullVisibility(
         ways: List<WaySnapshot>,
         viewCenter: Pair<Double, Double>?,
+        lanelets: List<LaneletSnapshot> = emptyList(),
     ): OutboundMessage.Patch? {
         if (!cullEnabled) return null
         val a = anchor ?: return null
@@ -200,11 +257,14 @@ class Viewer3dDiffEngine(
             if (Viewer3dFeatures.wayInCull(w, a, bounds, true)) visible[w.uniqueId] = w
         }
         val visibleIds = visible.keys
+        val visibleLanelets = lanelets
+            .filter { !it.deleted && Viewer3dFeatures.laneletInCull(it, a, bounds, true) }
+            .associateBy { it.uniqueId }
         val ops = ArrayList<PatchOp>()
         for (fid in sent.keys.toList()) {
-            if (fid == Viewer3dConstants.VIEWPORT_ID) continue
-            val wid = fid.substringAfter("way/").toLongOrNull() ?: continue
-            if (wid !in visibleIds) {
+            val wid = wayIdOf(fid)
+            val lid = laneletIdOf(fid)
+            if ((wid != null && wid !in visibleIds) || (lid != null && lid !in visibleLanelets)) {
                 ops.add(PatchOp.Remove(fid))
                 sent.remove(fid)
             }
@@ -222,6 +282,9 @@ class Viewer3dDiffEngine(
         }
         for (wid in visibleIds) {
             if ("way/$wid" !in sent) dirtyWays.add(wid)
+        }
+        for (lid in visibleLanelets.keys) {
+            if ("relation/$lid" !in sent) dirtyLanelets.add(lid)
         }
         return if (ops.isEmpty()) null else OutboundMessage.Patch(ops)
     }

@@ -1,7 +1,13 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
-/** Build viewer features and signatures from headless way snapshots. */
+import org.openstreetmap.josm.plugins.lanelet2.infra.Centerline
+import org.openstreetmap.josm.plugins.lanelet2.infra.LonLat
+import kotlin.math.hypot
+
+/** Build viewer features and signatures from headless way / lanelet snapshots. */
 object Viewer3dFeatures {
+    /** Where along the centerline the direction arrow sits (fraction of its length). */
+    const val ARROW_AT = 0.35
     fun nodeEleMetres(eleTag: String?): Double {
         if (eleTag.isNullOrEmpty()) return 0.0
         return eleTag.toDoubleOrNull() ?: 0.0
@@ -47,7 +53,138 @@ object Viewer3dFeatures {
             type = feat.tags["type"],
             subtype = feat.tags["subtype"],
             participantBicycle = feat.tags["participant:bicycle"],
+            lanelet = feat.lanelet,
         )
+
+    /**
+     * lanelet2 parses `one_way` as a bool (`lexical_cast<bool>`, then
+     * "true"/"yes"/"false"/"no"); a lanelet is two-way for vehicles only when
+     * it parses as false. Absent means one-way (GenericTrafficRules).
+     */
+    fun isTwoWay(oneWay: String?): Boolean = oneWay?.trim() in setOf("no", "false", "0")
+
+    private fun enuPoints(nodes: List<NodeSnapshot>, anchor: Anchor): List<DoubleArray> {
+        val out = ArrayList<DoubleArray>(nodes.size)
+        for (n in nodes) {
+            val lat = n.lat ?: continue
+            val lon = n.lon ?: continue
+            val (x, y) = Viewer3dEnu.enu(lat, lon, anchor.lat, anchor.lon)
+            out.add(doubleArrayOf(x, y, nodeEleMetres(n.eleTag)))
+        }
+        return out
+    }
+
+    /**
+     * A lanelet for the viewer: references to its bounds (which stream as way
+     * features) and its direction arrow. `pts` holds one point (the arrow, or
+     * the start of the lanelet) so the viewer can place it in its spatial tiles.
+     */
+    fun featureForLanelet(l: LaneletSnapshot, anchor: Anchor): ViewerFeature? {
+        val leftId = l.leftWayId ?: return null
+        val rightId = l.rightWayId ?: return null
+        val left = enuPoints(l.left, anchor)
+        val right = enuPoints(l.right, anchor)
+        if (left.size < 2 || right.size < 2) return null
+        val arrow = laneletArrow(left, right)?.map { Viewer3dEnu.roundCoord(it) }?.toDoubleArray()
+        val rep = arrow?.copyOf(3) ?: doubleArrayOf(
+            Viewer3dEnu.roundCoord((left[0][0] + right[0][0]) / 2),
+            Viewer3dEnu.roundCoord((left[0][1] + right[0][1]) / 2),
+            Viewer3dEnu.roundCoord((left[0][2] + right[0][2]) / 2),
+        )
+        val tags = linkedMapOf<String, String>()
+        l.subtype?.let { tags["subtype"] = it }
+        l.oneWay?.let { tags["one_way"] = it }
+        return ViewerFeature(
+            id = "relation/${l.uniqueId}",
+            kind = "lanelet",
+            tags = tags,
+            pts = rep,
+            lanelet = LaneletRefs(
+                left = "way/$leftId",
+                right = "way/$rightId",
+                leftReversed = l.leftReversed,
+                rightReversed = l.rightReversed,
+                arrow = arrow,
+                twoWay = isTwoWay(l.oneWay),
+            ),
+        )
+    }
+
+    /**
+     * Arrow pose at [ARROW_AT] of the centerline (lanelet2
+     * `calculateCenterline`, run on ENU metres), with its height and slope
+     * taken from the bounds: x, y, z, dx, dy, dz (unit), lanelet width there.
+     * [left] / [right] are x, y, z points in driving order.
+     */
+    fun laneletArrow(left: List<DoubleArray>, right: List<DoubleArray>): DoubleArray? {
+        val cl = Centerline.calculateCenterlinePoints(
+            left.map { LonLat(it[0], it[1]) },
+            right.map { LonLat(it[0], it[1]) },
+        )
+        if (cl.size < 2) return null
+        val cum = DoubleArray(cl.size)
+        for (i in 1 until cl.size) cum[i] = cum[i - 1] + hypot(cl[i].lon - cl[i - 1].lon, cl[i].lat - cl[i - 1].lat)
+        val total = cum.last()
+        if (total < 1e-6) return null
+        val target = total * ARROW_AT
+        // The segment holding the target, skipping zero-length ones (the
+        // centerline can repeat a vertex, e.g. upstream's duplicated tail).
+        var k = 0
+        while (k < cl.size - 2 && (cum[k + 1] < target || cum[k + 1] - cum[k] <= 1e-9)) k++
+        val seg = cum[k + 1] - cum[k]
+        if (seg <= 1e-9) return null
+        val t = ((target - cum[k]) / seg).coerceIn(0.0, 1.0)
+        val x = cl[k].lon + (cl[k + 1].lon - cl[k].lon) * t
+        val y = cl[k].lat + (cl[k + 1].lat - cl[k].lat) * t
+        var dx = (cl[k + 1].lon - cl[k].lon) / seg
+        var dy = (cl[k + 1].lat - cl[k].lat) / seg
+        val z = surfaceZ(left, right, x, y)
+        // Slope from the surface half a metre either side of the arrow.
+        val slope = surfaceZ(left, right, x + dx * 0.5, y + dy * 0.5) - surfaceZ(left, right, x - dx * 0.5, y - dy * 0.5)
+        val len = hypot(hypot(dx, dy), slope)
+        dx /= len
+        dy /= len
+        val width = closestOnPolyline(left, x, y).first + closestOnPolyline(right, x, y).first
+        return doubleArrayOf(x, y, z, dx, dy, slope / len, width)
+    }
+
+    /** Height under (x, y): the mean of both bounds' heights at their closest points. */
+    private fun surfaceZ(left: List<DoubleArray>, right: List<DoubleArray>, x: Double, y: Double): Double =
+        (closestOnPolyline(left, x, y).second + closestOnPolyline(right, x, y).second) / 2
+
+    /** Horizontal distance from (x, y) to the polyline, and its height there. */
+    private fun closestOnPolyline(pts: List<DoubleArray>, x: Double, y: Double): Pair<Double, Double> {
+        var bestD = Double.MAX_VALUE
+        var bestZ = pts[0][2]
+        for (i in 0 until pts.size - 1) {
+            val a = pts[i]
+            val b = pts[i + 1]
+            val ex = b[0] - a[0]
+            val ey = b[1] - a[1]
+            val len2 = ex * ex + ey * ey
+            val t = if (len2 > 1e-12) (((x - a[0]) * ex + (y - a[1]) * ey) / len2).coerceIn(0.0, 1.0) else 0.0
+            val d = hypot(a[0] + ex * t - x, a[1] + ey * t - y)
+            if (d < bestD) {
+                bestD = d
+                bestZ = a[2] + (b[2] - a[2]) * t
+            }
+        }
+        return bestD to bestZ
+    }
+
+    /** ENU bbox of a lanelet (both bounds), for culling. */
+    fun laneletBBoxEnu(l: LaneletSnapshot, anchor: Anchor): EnuBounds? {
+        val pts = enuPoints(l.left, anchor) + enuPoints(l.right, anchor)
+        if (pts.isEmpty()) return null
+        return EnuBounds(pts.minOf { it[0] }, pts.minOf { it[1] }, pts.maxOf { it[0] }, pts.maxOf { it[1] })
+    }
+
+    fun laneletInCull(l: LaneletSnapshot, anchor: Anchor, bounds: EnuBounds?, cullOn: Boolean): Boolean {
+        if (!cullOn) return true
+        if (bounds == null) return false
+        val lb = laneletBBoxEnu(l, anchor) ?: return false
+        return bounds.intersects(lb)
+    }
 
     fun wayBBoxEnu(way: WaySnapshot, anchor: Anchor): EnuBounds? {
         var wminX = 1.0e18

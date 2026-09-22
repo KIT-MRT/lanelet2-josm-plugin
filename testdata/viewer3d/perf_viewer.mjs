@@ -28,6 +28,7 @@ const attr = (s, k) => {
 async function readOsm(path) {
   const nodes = new Map(); // id -> [lat, lon, ele]
   const ways = [];
+  const lanelets = [];     // { id, left, right, tags }
   let cur = null;
   let curKind = null;
   const rl = readline.createInterface({ input: fs.createReadStream(path), crlfDelay: Infinity });
@@ -43,23 +44,28 @@ async function readOsm(path) {
       curKind = "way";
       ways.push(cur);
     } else if (s.startsWith("<relation")) {
+      cur = { id: Number(attr(s, "id")), left: null, right: null, tags: {} };
       curKind = "rel";
+      lanelets.push(cur);
+    } else if (s.startsWith("<member") && curKind === "rel") {
+      const role = attr(s, "role");
+      if (attr(s, "type") === "way" && (role === "left" || role === "right")) cur[role] = Number(attr(s, "ref"));
     } else if (s.startsWith("<nd ") && curKind === "way") {
       cur.nds.push(Number(attr(s, "ref")));
     } else if (s.startsWith("<tag")) {
       const k = attr(s, "k");
       const v = attr(s, "v");
       if (curKind === "node" && k === "ele") cur[2] = Number(v) || 0;
-      else if (curKind === "way") cur.tags[k] = v;
+      else if (curKind === "way" || curKind === "rel") cur.tags[k] = v;
     } else if (s.startsWith("</")) {
       curKind = null;
     }
   }
-  return { nodes, ways };
+  return { nodes, ways, lanelets: lanelets.filter((r) => r.tags.type === "lanelet" && r.left && r.right) };
 }
 
 const t0 = Date.now();
-const { nodes, ways } = await readOsm(mapPath);
+const { nodes, ways, lanelets } = await readOsm(mapPath);
 let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
 for (const w of ways) {
   for (const id of w.nds) {
@@ -90,26 +96,63 @@ for (const w of ways) {
   features.push({ id: `way/${w.id}`, kind: "line", tags, pts: points, nodes: nds });
   nPts += nds.length;
 }
+// Lanelets like Viewer3dFeatures.featureForLanelet sends them, minus the
+// lanelet2 alignment and centerline (not ported to JS): bounds as stored and
+// an arrow at 35 % of the left bound. Enough to load surfaces and arrows.
+const wayPts = new Map(features.map((f) => [f.id, f.pts]));
+let nLanelets = 0;
+for (const r of lanelets) {
+  const lp = wayPts.get(`way/${r.left}`);
+  if (!lp || !wayPts.get(`way/${r.right}`)) continue;
+  const k = Math.min(Math.floor((lp.length / 3) * 0.35), lp.length / 3 - 2) * 3;
+  const dx = lp[k + 3] - lp[k], dy = lp[k + 4] - lp[k + 1];
+  const len = Math.hypot(dx, dy) || 1;
+  const tags = {};
+  for (const key of ["subtype", "one_way"]) if (r.tags[key] !== undefined) tags[key] = r.tags[key];
+  features.push({ id: `relation/${r.id}`, kind: "lanelet", tags, pts: [lp[k], lp[k + 1], lp[k + 2]],
+    left: `way/${r.left}`, right: `way/${r.right}`, lrev: false, rrev: false,
+    two: ["no", "false", "0"].includes(r.tags.one_way), arrow: [lp[k], lp[k + 1], lp[k + 2], dx / len, dy / len, 0, 3.5] });
+  nLanelets++;
+}
 const snapshot = JSON.stringify({ type: "snapshot", anchor: { lat: lat0, lon: lon0 }, features });
-console.log(`map: ${features.length} ways, ${nPts} points, snapshot ${(snapshot.length / 1e6).toFixed(1)} MB` +
+console.log(`map: ${features.length - nLanelets} ways, ${nLanelets} lanelets, ${nPts} points, snapshot ${(snapshot.length / 1e6).toFixed(1)} MB` +
   ` (read+convert ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 
 const v = await openViewer({ shotsDir, query: "profile=1" });
 try {
+  console.log(`renderer: ${await v.evaluate("(() => { const gl = document.createElement('canvas').getContext('webgl2'); const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()")}`);
   const tSend = Date.now();
   v.sendScene(JSON.parse(snapshot));
   const ok = await v.waitForFeatures(features.length, 180000);
   const tShown = Date.now();
   console.log(`page shows all features: ${ok} after ${((tShown - tSend) / 1000).toFixed(2)} s`);
   console.log(`page apply: ${await v.hud("perf")}`);
-  await sleep(1500);
+  // The first frames build every tile (and the arrows); wait them out so the
+  // frame numbers below are steady state.
+  await sleep(6000);
   for (const [label, key] of [["overview (F)", "f"], ["top-down (B)", "b"]]) {
     await v.key(key);
-    await sleep(2500);
-    const stats = await v.evaluate("window.__ll2test.stats ? window.__ll2test.stats() : null");
+    await sleep(3000);
+    const stats = await v.evaluate("window.__ll2test.stats ? { ...window.__ll2test.stats(), lanelets: window.__ll2test.lanelets ? window.__ll2test.lanelets() : null } : null");
     console.log(`${label}: ${JSON.stringify(stats)} | ${await v.hud("render")}`);
     await v.shot(`perf_${key}.png`);
   }
+  // Street level: from the top-down view, wheel in on the middle of the
+  // screen to ~60 m, then tilt to an oblique view (the editing situation).
+  await v.wheel(640, 400, -300, 12);
+  await v.drag("right", 640, 400, 0, -250);
+  await sleep(3000);
+  const cam = await v.camera();
+  const stats = await v.evaluate("window.__ll2test.stats()");
+  console.log(`street level (${cam.pos[2].toFixed(0)} m up, pitch ${(cam.pitch * 180 / Math.PI).toFixed(0)}°): ` +
+    `${stats.drawCalls} draws | ${await v.hud("render")}`);
+  await v.shot("perf_street.png");
+  await v.key("l");
+  await sleep(2500);
+  console.log(`street level, lanelets hidden: ${(await v.evaluate("window.__ll2test.stats()")).drawCalls} draws | ${await v.hud("render")}`);
+  await v.key("l");
+  const buildLog = (await v.evaluate("window.__perfLog ? window.__perfLog.join('\\n') : ''"));
+  if (buildLog) console.log(buildLog);
   console.log(`page errors: ${v.errors.length ? v.errors.join(" | ") : "none"}`);
 } finally {
   await v.close();

@@ -8,6 +8,23 @@ data class NodeSnapshot(
     val eleTag: String?,
 )
 
+/**
+ * A lanelet relation: bound ways with their nodes already in driving order
+ * (lanelet2 alignment applied), plus the tags the viewer shows.
+ */
+data class LaneletSnapshot(
+    val uniqueId: Long,
+    val deleted: Boolean,
+    val leftWayId: Long?,
+    val rightWayId: Long?,
+    val leftReversed: Boolean,
+    val rightReversed: Boolean,
+    val left: List<NodeSnapshot>,
+    val right: List<NodeSnapshot>,
+    val subtype: String?,
+    val oneWay: String?,
+)
+
 data class WaySnapshot(
     val uniqueId: Long,
     val deleted: Boolean,
@@ -18,8 +35,31 @@ data class WaySnapshot(
 )
 
 /**
+ * One lanelet relation for the viewer: its bound ways by feature id, whether
+ * each is reversed to run in driving direction (lanelet2 `geometry::align`),
+ * and the direction arrow at 35 % of the centerline:
+ * [arrow] = x, y, z, dx, dy, dz (unit), width (m), or null when degenerate.
+ */
+class LaneletRefs(
+    val left: String,
+    val right: String,
+    val leftReversed: Boolean,
+    val rightReversed: Boolean,
+    val arrow: DoubleArray?,
+    val twoWay: Boolean,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is LaneletRefs && left == other.left && right == other.right &&
+            leftReversed == other.leftReversed && rightReversed == other.rightReversed &&
+            twoWay == other.twoWay && (arrow?.contentEquals(other.arrow) ?: (other.arrow == null))
+
+    override fun hashCode(): Int = 31 * left.hashCode() + right.hashCode()
+}
+
+/**
  * One renderable object for the viewer. Wire format (protocol v2):
- * `{"id","kind","tags","pts":[x,y,z,...],"nodes":[uniqueId,...],"center"}`.
+ * `{"id","kind","tags","pts":[x,y,z,...],"nodes":[uniqueId,...],"center"}`,
+ * plus for `kind: "lanelet"` the fields of [LaneletRefs].
  */
 class ViewerFeature(
     val id: String,
@@ -30,15 +70,17 @@ class ViewerFeature(
     /** JOSM unique id of the node behind each vertex; empty for overlays. */
     val nodeIds: LongArray = LongArray(0),
     val center: List<Double>? = null,
+    val lanelet: LaneletRefs? = null,
 ) {
     val vertexCount: Int get() = pts.size / 3
 
     fun copy(tags: Map<String, String> = this.tags, center: List<Double>? = this.center) =
-        ViewerFeature(id, kind, tags, pts, nodeIds, center)
+        ViewerFeature(id, kind, tags, pts, nodeIds, center, lanelet)
 
     override fun equals(other: Any?): Boolean =
         other is ViewerFeature && id == other.id && kind == other.kind && tags == other.tags &&
-            pts.contentEquals(other.pts) && nodeIds.contentEquals(other.nodeIds) && center == other.center
+            pts.contentEquals(other.pts) && nodeIds.contentEquals(other.nodeIds) && center == other.center &&
+            lanelet == other.lanelet
 
     override fun hashCode(): Int = 31 * id.hashCode() + pts.contentHashCode()
 }
@@ -54,10 +96,12 @@ class FeatureSignature(
     val type: String?,
     val subtype: String?,
     val participantBicycle: String?,
+    val lanelet: LaneletRefs? = null,
 ) {
     override fun equals(other: Any?): Boolean =
         other is FeatureSignature && nodeIds.contentEquals(other.nodeIds) && pts.contentEquals(other.pts) &&
-            type == other.type && subtype == other.subtype && participantBicycle == other.participantBicycle
+            type == other.type && subtype == other.subtype && participantBicycle == other.participantBicycle &&
+            lanelet == other.lanelet
 
     override fun hashCode(): Int = 31 * nodeIds.contentHashCode() + pts.contentHashCode()
 }

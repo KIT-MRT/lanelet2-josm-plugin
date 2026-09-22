@@ -5,7 +5,8 @@
 // pushes a `snapshot` on connect, then `patch` messages as JOSM data changes.
 //
 //   Feature  { id, kind, tags, pos: Float64Array(x,y,z per vertex),
-//              nodes: number[] (node id per vertex), center, bs, tile }
+//              nodes: number[] (node id per vertex), center, bs, tile,
+//              lanelet: { left, right, lrev, rrev, two, arrow } for kind "lanelet" }
 //   Tile     { key, features: Set<Feature>, bs }  spatial bucket, TILE_M square
 //   NodeRec  { id, x, y, z, refs: [{ f, i }] }    only while the index is on
 //
@@ -17,6 +18,32 @@ export const TILE_M = 256;
 export const VIEWPORT_ID = "viewport";
 const FRAME_ELE_MIN = -200;
 const FRAME_ELE_MAX = 5000;
+
+// Rendering batches RENDER_CHUNK x RENDER_CHUNK store tiles (~1 km) into one
+// draw call: a whole city in view costs a few hundred draws, while picking
+// keeps the finer tiles and a one-edit rebuild stays a few milliseconds.
+export const RENDER_CHUNK = 4;
+
+/** Render chunk key ("cx,cy") of a store tile key ("tx,ty"). */
+export function chunkKeyOf(tileKey) {
+  const i = tileKey.indexOf(",");
+  const tx = Number(tileKey.slice(0, i));
+  const ty = Number(tileKey.slice(i + 1));
+  return `${Math.floor(tx / RENDER_CHUNK)},${Math.floor(ty / RENDER_CHUNK)}`;
+}
+
+/** Store tiles (existing ones) of a render chunk. */
+export function* tilesOfChunk(chunkKey) {
+  const i = chunkKey.indexOf(",");
+  const cx = Number(chunkKey.slice(0, i));
+  const cy = Number(chunkKey.slice(i + 1));
+  for (let dx = 0; dx < RENDER_CHUNK; dx++) {
+    for (let dy = 0; dy < RENDER_CHUNK; dy++) {
+      const t = store.tiles.get(`${cx * RENDER_CHUNK + dx},${cy * RENDER_CHUNK + dy}`);
+      if (t) yield t;
+    }
+  }
+}
 
 /** "node/123" | 123 -> 123. JOSM unique ids of new nodes are negative. */
 export function nodeKey(n) {
@@ -52,6 +79,10 @@ function toFeature(raw) {
     nodes: (raw.nodes || []).map(nodeKey),
     center: raw.center || null,
     color: raw.color || null,
+    lanelet: raw.kind === "lanelet" ? {
+      left: raw.left, right: raw.right, lrev: !!raw.lrev, rrev: !!raw.rrev, two: !!raw.two,
+      arrow: Array.isArray(raw.arrow) ? raw.arrow : null,
+    } : null,
     bs: null,
     tile: null,
   };

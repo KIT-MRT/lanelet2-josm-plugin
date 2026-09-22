@@ -22,6 +22,7 @@ import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.NavigatableComponent
 import org.openstreetmap.josm.gui.layer.MainLayerManager.ActiveLayerChangeListener
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
+import org.openstreetmap.josm.plugins.lanelet2.infra.Lanelet
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.tools.Logging
 import javax.swing.SwingUtilities
@@ -254,15 +255,22 @@ object Viewer3dHook {
         val viewCenter = mapViewCenter()
         if (engine.forceSnapshot || engine.sent.isEmpty() || engine.anchor == null) {
             if (engine.anchor == null) engine.anchor = anchorOf(ds)
-            engine.computeFull(candidateWays(ds, viewCenter), viewCenter)?.let { socket?.enqueue(it) }
+            val ways = candidateWayPrimitives(ds, viewCenter)
+            engine.computeFull(ways.map { it.toSnapshot() }, viewCenter, laneletsOf(ways))
+                ?.let { socket?.enqueue(it) }
             return
         }
         if (engine.dirtyAll) {
-            engine.seedRescan(candidateWays(ds, viewCenter), viewCenter)?.let { socket?.enqueue(it) }
+            val ways = candidateWayPrimitives(ds, viewCenter)
+            engine.seedRescan(ways.map { it.toSnapshot() }, viewCenter, laneletsOf(ways))?.let { socket?.enqueue(it) }
         }
         // Only the dirty ways are read: one edit no longer copies the dataset
         // (~150 ms on the EDT for Karlsruhe's 144k ways).
-        val result = engine.computeIncremental({ id -> ds.wayById(id) }, viewCenter)
+        val result = engine.computeIncremental(
+            { id -> ds.wayById(id) },
+            viewCenter,
+            { id -> (ds.getPrimitiveById(id, OsmPrimitiveType.RELATION) as? Relation)?.toLaneletSnapshot() },
+        )
         result.patch?.let { socket?.enqueue(it) }
         if (result.morePending) scheduleEdit()
     }
@@ -272,12 +280,25 @@ object Viewer3dHook {
      * finds in the cull square (the engine still applies the exact test);
      * without, every way.
      */
-    private fun candidateWays(ds: DataSet, viewCenter: Pair<Double, Double>?): List<WaySnapshot> {
+    private fun candidateWayPrimitives(ds: DataSet, viewCenter: Pair<Double, Double>?): Collection<Way> {
         val a = engine.anchor
-        if (!engine.cullEnabled || a == null) return ds.waysSnapshot()
+        if (!engine.cullEnabled || a == null) return ds.ways
         val bounds = Viewer3dFeatures.cullBoundsEnu(viewCenter, a, engine.cullRangeM) ?: return emptyList()
         val box = Viewer3dFeatures.latLonBoxOf(bounds, a)
-        return ds.searchWays(BBox(box[0], box[1], box[2], box[3])).map { it.toSnapshot() }
+        return ds.searchWays(BBox(box[0], box[1], box[2], box[3]))
+    }
+
+    /** Lanelets bounded by any of [ways] (all lanelets when [ways] is the whole dataset). */
+    private fun laneletsOf(ways: Collection<Way>): List<LaneletSnapshot> {
+        val out = LinkedHashMap<Long, LaneletSnapshot>()
+        for (w in ways) {
+            for (r in w.referrers) {
+                if (r is Relation && r.isLanelet() && r.uniqueId !in out) {
+                    r.toLaneletSnapshot()?.let { out[r.uniqueId] = it }
+                }
+            }
+        }
+        return out.values.toList()
     }
 
     /** Same anchor as [Viewer3dFeatures.computeAnchor] over all ways, without snapshotting them. */
@@ -304,7 +325,9 @@ object Viewer3dHook {
         if (socket?.connected != true) return
         if (engine.cullEnabled) {
             val ds = attachedDs ?: return
-            engine.syncCullVisibility(candidateWays(ds, mapViewCenter()), mapViewCenter())?.let { socket?.enqueue(it) }
+            val ways = candidateWayPrimitives(ds, mapViewCenter())
+            engine.syncCullVisibility(ways.map { it.toSnapshot() }, mapViewCenter(), laneletsOf(ways))
+                ?.let { socket?.enqueue(it) }
         }
         engine.viewportPatch(mapViewBounds(), mapViewCenter(), engine.followView)?.let {
             socket?.enqueue(it)
@@ -392,7 +415,10 @@ object Viewer3dHook {
             scheduleEdit()
         }
 
-        override fun relationMembersChanged(event: RelationMembersChangedEvent) = Unit
+        override fun relationMembersChanged(event: RelationMembersChangedEvent) {
+            markEventDirty(event)
+            scheduleEdit()
+        }
 
         override fun otherDatasetChange(event: AbstractDatasetChangedEvent) {
             engine.markAllDirty()
@@ -416,14 +442,16 @@ object Viewer3dHook {
         private fun markEventDirty(event: AbstractDatasetChangedEvent) {
             try {
                 val prims = event.primitives ?: return
+                // A node moves its ways, a way reshapes its lanelets.
+                fun markWay(w: Way) {
+                    engine.markWayDirty(w.uniqueId)
+                    for (r in w.referrers) if (r is Relation && r.isLanelet()) engine.markLaneletDirty(r.uniqueId)
+                }
                 for (p in prims) {
                     when (p) {
-                        is Way -> engine.markWayDirty(p.uniqueId)
-                        is Node -> {
-                            for (r in p.referrers) {
-                                if (r is Way) engine.markWayDirty(r.uniqueId)
-                            }
-                        }
+                        is Way -> markWay(p)
+                        is Node -> for (r in p.referrers) if (r is Way) markWay(r)
+                        is Relation -> if (p.isLanelet() || p.isDeleted) engine.markLaneletDirty(p.uniqueId)
                     }
                 }
             } catch (_: Exception) {
@@ -458,6 +486,35 @@ internal fun selectionMessage(selected: Collection<OsmPrimitive>): OutboundMessa
         nodeIds = nodes.take(cap),
         wayIds = ways.take((cap - minOf(nodes.size, cap)).coerceAtLeast(0)),
         truncated = truncated,
+    )
+}
+
+internal fun Relation.isLanelet(): Boolean = get("type") == "lanelet"
+
+/**
+ * Bounds in driving direction via [Lanelet] (the port of lanelet2's
+ * `geometry::align`, signed distance of each bound's middle to the other).
+ */
+internal fun Relation.toLaneletSnapshot(): LaneletSnapshot? {
+    if (!isLanelet() && !isDeleted) return null
+    val l = try {
+        Lanelet(this)
+    } catch (_: Exception) {
+        return null
+    }
+    val left = l.leftBound()
+    val right = l.rightBound()
+    return LaneletSnapshot(
+        uniqueId = uniqueId,
+        deleted = isDeleted || !isLanelet(),
+        leftWayId = left?.way?.uniqueId,
+        rightWayId = right?.way?.uniqueId,
+        leftReversed = left?.isReversed ?: false,
+        rightReversed = right?.isReversed ?: false,
+        left = left?.getNodes()?.map { it.toSnapshot() }.orEmpty(),
+        right = right?.getNodes()?.map { it.toSnapshot() }.orEmpty(),
+        subtype = get("subtype"),
+        oneWay = get("one_way"),
     )
 }
 

@@ -41,8 +41,15 @@ class Viewer3dPerfTest {
         val center: Pair<Double, Double>? = null
         repeat(2) { round ->
             val ways = timed("[$round] snapshot every way (ds.ways.map)") { ds.ways.map { it.toSnapshot() } }
+            val lanelets = timed("[$round] snapshot every lanelet (align bounds)") {
+                ds.relations.filter { it.isLanelet() }.mapNotNull { it.toLaneletSnapshot() }
+            }
             engine.resetForLayerChange()
-            val snapshot = timed("[$round] computeFull") { engine.computeFull(ways, center)!! }
+            timed("[$round] computeFull, ways only") { engine.computeFull(ways, center)!! }
+            engine.resetForLayerChange()
+            val snapshot = timed("[$round] computeFull with ${lanelets.size} lanelets") {
+                engine.computeFull(ways, center, lanelets)!!
+            }
             val json = timed("[$round] encode snapshot JSON") { Viewer3dJson.encode(snapshot) }
             println("[viewer3d-perf] snapshot JSON ${"%.1f".format(json.length / 1e6)} MB")
         }

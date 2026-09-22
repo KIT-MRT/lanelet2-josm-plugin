@@ -2,7 +2,7 @@
 //
 // The modules under js/ do the work:
 //   store.js      streamed map as plain data (features, tiles, node index)
-//   render/*      batched lines, icons, overlays drawn from the store
+//   render/*      batched lines, lanelet surfaces + arrows, icons, overlays
 //   camera.js     heading/pitch camera, orbit, walk, framing
 //   picking.js    screen-space picking over the store
 //   nav.js        mouse navigation;  keys.js  keyboard, FPS look
@@ -18,6 +18,7 @@ import { camera, view } from "./js/camera.js";
 import { store, nodeToken } from "./js/store.js";
 import { lineLayer } from "./js/render/lines.js";
 import { iconLayer } from "./js/render/icons.js";
+import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
 import { updateHighlight } from "./js/render/highlight.js";
 import { selection } from "./js/selection.js";
@@ -68,6 +69,7 @@ function tick() {
   applyHeldCamera(dt);
   maybeSyncJosmView();
   lineLayer.update();
+  laneletLayer.update();
   updateHighlight();
   iconLayer.update(camera);
   updateScreenSizedMarkers();
@@ -123,6 +125,13 @@ if (TEST_HOOKS) {
       const el = document.getElementById("toast");
       return el && el.classList.contains("show") ? { text: el.textContent, kind: el.className } : null;
     },
+    lanelets: () => ({
+      count: laneletLayer.lanelets.size,
+      surfaceTiles: laneletLayer.chunks.size,
+      oneWayArrows: laneletLayer.arrowMeshes[0] ? laneletLayer.arrowMeshes[0].count : 0,
+      twoWayArrows: laneletLayer.arrowMeshes[1] ? laneletLayer.arrowMeshes[1].count : 0,
+      visible: laneletLayer.visible,
+    }),
     stats: () => ({
       features: store.featureCount(),
       tiles: store.tiles.size,
