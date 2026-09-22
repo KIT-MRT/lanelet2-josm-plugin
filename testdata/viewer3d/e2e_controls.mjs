@@ -150,11 +150,14 @@ try {
     opened[0]);
   t.check("the menu closes after a choice", await v.evaluate("document.getElementById('imageryMenu').hidden"));
 
-  // A clicked toolbar button must not keep focus: Space would click it again.
+  // A clicked toolbar button must not keep focus, or Enter clicks it again.
+  // (Space is safe either way: the viewer prevents its default as a move key.)
   await clickEl("#lanesBtn");
   const lanesAfterClick = (await v.evaluate("window.__ll2test.lanelets()")).visible;
-  await v.hold(" ", "Space", 150);
-  t.check("Space after clicking a button does not click it again",
+  await v.cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", windowsVirtualKeyCode: 13 });
+  await v.cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await sleep(100);
+  t.check("Enter after clicking a button does not click it again",
     (await v.evaluate("window.__ll2test.lanelets()")).visible === lanesAfterClick);
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));

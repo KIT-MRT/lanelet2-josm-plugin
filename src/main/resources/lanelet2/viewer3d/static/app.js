@@ -39,8 +39,8 @@ installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
 
-// A clicked button must not keep keyboard focus: Space (up) or Enter would
-// click it again instead of reaching the map.
+// A clicked button must not keep keyboard focus, or Enter clicks it again
+// instead of reaching the map. (Space is prevented as a move key anyway.)
 document.addEventListener("click", (e) => {
   const b = e.target && e.target.closest ? e.target.closest("button") : null;
   if (b) b.blur();
