@@ -125,17 +125,80 @@ object HeightTools {
         }
     }
 
-    /** Heights for [newNodes] from the nearest other node that has one. */
-    fun planNewNodeHeights(ds: DataSet, newNodes: Collection<Node>): Plan {
-        val exclude = newNodes.toHashSet()
+    /**
+     * Heights for [newNodes] (created without `ele`):
+     * - a node with a known height along its ways in two directions (inserted
+     *   into a way, the joint of a new way and the way it continues, or inside
+     *   a new way drawn between existing nodes) is interpolated by distance
+     *   between the two nearest of them;
+     * - a free end of a way, or an orphan, takes the height of the nearest node.
+     * The other new nodes never count as known heights, so a new way between
+     * two existing nodes gets one straight profile between them.
+     */
+    fun planNewNodeHeights(ds: DataSet, newNodes: Collection<Node>): Plan =
+        planHeights(ds, newNodes.filter { !it.hasKey(ELE_KEY) }, newNodes.toHashSet())
+
+    /**
+     * The same rule for [nodes] whether or not they have a height yet: none of
+     * [unknown] counts as a known height (re-planning heights this plugin
+     * guessed earlier must not anchor on other guesses). Only nodes whose
+     * height changes are returned.
+     */
+    fun planHeights(ds: DataSet, nodes: Collection<Node>, unknown: Set<Node>): Plan {
         val changes = ArrayList<Pair<Node, Double>>()
-        for (n in newNodes) {
-            if (n.isDeleted || n.dataSet !== ds || n.hasKey(ELE_KEY)) continue
+        for (n in nodes) {
+            if (n.isDeleted || n.dataSet !== ds) continue
             val c = n.coor ?: continue
-            val (_, z) = nearestWithEle(ds, c, exclude) ?: continue
-            changes.add(n to z)
+            val z = heightAlongWays(n, unknown) ?: nearestWithEle(ds, c, unknown)?.second ?: continue
+            val cur = eleOf(n)
+            if (cur == null || abs(cur - z) > EPS_M) changes.add(n to z)
         }
         return Plan(changes)
+    }
+
+    /**
+     * Interpolated height of [n] between the two nearest known heights found
+     * walking from it toward the ends of its ways, or null when fewer than two
+     * directions lead to one (an end node or an orphan).
+     */
+    fun heightAlongWays(n: Node, unknown: Set<Node>): Double? {
+        val found = knownHeightsAlongWays(n, unknown).sortedBy { it.first }
+        if (found.size < 2) return null
+        val (d1, z1) = found[0]
+        val (d2, z2) = found[1]
+        return if (d1 + d2 < 1e-9) (z1 + z2) / 2 else z1 + (z2 - z1) * d1 / (d1 + d2)
+    }
+
+    /** (distance along the way, height) of the first known height in each direction. */
+    private fun knownHeightsAlongWays(n: Node, unknown: Set<Node>): List<Pair<Double, Double>> {
+        val start = n.coor ?: return emptyList()
+        val out = ArrayList<Pair<Double, Double>>()
+        for (w in n.referrers) {
+            if (w !is Way || w.isDeleted) continue
+            val ns = w.nodes
+            for (i in ns.indices) {
+                if (ns[i] !== n) continue
+                for (step in intArrayOf(-1, 1)) {
+                    var j = i + step
+                    var d = 0.0
+                    var prev: ILatLon = start
+                    while (j in ns.indices) {
+                        val m = ns[j]
+                        if (m === n) break // a closed way leading back to the node
+                        val c = m.coor ?: break
+                        d += prev.greatCircleDistance(c)
+                        prev = c
+                        val z = if (m in unknown) null else eleOf(m)
+                        if (z != null) {
+                            out.add(d to z)
+                            break
+                        }
+                        j += step
+                    }
+                }
+            }
+        }
+        return out
     }
 
     data class Jump(val way: Way, val a: Node, val b: Node, val dz: Double)

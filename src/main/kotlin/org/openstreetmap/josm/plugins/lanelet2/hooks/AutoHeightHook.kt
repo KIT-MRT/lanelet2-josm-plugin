@@ -5,6 +5,7 @@ import org.openstreetmap.josm.command.SequenceCommand
 import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
 import org.openstreetmap.josm.data.osm.OsmPrimitive
+import org.openstreetmap.josm.data.osm.Way
 import org.openstreetmap.josm.data.osm.event.AbstractDatasetChangedEvent
 import org.openstreetmap.josm.data.osm.event.DataChangedEvent
 import org.openstreetmap.josm.data.osm.event.DataSetListener
@@ -27,24 +28,35 @@ import javax.swing.JOptionPane
 import javax.swing.Timer
 
 /**
- * New nodes take the height (`ele`) of the nearest existing node that has one,
- * so a way drawn in JOSM does not start at 0 m in an absolute-height map. On by
- * default (`autoheight.enabled`).
+ * New nodes get a height (`ele`) so a way drawn in JOSM does not drop to 0 m in
+ * an absolute-height map. On by default (`autoheight.enabled`). The rule is
+ * [HeightTools.planNewNodeHeights]: a node inserted into a way, or joining
+ * ways, is interpolated between the known heights on both sides; a free end or
+ * an orphan takes the nearest node's height.
  *
- * Same shape as [AutotagHook]: nodes are only collected in `primitivesAdded`
- * and tagged after a short debounce through one SequenceCommand (its own undo
+ * Drawing a way click by click gives each node its height while it is still
+ * the free end. So the heights this hook wrote are remembered, and when a way
+ * holding such nodes changes shape (the new way is finished on an existing
+ * node, say), they are planned again, treating each other as unknown. A
+ * height someone changed since is no longer ours and is left alone.
+ *
+ * Same shape as [AutotagHook]: nodes are only collected in dataset events and
+ * tagged after a short debounce through one SequenceCommand (its own undo
  * step), so the hook never mutates inside a dataset event. A resulting height
  * jump above `height.jump_warn_m` between neighbours raises a notification.
  */
 object AutoHeightHook {
     const val DEBOUNCE_MS = 300
     const val SEQUENCE_TITLE = "Set heights of new nodes"
+    const val REFRESH_TITLE = "Update heights of new nodes"
 
     private var activeListener: ActiveLayerChangeListener? = null
     private val dsListener = Listener()
     private var attachedDs: DataSet? = null
     private var timer: Timer? = null
     private val pending = LinkedHashSet<Node>()
+    private val refresh = LinkedHashSet<Node>()
+    private val assigned = HashMap<Node, String>() // node -> the ele this hook wrote
 
     fun isEnabled(): Boolean = LaneletSettings.isAutoHeightEnabled()
 
@@ -72,6 +84,8 @@ object AutoHeightHook {
         }
         attachedDs = null
         pending.clear()
+        refresh.clear()
+        assigned.clear()
         if (ds == null) return
         try {
             ds.addDataSetListener(dsListener)
@@ -91,7 +105,20 @@ object AutoHeightHook {
         for (p in primitives) {
             if (p is Node && p.isNew && !p.hasKey(HeightTools.ELE_KEY)) pending.add(p)
         }
-        if (pending.isEmpty()) return
+        if (pending.isNotEmpty()) restartTimer()
+    }
+
+    /** A way changed shape: its nodes with a height guessed by this hook get planned again. */
+    internal fun onWayChanged(way: Way) {
+        if (!isEnabled() || assigned.isEmpty()) return
+        for (n in way.nodes) if (isOurs(n)) refresh.add(n)
+        if (refresh.isNotEmpty()) restartTimer()
+    }
+
+    private fun isOurs(n: Node): Boolean =
+        !n.isDeleted && n.dataSet === attachedDs && assigned[n]?.let { it == n.get(HeightTools.ELE_KEY) } == true
+
+    private fun restartTimer() {
         val t = timer ?: Timer(DEBOUNCE_MS) {
             try {
                 flush()
@@ -111,16 +138,25 @@ object AutoHeightHook {
      */
     fun flush(): String? {
         val ds = attachedDs ?: return null
-        val batch = pending.toList()
+        val batch = pending.filter { !it.hasKey(HeightTools.ELE_KEY) }
+        val again = refresh.filter { isOurs(it) && it !in pending }
         pending.clear()
-        if (batch.isEmpty() || !isEnabled()) return null
-        val plan = HeightTools.planNewNodeHeights(ds, batch)
+        refresh.clear()
+        assigned.keys.removeIf { !isOurs(it) }
+        if ((batch.isEmpty() && again.isEmpty()) || !isEnabled()) return null
+        // Neither new nodes nor earlier guesses count as known heights.
+        val unknown = HashSet<Node>(batch).apply { addAll(assigned.keys) }
+        val plan = HeightTools.planHeights(ds, batch + again, unknown)
         if (plan.changes.isEmpty()) return null
-        val commands = plan.changes.map { (n, z) -> ChangePropertyCommand(n, HeightTools.ELE_KEY, HeightTools.formatEle(z)) }
-        LaneletUtils.getUndo().add(SequenceCommand(SEQUENCE_TITLE, commands))
+        val commands = plan.changes.map { (n, z) ->
+            val v = HeightTools.formatEle(z)
+            assigned[n] = v
+            ChangePropertyCommand(n, HeightTools.ELE_KEY, v)
+        }
+        LaneletUtils.getUndo().add(SequenceCommand(if (batch.isEmpty()) REFRESH_TITLE else SEQUENCE_TITLE, commands))
         val threshold = LaneletSettings.getHeightJumpWarnM()
         val warning = HeightTools.describeJumps(HeightTools.heightJumps(plan.changes.map { it.first }, threshold), threshold)
-            ?.let { "New nodes took the height of the nearest node. $it." }
+            ?.let { "Heights given to new nodes: $it." }
         if (warning != null) notifyWarning(warning)
         return warning
     }
@@ -149,7 +185,12 @@ object AutoHeightHook {
         override fun primitivesRemoved(event: PrimitivesRemovedEvent) = Unit
         override fun tagsChanged(event: TagsChangedEvent) = Unit
         override fun nodeMoved(event: NodeMovedEvent) = Unit
-        override fun wayNodesChanged(event: WayNodesChangedEvent) = Unit
+        override fun wayNodesChanged(event: WayNodesChangedEvent) {
+            try {
+                onWayChanged(event.changedWay)
+            } catch (_: Exception) {
+            }
+        }
         override fun relationMembersChanged(event: RelationMembersChangedEvent) = Unit
         override fun otherDatasetChange(event: AbstractDatasetChangedEvent) = Unit
         override fun dataChanged(event: DataChangedEvent) = Unit

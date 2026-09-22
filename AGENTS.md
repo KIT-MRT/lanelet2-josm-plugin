@@ -219,11 +219,19 @@ Ported in `hooks/`. Quirks to keep:
 
 ### Auto-height (new, not a Jython port)
 
-- `hooks/AutoHeightHook`: a node created without `ele` (`isNew`) takes the
-  `ele` of the nearest node that has one (`HeightTools.nearestWithEle`,
-  spatial index, 5 m growing to 500 m). Same shape as autotag: collect in
-  `primitivesAdded`, flush after 300 ms as **one SequenceCommand of its own**
-  ("Set heights of new nodes"), so it is a separate undo step after the draw.
+- `hooks/AutoHeightHook`: a node created without `ele` (`isNew`) gets one.
+  With a known height along its ways in **two directions** (inserted into a
+  way, the joint of two ways, inside a new way between existing nodes) it is
+  interpolated by distance between the two nearest; a free end or an orphan
+  takes the nearest node's `ele` (`HeightTools.nearestWithEle`, spatial index,
+  5 m growing to 500 m). Same shape as autotag: collect in dataset events,
+  flush after 300 ms as **one SequenceCommand of its own** ("Set heights of new
+  nodes"), so it is a separate undo step after the draw.
+- **Drawing click by click** gives each node its height while it is the free
+  end, so the hook remembers the values it wrote; `wayNodesChanged` on a way
+  holding them re-plans them ("Update heights of new nodes"), with all its own
+  guesses treated as unknown. A value changed by anyone else is not ours and
+  is never touched again.
 - **On by default** (`autoheight.enabled`, read through
   `LaneletSettings.getBoolean`, so `"true"`/`"yes"` count, unlike the
   Jython-era `"1"`-only keys). Installed once per session and never torn down;

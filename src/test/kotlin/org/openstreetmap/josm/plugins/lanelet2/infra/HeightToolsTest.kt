@@ -119,6 +119,46 @@ class HeightToolsTest {
     }
 
     @Test
+    fun aNodeInsertedIntoAWayIsInterpolatedNotCopied() {
+        val a = node(0.0, "100")
+        val b = node(40.0, "110")
+        val w = way(a, b)
+        val n = node(10.0)
+        w.setNodes(listOf(a, n, b)) // JOSM's insert-into-way
+        val z = HeightTools.planNewNodeHeights(ds, listOf(n)).changes.single().second
+        assertEquals(102.5, z, 0.01) // not 100, the nearest node's height
+    }
+
+    @Test
+    fun aNewWayBetweenTwoNodesGetsOneStraightProfile() {
+        val e1 = node(0.0, "100")
+        val e2 = node(40.0, "110")
+        val news = listOf(node(10.0), node(20.0), node(30.0))
+        way(e1, *news.toTypedArray(), e2)
+        val z = HeightTools.planNewNodeHeights(ds, news).changes.toMap()
+        assertEquals(listOf(102.5, 105.0, 107.5), news.map { z[it]!! }.map { Math.round(it * 100) / 100.0 })
+    }
+
+    @Test
+    fun theJointOfTwoWaysIsInterpolatedAcrossBoth() {
+        val p = node(0.0, "100")
+        val n = node(10.0)
+        val q = node(40.0, "110")
+        way(p, n)
+        way(n, q)
+        assertEquals(102.5, HeightTools.planNewNodeHeights(ds, listOf(n)).changes.single().second, 0.01)
+    }
+
+    @Test
+    fun aFreeEndTakesTheNearestHeight() {
+        val a = node(0.0, "100")
+        val b = node(40.0, "110")
+        val n = node(45.0)
+        way(a, b, n) // extends the way at its end, joined to nothing else
+        assertEquals(110.0, HeightTools.planNewNodeHeights(ds, listOf(n)).changes.single().second, 0.0)
+    }
+
+    @Test
     fun jumpsAboveTheThresholdAreFound() {
         val a = node(0.0, "100")
         val b = node(5.0, "103.5")
