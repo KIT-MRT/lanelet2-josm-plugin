@@ -23,16 +23,16 @@ by capturing the mouse and disabling edit mode.
 - [x] **Server build handshake.** `/healthz` reports a build id; the plugin
       recycles a leftover server whose id differs from the jar. Then a generic
       `/js/` module route is safe.
-- [ ] **Split `app.js` into ES modules** (scene, camera/nav, picking, selection,
+- [x] **Split `app.js` into ES modules** (scene, camera/nav, picking, selection,
       edit, net, hud). Pure-logic modules get node unit tests.
 - [x] **Browser E2E harness in the repo** (`testdata/viewer3d/`), headless
       Chrome over CDP with a fake JOSM bridge. Manual, not part of Gradle.
-- [ ] **Batched rendering for huge maps.** One draw call per spatial chunk
+- [x] **Batched rendering for huge maps.** One draw call per spatial chunk
       instead of one `THREE.Line` per way (Karlsruhe: 144k ways = 144k draw
       calls). Features kept as plain data; live edits patch chunk buffers.
 - [ ] **Incremental JOSM streaming.** Snapshot only dirty ways instead of
       copying every way of the dataset on the EDT per 200 ms cycle.
-- [ ] **Incremental node index** in the browser (edit mode rebuilt it per message).
+- [x] **Incremental node index** in the browser (edit mode rebuilt it per message).
 - [ ] **Protocol v2**: flat coordinate arrays, command ids with an
       ack/reject reply, inbound parsing with JOSM's bundled jakarta.json.
 - [ ] Stream standalone nodes (points not in any way) so they can be edited.

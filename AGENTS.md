@@ -278,6 +278,12 @@ Browser camera and picking (`app.js`):
   (Z up, no roll, no target). Left-drag orbits the map point under the cursor
   and turns in place over sky; right-drag looks; middle/shift-drag pans; the
   wheel dollies toward the cursor.
+- **The browser keeps the map as plain data** (`js/store.js`: features with
+  `Float64Array` positions, 256 m tiles, a node index built on first use and
+  then updated per feature). Rendering (`js/render/`) and picking read the
+  store, never three.js objects. Lines are one indexed `LineSegments` per tile,
+  not one `THREE.Line` per way: Karlsruhe has 144k ways. A drag rewrites only
+  the moved vertices; a changed tile is rebuilt on the next frame.
 - **Picking tolerances are screen pixels** (`pickMapPoint`, `pickNode`).
   three's Line/Points raycast thresholds are world metres, which picked the
   wrong node up close. Lanes between two bounds have no geometry, so a miss
