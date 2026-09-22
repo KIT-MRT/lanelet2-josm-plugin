@@ -15,6 +15,9 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 // timing breakdown (parse / apply / index / pick-cloud) for every message and
 // shows live render stats, so large-map slowness can be attributed to a stage.
 const PROFILE = new URLSearchParams(location.search).get("profile") === "1";
+// ?test=1 exposes window.__ll2test for the headless E2E harness
+// (testdata/viewer3d/). Read-only views of camera, projection and selection.
+const TEST_HOOKS = new URLSearchParams(location.search).get("test") === "1";
 function plog() {
   if (PROFILE) console.log.apply(console, ["[viewer][perf]"].concat([].slice.call(arguments)));
 }
@@ -1315,13 +1318,26 @@ function sendCommand(ops) {
 
 // Click (not drag) selection of the nearest node vertex.
 let downX = 0, downY = 0;
+let downOnGizmo = false;
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
   downX = e.clientX; downY = e.clientY;
+  // TransformControls' own pointerdown ran first (registered earlier) and set
+  // `dragging` if the press hit a handle. Its pointerup clears that again
+  // before ours runs, so remember it here.
+  downOnGizmo = transform.dragging;
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
   if (!editMode || transform.dragging || e.button !== 0) return;
   if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return; // was a drag
+  if (downOnGizmo) {
+    // A click on a handle keeps the selection, rather than selecting whichever
+    // node lies near the arrow. Only a click squarely on another node's dot
+    // (which the arrow may cross) selects that node.
+    const nid = pickNode(e.clientX, e.clientY, GIZMO_CLICK_NODE_PX);
+    if (nid && nid !== selectedNode) selectNode(nid);
+    return;
+  }
   const nid = pickNode(e.clientX, e.clientY);
   if (nid) selectNode(nid);
   else deselect();
@@ -1338,6 +1354,7 @@ window.addEventListener("keydown", (e) => {
 // misses everything far away.
 const PICK_RADIUS_PX = 10;       // a line / node this close counts as under the cursor
 const PICK_TIE_PX = 1.5;         // candidates this close on screen: nearer one wins
+const GIZMO_CLICK_NODE_PX = 4;   // a click on a gizmo handle selects only a node dot this close
 const HEIGHT_PROBE_PX = 160;     // nearest line within this sets the local ground height
 const GROUND_PICK_MAX_M = 5000;  // ground hits further out count as sky
 const raycaster = new THREE.Raycaster();
@@ -1487,9 +1504,9 @@ function cursorRay(clientX, clientY) {
   return raycaster.ray;
 }
 
-// Node id nearest the cursor within PICK_RADIUS_PX (nearer to the camera on
+// Node id nearest the cursor within `radiusPx` (nearer to the camera on
 // near-ties), or null.
-function pickNode(clientX, clientY) {
+function pickNode(clientX, clientY, radiusPx = PICK_RADIUS_PX) {
   ensureNodeIndex();
   const pr = screenProjector();
   let best = null;
@@ -1503,7 +1520,7 @@ function pickNode(clientX, clientY) {
       pr.cx + (pr.f * _segA[3]) / d - clientX,
       pr.cy - (pr.f * _segA[4]) / d - clientY,
     );
-    if (px > PICK_RADIUS_PX) continue;
+    if (px > radiusPx) continue;
     if (best === null || px < bestPx - PICK_TIE_PX || (px <= bestPx + PICK_TIE_PX && d < bestDepth)) {
       best = nid;
       bestPx = px;
@@ -1734,6 +1751,22 @@ function tick() {
   }
 }
 tick();
+
+if (TEST_HOOKS) {
+  const _tp = new THREE.Vector3();
+  window.__ll2test = {
+    // Page pixel of a world point, as the renderer draws it; [x, y, ndcZ].
+    project(x, y, z) {
+      camera.updateMatrixWorld();
+      _tp.set(x, y, z).project(camera);
+      const r = renderer.domElement.getBoundingClientRect();
+      return [r.left + ((_tp.x + 1) / 2) * r.width, r.top + ((1 - _tp.y) / 2) * r.height, _tp.z];
+    },
+    camera: () => ({ pos: camera.position.toArray(), yaw: view.yaw, pitch: view.pitch, fov: camera.fov }),
+    pivot: () => ({ point: nav.lastPivot ? nav.lastPivot.toArray() : null, kind: nav.lastPivotKind }),
+    selected: () => selectedNode,
+  };
+}
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
