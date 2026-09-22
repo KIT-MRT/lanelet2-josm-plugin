@@ -154,6 +154,7 @@ if (TEST_HOOKS) {
       surfaceTiles: laneletLayer.chunks.size,
       oneWayArrows: laneletLayer.arrowMeshes[0] ? laneletLayer.arrowMeshes[0].count : 0,
       twoWayArrows: laneletLayer.arrowMeshes[1] ? laneletLayer.arrowMeshes[1].count : 0,
+      overrideArrows: Array.from(laneletLayer.lanelets.values()).filter((f) => f.lanelet.owx.length).length,
       visible: laneletLayer.visible,
     }),
     stats: () => ({

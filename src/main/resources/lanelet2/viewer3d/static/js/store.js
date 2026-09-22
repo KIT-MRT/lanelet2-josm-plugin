@@ -6,7 +6,7 @@
 //
 //   Feature  { id, kind, tags, pos: Float64Array(x,y,z per vertex),
 //              nodes: number[] (node id per vertex), center, bs, tile,
-//              lanelet: { left, right, lrev, rrev, two, arrow } for kind "lanelet" }
+//              lanelet: { left, right, lrev, rrev, two, owx, arrow } for kind "lanelet" }
 //   Tile     { key, features: Set<Feature>, bs }  spatial bucket, TILE_M square
 //   NodeRec  { id, x, y, z, refs: [{ f, i }] }    only while the index is on
 //
@@ -81,6 +81,7 @@ function toFeature(raw) {
     color: raw.color || null,
     lanelet: raw.kind === "lanelet" ? {
       left: raw.left, right: raw.right, lrev: !!raw.lrev, rrev: !!raw.rrev, two: !!raw.two,
+      owx: Array.isArray(raw.owx) ? raw.owx : [], // participants a one_way:<p> tag gives the other answer
       arrow: Array.isArray(raw.arrow) ? raw.arrow : null,
     } : null,
     bs: null,

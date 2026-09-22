@@ -23,6 +23,8 @@ data class LaneletSnapshot(
     val right: List<NodeSnapshot>,
     val subtype: String?,
     val oneWay: String?,
+    /** Every `one_way` / `one_way:<participant>` tag (tests may leave it empty). */
+    val oneWayTags: Map<String, String> = emptyMap(),
 )
 
 data class WaySnapshot(
@@ -47,11 +49,14 @@ class LaneletRefs(
     val rightReversed: Boolean,
     val arrow: DoubleArray?,
     val twoWay: Boolean,
+    /** Participants an explicit `one_way:<participant>` gives the other answer than [twoWay] (a car's). */
+    val otherWay: List<String> = emptyList(),
 ) {
     override fun equals(other: Any?): Boolean =
         other is LaneletRefs && left == other.left && right == other.right &&
             leftReversed == other.leftReversed && rightReversed == other.rightReversed &&
-            twoWay == other.twoWay && (arrow?.contentEquals(other.arrow) ?: (other.arrow == null))
+            twoWay == other.twoWay && otherWay == other.otherWay &&
+            (arrow?.contentEquals(other.arrow) ?: (other.arrow == null))
 
     override fun hashCode(): Int = 31 * left.hashCode() + right.hashCode()
 }

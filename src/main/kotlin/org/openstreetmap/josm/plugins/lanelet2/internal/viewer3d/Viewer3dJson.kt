@@ -120,6 +120,14 @@ object Viewer3dJson {
             sb.append(",\"lrev\":").append(l.leftReversed)
             sb.append(",\"rrev\":").append(l.rightReversed)
             sb.append(",\"two\":").append(l.twoWay)
+            if (l.otherWay.isNotEmpty()) {
+                sb.append(",\"owx\":[")
+                l.otherWay.forEachIndexed { i, p ->
+                    if (i > 0) sb.append(',')
+                    sb.append(jsonString(p))
+                }
+                sb.append(']')
+            }
             l.arrow?.let { a ->
                 sb.append(",\"arrow\":[")
                 for (i in a.indices) {

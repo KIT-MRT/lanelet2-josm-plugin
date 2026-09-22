@@ -108,12 +108,47 @@ object Viewer3dFeatures {
             lanelet = feat.lanelet,
         )
 
+    /** Whose direction rules the arrows show: lanelet2's car. */
+    const val ARROW_PARTICIPANT = "vehicle:car"
+    private const val ONE_WAY = "one_way"
+
+    /** lanelet2's `Attribute::asBool`: `lexical_cast<bool>` (1 / 0), then true / yes, false / no. */
+    fun parseLaneletBool(v: String?): Boolean? = when (v?.trim()) {
+        "1", "true", "yes" -> true
+        "0", "false", "no" -> false
+        else -> null
+    }
+
+    /** Two-way for vehicles from `one_way` alone (no overrides). */
+    fun isTwoWay(oneWay: String?): Boolean = isTwoWayFor(oneWay?.let { mapOf(ONE_WAY to it) } ?: emptyMap(), ARROW_PARTICIPANT)
+
     /**
-     * lanelet2 parses `one_way` as a bool (`lexical_cast<bool>`, then
-     * "true"/"yes"/"false"/"no"); a lanelet is two-way for vehicles only when
-     * it parses as false. Absent means one-way (GenericTrafficRules).
+     * lanelet2's `GenericTrafficRules::isOneWay`, negated, for [participant]
+     * (`isDrivingDir` of the inverted lanelet): `one_way` decides when it is a
+     * bool; else, with any `one_way*` key, the first key (sorted) that is a
+     * prefix of `one_way:<participant>` decides, unparsable or missing meaning
+     * one-way (`one_way:vehicle=no` covers `vehicle:car`); else only
+     * pedestrians may go both ways.
      */
-    fun isTwoWay(oneWay: String?): Boolean = oneWay?.trim() in setOf("no", "false", "0")
+    fun isTwoWayFor(tags: Map<String, String>, participant: String): Boolean {
+        parseLaneletBool(tags[ONE_WAY])?.let { return !it }
+        if (tags.keys.any { it.startsWith(ONE_WAY) }) {
+            val full = "$ONE_WAY:$participant"
+            val key = tags.keys.sorted().firstOrNull { full.startsWith(it) }
+            return !(key?.let { parseLaneletBool(tags[it]) } ?: true)
+        }
+        return participant == "pedestrian"
+    }
+
+    /**
+     * Participants whose own `one_way:<participant>` tag gives them the other
+     * answer than a car, e.g. `one_way:bicycle=no` on a one-way road.
+     */
+    fun otherWayParticipants(tags: Map<String, String>): List<String> {
+        val car = isTwoWayFor(tags, ARROW_PARTICIPANT)
+        return tags.keys.filter { it.startsWith("$ONE_WAY:") }.map { it.removePrefix("$ONE_WAY:") }.sorted()
+            .filter { isTwoWayFor(tags, it) != car }
+    }
 
     /** ENU points of a bound, unknown heights filled like [featureForWay] draws them. */
     private fun enuPoints(nodes: List<NodeSnapshot>, anchor: Anchor): List<DoubleArray> {
@@ -154,7 +189,8 @@ object Viewer3dFeatures {
         )
         val tags = linkedMapOf<String, String>()
         l.subtype?.let { tags["subtype"] = it }
-        l.oneWay?.let { tags["one_way"] = it }
+        val oneWayTags = l.oneWayTags.ifEmpty { l.oneWay?.let { mapOf(ONE_WAY to it) } ?: emptyMap() }
+        tags.putAll(oneWayTags.toSortedMap())
         return ViewerFeature(
             id = "relation/${l.uniqueId}",
             kind = "lanelet",
@@ -166,7 +202,8 @@ object Viewer3dFeatures {
                 leftReversed = l.leftReversed,
                 rightReversed = l.rightReversed,
                 arrow = arrow,
-                twoWay = isTwoWay(l.oneWay),
+                twoWay = isTwoWayFor(oneWayTags, ARROW_PARTICIPANT),
+                otherWay = otherWayParticipants(oneWayTags),
             ),
         )
     }

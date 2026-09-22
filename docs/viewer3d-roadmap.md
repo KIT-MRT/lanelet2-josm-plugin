@@ -198,6 +198,14 @@ Most impactful for editing heights, in my estimate:
   It could run on the worker under the dataset's read lock.
 - Draw-distance LOD: hide chunks far beyond the view (or draw them without
   surfaces / arrows) so a whole-city view at a shallow angle does not pay for
-  the horizon. Currently ~45 fps on an integrated GPU, fine but not free.
-- `one_way:<participant>` overrides (e.g. `one_way:bicycle=no`) could get a
-  distinct arrow style; lanelet2 treats them per participant.
+  the horizon. **Deferred: no measurable gain here.** Iris Xe via headless
+  ANGLE/GL, Karlsruhe: 44–47 fps (~20 ms) in every view (overview, top-down,
+  street level, a horizon view at -37°), and still ~20 ms with 22 draw calls
+  and lanelets hidden, so the frame time is fixed overhead of headless
+  presentation, not far geometry. Revisit with a measurement in a real
+  browser window.
+- [x] `one_way:<participant>` overrides: the arrow now follows lanelet2's
+  `isOneWay` for a car (`one_way` wins as a bool; else the override whose key
+  prefixes `one_way:vehicle:car`; else one-way), and turns violet when an
+  explicit override gives another participant the other answer (`owx`).
+  Karlsruhe has none (6,360 yes, 3,782 `0`, 2,200 no, 38 `1`).

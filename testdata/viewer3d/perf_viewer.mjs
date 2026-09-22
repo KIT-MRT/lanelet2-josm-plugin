@@ -201,6 +201,17 @@ try {
   await sleep(2500);
   console.log(`street level, lanelets hidden: ${(await v.evaluate("window.__ll2test.stats()")).drawCalls} draws | ${await v.hud("render")}`);
   await v.key("l");
+  // Horizon: tilt up to a shallow view, where far chunks cost the most.
+  await v.drag("right", 640, 400, 0, -120);
+  await sleep(3000);
+  const hc = await v.camera();
+  console.log(`horizon (pitch ${(hc.pitch * 180 / Math.PI).toFixed(0)}°): ` +
+    `${(await v.evaluate("window.__ll2test.stats()")).drawCalls} draws | ${await v.hud("render")}`);
+  await v.shot("perf_horizon.png");
+  await v.key("l");
+  await sleep(2500);
+  console.log(`horizon, lanelets hidden: ${(await v.evaluate("window.__ll2test.stats()")).drawCalls} draws | ${await v.hud("render")}`);
+  await v.key("l");
   const buildLog = (await v.evaluate("window.__perfLog ? window.__perfLog.join('\\n') : ''"));
   if (buildLog) console.log(buildLog);
   console.log(`page errors: ${v.errors.length ? v.errors.join(" | ") : "none"}`);

@@ -5,8 +5,10 @@
 // the lanelet2 `geometry::align` port). Surfaces are triangulated here from
 // those ways, batched per render chunk, and rebuilt when a bound changes (live
 // during a drag). Arrows sit where JOSM put them: 35 % along the lanelet2
-// centerline, double-headed when `one_way` parses as false. Two instanced
-// meshes draw every arrow of the map.
+// centerline, double-headed when a car may use the lanelet both ways (lanelet2's
+// traffic rules, `one_way` and its `one_way:<participant>` overrides), violet
+// when an override gives some participant the other answer (`owx`). Two
+// instanced meshes draw every arrow of the map.
 import * as THREE from "three";
 import { store, chunkKeyOf, tilesOfChunk } from "../store.js";
 import { mapRoot } from "../scene.js";
@@ -29,8 +31,9 @@ const SURFACE_COLORS = {
 const DEFAULT_SURFACE_COLOR = 0x607890;
 const ARROW_LIFT_M = 0.05;
 const ARROW_LEN_M = 2.4;          // nominal geometry length
-const ONE_WAY_COLOR = 0xf2f5fb;
-const TWO_WAY_COLOR = 0xffd23f;
+const ONE_WAY_COLOR = new THREE.Color(0xf2f5fb);
+const TWO_WAY_COLOR = new THREE.Color(0xffd23f);
+const OVERRIDE_COLOR = new THREE.Color(0xc792ea); // e.g. one-way, but one_way:bicycle=no
 
 // forceSinglePass: three.js draws transparent double-sided materials twice
 // (back faces, then front) unless told otherwise; these are flat, so one pass
@@ -69,9 +72,10 @@ function arrowGeometry(double) {
   return new THREE.ShapeGeometry(s);
 }
 
-function arrowMaterial(color) {
+/** Arrow colours come per instance (setColorAt), so the material is white. */
+function arrowMaterial() {
   return new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true,
+    color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true,
   });
 }
 
@@ -114,8 +118,8 @@ class LaneletLayer {
     this.arrowMeshes = [];      // [one-way, two-way] InstancedMesh
     this.oneGeom = arrowGeometry(false);
     this.twoGeom = arrowGeometry(true);
-    this.oneMat = arrowMaterial(ONE_WAY_COLOR);
-    this.twoMat = arrowMaterial(TWO_WAY_COLOR);
+    this.oneMat = arrowMaterial();
+    this.twoMat = arrowMaterial();
 
     store.on("upsert", (f, old) => {
       if (f.kind === "lanelet") {
@@ -250,9 +254,9 @@ class LaneletLayer {
     const one = [];
     const two = [];
     for (const f of this.lanelets.values()) {
-      if (f.lanelet.arrow) (f.lanelet.two ? two : one).push(f.lanelet.arrow);
+      if (f.lanelet.arrow) (f.lanelet.two ? two : one).push(f.lanelet);
     }
-    const build = (list, geom, mat) => {
+    const build = (list, geom, mat, color) => {
       const mesh = new THREE.InstancedMesh(geom, mat, Math.max(1, list.length));
       mesh.count = list.length;
       mesh.frustumCulled = false; // instances span the whole map; the geometry sphere does not
@@ -262,7 +266,8 @@ class LaneletLayer {
       const X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3();
       const up = new THREE.Vector3(0, 0, 1);
       const p = new THREE.Vector3();
-      list.forEach((a, i) => {
+      list.forEach((l, i) => {
+        const a = l.arrow;
         // Local +X along the lane (with its slope), +Z the surface normal.
         X.set(a[3], a[4], a[5]).normalize();
         Z.copy(up).addScaledVector(X, -up.dot(X)).normalize();
@@ -272,12 +277,17 @@ class LaneletLayer {
         p.set(a[0], a[1], a[2] + ARROW_LIFT_M);
         m.setPosition(p);
         mesh.setMatrixAt(i, m);
+        mesh.setColorAt(i, l.owx.length ? OVERRIDE_COLOR : color);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mapRoot.add(mesh);
       return mesh;
     };
-    this.arrowMeshes = [build(one, this.oneGeom, this.oneMat), build(two, this.twoGeom, this.twoMat)];
+    this.arrowMeshes = [
+      build(one, this.oneGeom, this.oneMat, ONE_WAY_COLOR),
+      build(two, this.twoGeom, this.twoMat, TWO_WAY_COLOR),
+    ];
   }
 }
 

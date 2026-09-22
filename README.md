@@ -125,7 +125,10 @@ culling.
   once with *Recenter JOSM*), so turning the view at street level pans JOSM
   and its cull box too.
 - **Lanelets (L)** show as surfaces with a direction arrow at 35 % of the
-  lanelet2 centerline, double-headed for `one_way=no`.
+  lanelet2 centerline, double-headed where a car may drive both ways
+  (lanelet2's rules, including `one_way:<participant>` overrides), violet
+  where such an override gives some participant the other direction rule
+  (e.g. `one_way:bicycle=no` on a one-way road).
 - **Street view:** the viewer's button and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
 

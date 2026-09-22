@@ -555,6 +555,7 @@ internal fun Relation.toLaneletSnapshot(): LaneletSnapshot? {
         right = right?.getNodes()?.map { it.toSnapshot() }.orEmpty(),
         subtype = get("subtype"),
         oneWay = get("one_way"),
+        oneWayTags = keys.filterKeys { it.startsWith("one_way") },
     )
 }
 

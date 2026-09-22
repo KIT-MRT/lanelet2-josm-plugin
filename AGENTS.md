@@ -333,7 +333,11 @@ Browser camera and picking (`app.js`):
   three.js draws transparent double-sided meshes twice.
 - **Lanelets stream as references, not geometry**: `kind: "lanelet"` with
   `left`/`right` way ids, `lrev`/`rrev` (lanelet2 `geometry::align` via
-  `Lanelet(relation)`), `two` (one_way parses false: `no`/`false`/`0`) and
+  `Lanelet(relation)`), `two` (a car may drive it both ways:
+  `Viewer3dFeatures.isTwoWayFor`, the port of lanelet2's
+  `GenericTrafficRules::isOneWay` with `one_way:<participant>` overrides,
+  bools as `lexical_cast` + yes/no/true/false), `owx` (participants an
+  explicit override gives the other answer; arrows turn violet) and
   `arrow` (x, y, z, dx, dy, dz, width at 35 % of the `Centerline` port, run on
   ENU metres). The browser triangulates surfaces from the way features, so a
   bound change needs its lanelets re-sent (the hook marks node → way →

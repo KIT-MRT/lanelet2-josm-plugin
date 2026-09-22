@@ -37,6 +37,18 @@ try {
   t.check("one single-headed and one double-headed arrow", l.oneWayArrows === 1 && l.twoWayArrows === 1, JSON.stringify(l));
   await v.shot("lanelets_bev.png");
 
+  // A one-way road that bicycles may use both ways: same arrow, violet.
+  const withOverride = { ...features[3], tags: { subtype: "road", "one_way:bicycle": "no" }, owx: ["bicycle"] };
+  v.sendScene({ type: "patch", ops: [{ op: "upsert", feature: withOverride }] });
+  await sleep(300);
+  l = await lanes();
+  t.check("a one_way:<participant> override marks the arrow, keeping the car's shape",
+    l.overrideArrows === 1 && l.oneWayArrows === 1 && l.twoWayArrows === 1, JSON.stringify(l));
+  await v.shot("lanelets_override.png");
+  v.sendScene({ type: "patch", ops: [{ op: "upsert", feature: features[3] }] });
+  await sleep(300);
+  t.check("and unmarks it when the override goes", (await lanes()).overrideArrows === 0);
+
   // Orbit from inside a lane, far from both bounds on screen (zoomed in so
   // the lane is wide): the pivot is the surface, not the ground-plane guess.
   let p = await v.project([60, 0, Z]);
