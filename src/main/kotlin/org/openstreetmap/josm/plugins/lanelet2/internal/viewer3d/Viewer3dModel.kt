@@ -81,23 +81,53 @@ sealed class OutboundMessage {
     ) : OutboundMessage()
 
     data class Patch(val ops: List<PatchOp>) : OutboundMessage()
+
+    /**
+     * JOSM's current selection, as the viewer can show it: node unique ids and
+     * way feature ids ("way/<id>"; a selected relation contributes its member
+     * ways). [truncated] when it was capped at [Viewer3dConstants.MAX_SELECTION_SYNC].
+     */
+    data class Selection(
+        val nodeIds: List<Long>,
+        val wayIds: List<String>,
+        val truncated: Boolean = false,
+    ) : OutboundMessage()
+
+    /** JOSM's answer to one browser command, matched by the command's [id]. */
+    data class CommandResult(val id: String, val ok: Boolean, val message: String) : OutboundMessage()
 }
 
 /** Parsed browser → JOSM command (before JOSM Command construction). */
 sealed class InboundOp {
+    /**
+     * Move a node. Only the components present change: without x/y the node
+     * keeps its lat/lon exactly, without z its `ele` tag is left alone (so an
+     * XY drag never adds `ele` to a node that had none).
+     */
     data class MoveNode(
         val id: String,
-        val x: Double,
-        val y: Double,
+        val x: Double?,
+        val y: Double?,
         val z: Double?,
     ) : InboundOp()
 
     data class SetTag(val id: String, val key: String, val value: String) : InboundOp()
 
     data class SetView(val x: Double, val y: Double, val force: Boolean) : InboundOp()
+
+    /** Replace JOSM's selection ("node/1", "way/2", ...). */
+    data class Select(val ids: List<String>) : InboundOp()
+
+    /** Select [ids] and run JOSM's own Delete action on them (with its warnings). */
+    data class DeleteSelection(val ids: List<String>) : InboundOp()
+
+    data object Undo : InboundOp()
+
+    data object Redo : InboundOp()
 }
 
-data class InboundCommand(val ops: List<InboundOp>)
+/** [id] is set by the viewer when it wants a [OutboundMessage.CommandResult]. */
+data class InboundCommand(val ops: List<InboundOp>, val id: String? = null)
 
 object Viewer3dConstants {
     const val VIEWPORT_ID = "viewport"
@@ -106,4 +136,6 @@ object Viewer3dConstants {
     const val DEBOUNCE_MS = 200
     const val VIEWPORT_DEBOUNCE_MS = 1000
     const val SEQUENCE_TITLE = "3D viewer edit"
+    const val MAX_SELECTION_SYNC = 20000
+    const val SELECTION_DEBOUNCE_MS = 120
 }

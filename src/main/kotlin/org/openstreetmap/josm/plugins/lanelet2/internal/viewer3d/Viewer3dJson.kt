@@ -1,5 +1,12 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
+import jakarta.json.Json
+import jakarta.json.JsonNumber
+import jakarta.json.JsonObject
+import jakarta.json.JsonString
+import jakarta.json.JsonValue
+import org.openstreetmap.josm.tools.Logging
+import java.io.StringReader
 import java.util.Locale
 
 /** Compact JSON encoding for bridge messages (`separators=(",", ":")`). */
@@ -7,7 +14,31 @@ object Viewer3dJson {
     fun encode(message: OutboundMessage): String = when (message) {
         is OutboundMessage.Snapshot -> encodeSnapshot(message)
         is OutboundMessage.Patch -> encodePatch(message)
+        is OutboundMessage.Selection -> encodeSelection(message)
+        is OutboundMessage.CommandResult -> encodeResult(message)
     }
+
+    private fun encodeSelection(msg: OutboundMessage.Selection): String {
+        val sb = StringBuilder(64 + msg.nodeIds.size * 12 + msg.wayIds.size * 16)
+        sb.append("{\"type\":\"selection\",\"nodes\":[")
+        msg.nodeIds.forEachIndexed { i, id ->
+            if (i > 0) sb.append(',')
+            sb.append(id)
+        }
+        sb.append("],\"ways\":[")
+        msg.wayIds.forEachIndexed { i, id ->
+            if (i > 0) sb.append(',')
+            sb.append(jsonString(id))
+        }
+        sb.append(']')
+        if (msg.truncated) sb.append(",\"truncated\":true")
+        sb.append('}')
+        return sb.toString()
+    }
+
+    private fun encodeResult(msg: OutboundMessage.CommandResult): String =
+        "{\"type\":\"command_result\",\"id\":${jsonString(msg.id)},\"ok\":${msg.ok}," +
+            "\"message\":${jsonString(msg.message)}}"
 
     private fun encodeSnapshot(msg: OutboundMessage.Snapshot): String {
         val sb = StringBuilder(256 + msg.features.sumOf { 64 + it.pts.size * 9 })
@@ -172,131 +203,64 @@ object Viewer3dJson {
         return sb.toString()
     }
 
-    /** Minimal parser for inbound `{"type":"command","ops":[...]}`. Unknown ops skipped. */
+    /**
+     * Parse an inbound `{"type":"command","id":...,"ops":[...]}` with JOSM's
+     * bundled jakarta.json. Unknown or malformed ops are skipped; anything that
+     * is not a command object yields null.
+     */
     fun parseCommand(json: String): InboundCommand? {
-        val trimmed = json.trim()
-        if (!trimmed.startsWith("{") || !trimmed.contains("\"type\"")) return null
-        val type = extractStringField(trimmed, "type") ?: return null
-        if (type != "command") return null
-        val opsRaw = extractArrayField(trimmed, "ops") ?: return null
-        val ops = parseOpsArray(opsRaw)
-        return InboundCommand(ops)
-    }
-
-    private fun parseOpsArray(raw: String): List<InboundOp> {
-        val out = ArrayList<InboundOp>()
-        var i = 0
-        while (i < raw.length) {
-            while (i < raw.length && raw[i] != '{') i++
-            if (i >= raw.length) break
-            val end = findMatchingBrace(raw, i)
-            if (end < 0) break
-            parseOp(raw.substring(i, end + 1))?.let { out.add(it) }
-            i = end + 1
+        val obj = try {
+            Json.createReader(StringReader(json)).use { it.readObject() }
+        } catch (e: Exception) {
+            Logging.debug(e)
+            return null
         }
-        return out
+        if (string(obj, "type") != "command") return null
+        val opsArr = obj["ops"] as? jakarta.json.JsonArray ?: return null
+        val ops = opsArr.mapNotNull { (it as? JsonObject)?.let(::parseOp) }
+        return InboundCommand(ops, string(obj, "id"))
     }
 
-    private fun parseOp(obj: String): InboundOp? {
-        val op = extractStringField(obj, "op") ?: return null
-        return when (op) {
-            "move_node" -> {
-                val id = extractStringField(obj, "id") ?: return null
-                val x = extractNumberField(obj, "x") ?: return null
-                val y = extractNumberField(obj, "y") ?: return null
-                val z = extractNumberField(obj, "z")
-                InboundOp.MoveNode(id, x, y, z)
-            }
-            "set_tag" -> {
-                val id = extractStringField(obj, "id") ?: return null
-                val key = extractStringField(obj, "key") ?: return null
-                val value = extractStringField(obj, "value") ?: ""
-                InboundOp.SetTag(id, key, value)
-            }
-            "set_view" -> {
-                val x = extractNumberField(obj, "x") ?: return null
-                val y = extractNumberField(obj, "y") ?: return null
-                val forceRaw = extractRawField(obj, "force")
-                val force = forceRaw == "true" || forceRaw == "1" || forceRaw == "True"
-                InboundOp.SetView(x, y, force)
-            }
-            else -> null
+    private fun parseOp(o: JsonObject): InboundOp? = when (string(o, "op")) {
+        "move_node" -> {
+            val id = string(o, "id")
+            val x = number(o, "x")
+            val y = number(o, "y")
+            val z = number(o, "z")
+            // x and y move together; a move must change something.
+            if (id == null || (x == null) != (y == null) || (x == null && z == null)) null
+            else InboundOp.MoveNode(id, x, y, z)
         }
-    }
-
-    private fun extractStringField(json: String, key: String): String? {
-        val pattern = Regex(""""$key"\s*:\s*"((?:\\.|[^"\\])*)"""")
-        val m = pattern.find(json) ?: return null
-        return unescapeJson(m.groupValues[1])
-    }
-
-    private fun extractNumberField(json: String, key: String): Double? {
-        val pattern = Regex(""""$key"\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)""")
-        return pattern.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
-    }
-
-    private fun extractRawField(json: String, key: String): String? {
-        val pattern = Regex(""""$key"\s*:\s*([^,}\]]+)""")
-        return pattern.find(json)?.groupValues?.get(1)?.trim()
-    }
-
-    private fun extractArrayField(json: String, key: String): String? {
-        val idx = json.indexOf("\"$key\"")
-        if (idx < 0) return null
-        val start = json.indexOf('[', idx)
-        if (start < 0) return null
-        val end = findMatchingBracket(json, start)
-        if (end < 0) return null
-        return json.substring(start + 1, end)
-    }
-
-    private fun findMatchingBracket(s: String, start: Int): Int {
-        var depth = 0
-        for (i in start until s.length) {
-            when (s[i]) {
-                '[' -> depth++
-                ']' -> {
-                    depth--
-                    if (depth == 0) return i
-                }
-            }
+        "set_tag" -> {
+            val id = string(o, "id")
+            val key = string(o, "key")
+            if (id == null || key == null) null else InboundOp.SetTag(id, key, string(o, "value") ?: "")
         }
-        return -1
+        "set_view" -> {
+            val x = number(o, "x")
+            val y = number(o, "y")
+            if (x == null || y == null) null else InboundOp.SetView(x, y, truthy(o["force"]))
+        }
+        "select" -> InboundOp.Select(strings(o, "ids"))
+        "delete_selection" -> InboundOp.DeleteSelection(strings(o, "ids"))
+        "undo" -> InboundOp.Undo
+        "redo" -> InboundOp.Redo
+        else -> null
     }
 
-    private fun findMatchingBrace(s: String, start: Int): Int {
-        var depth = 0
-        for (i in start until s.length) {
-            when (s[i]) {
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) return i
-                }
-            }
-        }
-        return -1
-    }
+    private fun string(o: JsonObject, key: String): String? = (o[key] as? JsonString)?.string
 
-    private fun unescapeJson(s: String): String {
-        val sb = StringBuilder()
-        var i = 0
-        while (i < s.length) {
-            if (s[i] == '\\' && i + 1 < s.length) {
-                when (s[i + 1]) {
-                    '"' -> sb.append('"')
-                    '\\' -> sb.append('\\')
-                    'n' -> sb.append('\n')
-                    'r' -> sb.append('\r')
-                    't' -> sb.append('\t')
-                    else -> sb.append(s[i + 1])
-                }
-                i += 2
-            } else {
-                sb.append(s[i])
-                i++
-            }
-        }
-        return sb.toString()
+    private fun number(o: JsonObject, key: String): Double? = (o[key] as? JsonNumber)?.doubleValue()
+
+    private fun strings(o: JsonObject, key: String): List<String> =
+        (o[key] as? jakarta.json.JsonArray)?.mapNotNull { (it as? JsonString)?.string }.orEmpty()
+
+    /** `true`, a non-zero number, or "true"/"1" in any case (the Jython accepted `True`). */
+    private fun truthy(v: JsonValue?): Boolean = when {
+        v == null -> false
+        v == JsonValue.TRUE -> true
+        v is JsonNumber -> v.doubleValue() != 0.0
+        v is JsonString -> v.string.equals("true", ignoreCase = true) || v.string == "1"
+        else -> false
     }
 }

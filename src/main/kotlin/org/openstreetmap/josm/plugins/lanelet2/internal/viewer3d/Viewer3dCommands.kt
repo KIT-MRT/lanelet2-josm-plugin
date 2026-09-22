@@ -3,12 +3,81 @@ package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 import org.openstreetmap.josm.command.ChangeCommand
 import org.openstreetmap.josm.command.ChangePropertyCommand
 import org.openstreetmap.josm.command.Command
+import org.openstreetmap.josm.data.UndoRedoHandler
 import org.openstreetmap.josm.data.coor.LatLon
 import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
+import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType
-import org.openstreetmap.josm.plugins.lanelet2.edit.applySequence
+import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
+import org.openstreetmap.josm.plugins.lanelet2.edit.applySequence
+import java.awt.event.ActionEvent
+
+/**
+ * The JOSM operations the viewer can trigger besides data commands. An
+ * interface so tests can run headless; [JosmEditorActions] is the real one.
+ */
+interface EditorActions {
+    fun select(ds: DataSet, prims: Collection<OsmPrimitive>)
+
+    /** Run JOSM's own Delete action on [prims]; null when it ran, else why not. */
+    fun delete(ds: DataSet, prims: Collection<OsmPrimitive>): String?
+
+    fun undo(): Boolean
+
+    fun redo(): Boolean
+}
+
+object JosmEditorActions : EditorActions {
+    override fun select(ds: DataSet, prims: Collection<OsmPrimitive>) {
+        ds.setSelected(prims)
+    }
+
+    override fun delete(ds: DataSet, prims: Collection<OsmPrimitive>): String? {
+        ds.setSelected(prims)
+        // MainMenu.delete is the action behind JOSM's Delete key: it checks the
+        // layer is visible and modifiable, then runs DeleteCommand with JOSM's
+        // usual confirmations (relation membership, outside the download area).
+        val action = MainApplication.getMenu()?.delete ?: return "JOSM's Delete action is not available"
+        if (!action.isEnabled) return "JOSM cannot delete this selection (locked or read-only layer?)"
+        action.actionPerformed(ActionEvent(ds, ActionEvent.ACTION_PERFORMED, "lanelet2-viewer3d-delete"))
+        return null
+    }
+
+    override fun undo(): Boolean {
+        val h = UndoRedoHandler.getInstance()
+        if (!h.hasUndoCommands()) return false
+        h.undo()
+        return true
+    }
+
+    override fun redo(): Boolean {
+        val h = UndoRedoHandler.getInstance()
+        if (!h.hasRedoCommands()) return false
+        h.redo()
+        return true
+    }
+}
+
+/**
+ * Where viewer edits land: the edit layer's data, whether the layer is
+ * visible, and how a finished edit is committed (one SequenceCommand).
+ */
+class EditTarget(
+    val ds: DataSet,
+    val visible: Boolean,
+    val commit: (List<Command>) -> Unit,
+) {
+    companion object {
+        fun of(layer: OsmDataLayer?): EditTarget? {
+            val ds = layer?.data ?: return null
+            return EditTarget(ds, layer.isVisible) { cmds ->
+                applySequence(Viewer3dConstants.SEQUENCE_TITLE, cmds, layer)
+            }
+        }
+    }
+}
 
 /** Parse OSM ids and build undoable commands from inbound bridge ops. */
 object Viewer3dCommands {
@@ -35,63 +104,127 @@ object Viewer3dCommands {
             }
         }
 
+    /** Commands for the data ops, plus the ids that no longer exist in [ds]. */
+    data class DataPlan(val commands: List<Command>, val missing: List<String>)
+
     /**
-     * Build JOSM [Command]s for data edits. `set_view` is excluded — it is not
-     * an undoable edit. Unknown ops are skipped silently.
+     * Build JOSM [Command]s for data edits. `set_view` and the editor actions
+     * are not data edits. Unknown ops are skipped silently.
      */
-    fun buildDataCommands(
-        ops: List<InboundOp>,
-        ds: DataSet,
-        anchor: Anchor,
-    ): List<Command> {
+    fun planDataCommands(ops: List<InboundOp>, ds: DataSet, anchor: Anchor): DataPlan {
         val commands = ArrayList<Command>()
+        val missing = ArrayList<String>()
         for (op in ops) {
             when (op) {
-                is InboundOp.SetView -> Unit
                 is InboundOp.MoveNode -> {
                     val (ptype, _) = parseId(op.id) ?: continue
                     if (ptype != OsmPrimitiveType.NODE) continue
-                    val node = lookup(ds, op.id) as? Node ?: continue
-                    if (node.isDeleted) continue
-                    val (lat, lon) = Viewer3dEnu.enuToLatLon(op.x, op.y, anchor.lat, anchor.lon)
-                    val newNode = Node(node)
-                    newNode.coor = LatLon(lat, lon)
-                    if (op.z != null) {
-                        Viewer3dEnu.formatEleG(op.z).let { newNode.put("ele", it) }
+                    val node = lookup(ds, op.id) as? Node
+                    if (node == null || node.isDeleted) {
+                        missing.add(op.id)
+                        continue
                     }
+                    val newNode = Node(node)
+                    if (op.x != null && op.y != null) {
+                        val (lat, lon) = Viewer3dEnu.enuToLatLon(op.x, op.y, anchor.lat, anchor.lon)
+                        newNode.coor = LatLon(lat, lon)
+                    }
+                    if (op.z != null) newNode.put("ele", Viewer3dEnu.formatEleG(op.z))
                     commands.add(ChangeCommand(node, newNode))
                 }
                 is InboundOp.SetTag -> {
-                    val prim = lookup(ds, op.id) ?: continue
-                    if (prim.isDeleted) continue
+                    val prim = lookup(ds, op.id)
+                    if (prim == null || prim.isDeleted) {
+                        missing.add(op.id)
+                        continue
+                    }
                     commands.add(ChangePropertyCommand(prim, op.key, op.value))
                 }
+                else -> Unit
             }
         }
-        return commands
+        return DataPlan(commands, missing)
+    }
+
+    fun buildDataCommands(ops: List<InboundOp>, ds: DataSet, anchor: Anchor): List<Command> =
+        planDataCommands(ops, ds, anchor).commands
+
+    private fun resolve(ds: DataSet, ids: List<String>): Pair<List<OsmPrimitive>, List<String>> {
+        val found = ArrayList<OsmPrimitive>()
+        val missing = ArrayList<String>()
+        for (id in ids) {
+            val p = lookup(ds, id)
+            if (p == null || p.isDeleted) missing.add(id) else found.add(p)
+        }
+        return found to missing
+    }
+
+    private fun describeMissing(missing: List<String>): String {
+        val shown = missing.take(3).joinToString(", ")
+        val more = if (missing.size > 3) " and ${missing.size - 3} more" else ""
+        return "${missing.size} object(s) no longer exist in JOSM: $shown$more"
     }
 
     /**
-     * Apply inbound ops: `move_node`/`set_tag` in one [org.openstreetmap.josm.command.SequenceCommand]
-     * so Ctrl+Z works; `set_view` is a camera move, not a command.
+     * Apply one inbound command. `set_view` moves the map (not undoable).
+     * Data ops (`move_node`, `set_tag`) go into **one** SequenceCommand, so one
+     * gesture is one Ctrl+Z; if any of their targets is gone, none is applied.
+     * `select` / `delete_selection` / `undo` / `redo` go through [actions].
+     *
+     * Returns the reply for a command that carries an id (null otherwise).
      */
     fun applyInbound(
         command: InboundCommand,
-        layer: OsmDataLayer?,
+        target: EditTarget?,
         anchor: Anchor?,
         driveView: Boolean,
         setView: (InboundOp.SetView, Anchor) -> Unit,
-    ) {
+        actions: EditorActions = JosmEditorActions,
+    ): OutboundMessage.CommandResult? {
         if (anchor != null) {
             for (op in command.ops) {
                 if (op is InboundOp.SetView) setView(op, anchor)
             }
         }
-        if (layer == null || !layer.isVisible) return
-        val ds = layer.data ?: return
-        val a = anchor ?: return
-        val commands = buildDataCommands(command.ops, ds, a)
-        if (commands.isEmpty()) return
-        applySequence(Viewer3dConstants.SEQUENCE_TITLE, commands, layer)
+        val edits = command.ops.filter { it !is InboundOp.SetView }
+        if (edits.isEmpty()) return null
+        fun reply(ok: Boolean, message: String) =
+            command.id?.let { OutboundMessage.CommandResult(it, ok, message) }
+
+        // Undo / redo act on JOSM's global stack, like its own Ctrl+Z.
+        if (edits.all { it is InboundOp.Undo || it is InboundOp.Redo }) {
+            var done = 0
+            for (op in edits) if (if (op is InboundOp.Undo) actions.undo() else actions.redo()) done++
+            val what = if (edits.first() is InboundOp.Undo) "undo" else "redo"
+            return if (done > 0) reply(true, "JOSM $what") else reply(false, "Nothing to $what in JOSM")
+        }
+
+        if (target == null) return reply(false, "No editable data layer in JOSM")
+        val ds = target.ds
+
+        val select = edits.filterIsInstance<InboundOp.Select>().lastOrNull()
+        if (select != null && edits.size == 1) {
+            actions.select(ds, resolve(ds, select.ids).first)
+            return reply(true, "Selected ${select.ids.size} in JOSM")
+        }
+
+        if (!target.visible) {
+            return reply(false, "The edit layer is hidden in JOSM; show it to edit from the 3D viewer")
+        }
+
+        val delete = edits.filterIsInstance<InboundOp.DeleteSelection>().lastOrNull()
+        if (delete != null) {
+            val (prims, missing) = resolve(ds, delete.ids)
+            if (prims.isEmpty()) return reply(false, if (missing.isEmpty()) "Nothing selected" else describeMissing(missing))
+            val refused = actions.delete(ds, prims)
+            return if (refused == null) reply(true, "Delete sent to JOSM") else reply(false, refused)
+        }
+
+        val a = anchor ?: return reply(false, "The viewer is not synced with JOSM yet")
+        val plan = planDataCommands(edits, ds, a)
+        if (plan.missing.isNotEmpty()) return reply(false, describeMissing(plan.missing))
+        if (plan.commands.isEmpty()) return reply(false, "Nothing to apply")
+        target.commit(plan.commands)
+        return reply(true, "Applied ${plan.commands.size} change(s)")
     }
 }

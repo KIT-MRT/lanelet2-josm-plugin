@@ -325,16 +325,27 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
 - **server -> browser:** SSE `GET /events`, bootstrapped with a full snapshot.
   `GET /state` returns the same; `GET /healthz` returns `{"ok": true}`.
 - **browser -> JOSM:** `POST /command` (HTTP port **8765**), which the server
-  only *forwards* to connected bridges. Ops the hook applies: `move_node`,
-  `set_tag`, `set_view`. **The browser only ever sends `move_node` and
-  `set_view`** — `set_tag` is implemented but dead. Unknown ops are skipped
-  silently.
+  only *forwards* to connected bridges. Parsed with JOSM's bundled
+  jakarta.json. Ops: `move_node` (x/y and z each optional: height-only moves
+  keep lat/lon exactly, XY moves never add `ele`), `set_tag` (still unused by
+  the browser), `set_view`, `select`, `delete_selection` (runs JOSM's own
+  Delete action, with its warnings), `undo`, `redo`. Unknown ops are skipped.
 - `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
-  on the undo stack, so Ctrl+Z works. `set_view` is a camera move, not a command.
-- **No selection listener and no undo listener.** Undo appears to work only
-  because dataset mutation fires `DataSetListener`. Pushes are triggered by
-  `DataSetListener` (200 ms debounce), `ActiveLayerChangeListener` (re-snapshot)
-  and `ZoomChangeListener` (1 s, viewport overlay).
+  on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
+  deliberate change from the Jython, which skipped missing nodes): if any
+  target is gone, nothing is applied, so the viewer can revert its
+  optimistic move. `set_view` is a camera move, not a command.
+- **Replies:** a command with an `"id"` gets `{"type":"command_result","id",
+  "ok","message"}` back through the ingest socket and SSE (e.g. "edit layer is
+  hidden"). `OsmDataLayer` cannot be built headless (JCS cache manager), so
+  `applyInbound` takes an `EditTarget` (dataset, visible, commit).
+- **Selection sync:** a `DataSelectionListener` on the edit dataset sends
+  `{"type":"selection","nodes":[ids],"ways":["way/id"]}` (120 ms debounce,
+  capped at 20k; a selected relation contributes its members). The server
+  keeps the last one and adds it to the bootstrap snapshot. Pushes are
+  otherwise triggered by `DataSetListener` (200 ms debounce),
+  `ActiveLayerChangeListener` (re-snapshot) and `ZoomChangeListener` (1 s,
+  viewport overlay).
 - Threading: all DataSet/MapView reads and command application on the **EDT**;
   JSON serialisation and socket writes on a `viewer3d-sender` daemon thread with
   a bounded queue that resyncs on overflow; a separate reader thread.

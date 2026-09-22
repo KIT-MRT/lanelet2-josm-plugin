@@ -6,7 +6,9 @@ import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
 import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType
+import org.openstreetmap.josm.data.osm.Relation
 import org.openstreetmap.josm.data.osm.Way
+import org.openstreetmap.josm.data.osm.DataSelectionListener
 import org.openstreetmap.josm.data.osm.event.AbstractDatasetChangedEvent
 import org.openstreetmap.josm.data.osm.event.DataChangedEvent
 import org.openstreetmap.josm.data.osm.event.DataSetListener
@@ -20,7 +22,6 @@ import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.NavigatableComponent
 import org.openstreetmap.josm.gui.layer.MainLayerManager.ActiveLayerChangeListener
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
-import org.openstreetmap.josm.plugins.lanelet2.edit.requireVisibleEditLayer
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.tools.Logging
 import javax.swing.SwingUtilities
@@ -37,12 +38,14 @@ object Viewer3dHook {
     private var socket: Viewer3dSocketClient? = null
 
     private var dsListener: DataSetListener? = null
+    private val selectionListener = DataSelectionListener { scheduleSelection() }
     private var activeListener: ActiveLayerChangeListener? = null
     private var zoomListener: NavigatableComponent.ZoomChangeListener? = null
     private var attachedDs: DataSet? = null
 
     private var editTimer: Timer? = null
     private var viewportTimer: Timer? = null
+    private var selectionTimer: Timer? = null
     @Volatile private var viewFrom3d = false
 
     fun serverProcess(): Viewer3dServerProcess = server
@@ -103,6 +106,7 @@ object Viewer3dHook {
         zoomListener = null
         editTimer?.stop()
         viewportTimer?.stop()
+        selectionTimer?.stop()
         socket?.stop()
         socket = null
         engine.resetForLayerChange()
@@ -134,6 +138,7 @@ object Viewer3dHook {
         engine.forceSnapshot = true
         scheduleEdit()
         scheduleViewport()
+        scheduleSelection()
     }
 
     private fun attachToCurrent(resetAnchor: Boolean) {
@@ -153,6 +158,7 @@ object Viewer3dHook {
         }
         try {
             ds.addDataSetListener(dsListener)
+            ds.addSelectionListener(selectionListener)
             attachedDs = ds
         } catch (_: Exception) {
             attachedDs = null
@@ -160,6 +166,7 @@ object Viewer3dHook {
         }
         scheduleEdit()
         scheduleViewport()
+        scheduleSelection()
     }
 
     private fun detachDs() {
@@ -170,6 +177,10 @@ object Viewer3dHook {
                 ds.removeDataSetListener(listener)
             } catch (_: Exception) {
             }
+        }
+        try {
+            ds?.removeSelectionListener(selectionListener)
+        } catch (_: Exception) {
         }
         attachedDs = null
     }
@@ -211,6 +222,27 @@ object Viewer3dHook {
             viewportTimer = it
         }
         timer.restart()
+    }
+
+    private fun scheduleSelection() {
+        val timer = selectionTimer ?: Timer(Viewer3dConstants.SELECTION_DEBOUNCE_MS) {
+            try {
+                sendSelection()
+            } catch (e: Exception) {
+                Logging.error(e)
+            }
+        }.also {
+            it.isRepeats = false
+            selectionTimer = it
+        }
+        timer.restart()
+    }
+
+    /** Mirror JOSM's selection to the viewer (it shows it while in edit mode). */
+    private fun sendSelection() {
+        if (socket?.connected != true) return
+        val ds = attachedDs ?: return
+        socket?.enqueue(selectionMessage(ds.selected))
     }
 
     private fun computeAndSend() {
@@ -281,13 +313,16 @@ object Viewer3dHook {
 
     private fun onCommandLine(line: String) {
         val cmd = Viewer3dJson.parseCommand(line) ?: return
-        Viewer3dCommands.applyInbound(
+        // The raw edit layer, not requireVisibleEditLayer(): the reply has to
+        // tell "no layer" from "layer hidden".
+        val result = Viewer3dCommands.applyInbound(
             command = cmd,
-            layer = requireVisibleEditLayer(),
+            target = EditTarget.of(LaneletUtils.getEditLayer()),
             anchor = engine.anchor,
             driveView = Viewer3dSettings.driveViewEnabled(),
             setView = { op, anchor -> applySetView(op, anchor) },
         )
+        result?.let { socket?.enqueue(it) }
     }
 
     private fun applySetView(op: InboundOp.SetView, anchor: Anchor) {
@@ -396,6 +431,34 @@ object Viewer3dHook {
             }
         }
     }
+}
+
+/**
+ * JOSM selection as the viewer shows it: nodes, ways, and for a selected
+ * relation (a lanelet, say) its member ways and nodes. Capped at
+ * [Viewer3dConstants.MAX_SELECTION_SYNC] items.
+ */
+internal fun selectionMessage(selected: Collection<OsmPrimitive>): OutboundMessage.Selection {
+    val nodes = LinkedHashSet<Long>()
+    val ways = LinkedHashSet<String>()
+    fun add(p: OsmPrimitive) {
+        if (p.isDeleted) return
+        when (p) {
+            is Node -> nodes.add(p.uniqueId)
+            is Way -> ways.add("way/${p.uniqueId}")
+            else -> Unit
+        }
+    }
+    for (p in selected) {
+        if (p is Relation) p.memberPrimitives.forEach(::add) else add(p)
+    }
+    val cap = Viewer3dConstants.MAX_SELECTION_SYNC
+    val truncated = nodes.size + ways.size > cap
+    return OutboundMessage.Selection(
+        nodeIds = nodes.take(cap),
+        wayIds = ways.take((cap - minOf(nodes.size, cap)).coerceAtLeast(0)),
+        truncated = truncated,
+    )
 }
 
 internal fun Way.toSnapshot(): WaySnapshot = WaySnapshot(

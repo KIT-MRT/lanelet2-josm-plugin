@@ -128,6 +128,12 @@ def _sse_encode(msg):
 #   clear    : empty the scene
 #     {"type":"clear"}
 #
+#   selection: JOSM's selection (kept, and sent with the bootstrap snapshot)
+#     {"type":"selection","nodes":[17,-5],"ways":["way/3"],"truncated":false}
+#
+#   command_result: JOSM's answer to a browser command that had an "id"
+#     {"type":"command_result","id":"c12","ok":false,"message":"..."}
+#
 #   feature  : one renderable object (protocol v2: flat arrays)
 #     {"id":"way/-123",
 #      "kind":"line",
@@ -155,6 +161,7 @@ class SceneHub:
         self._lock = threading.Lock()
         self._anchor = None                 # {"lat":..,"lon":..} or None
         self._features = {}                 # id -> feature dict
+        self._selection = None              # last JOSM selection message
         self._seq = 0                       # monotonically increasing
         self._subscribers = set()           # set[queue.Queue]
         self._bridges = set()               # set[_BridgeConn] (command back-channel)
@@ -241,14 +248,20 @@ class SceneHub:
                     self._anchor = {"lat": op.get("lat"), "lon": op.get("lon")}
         elif mtype == "clear":
             self._features = {}
+        elif mtype == "selection":
+            # Kept so a browser that (re)connects starts with JOSM's selection.
+            self._selection = {"nodes": msg.get("nodes", []), "ways": msg.get("ways", [])}
 
     def _snapshot_message_locked(self):
-        return {
+        msg = {
             "type": "snapshot",
             "seq": self._seq,
             "anchor": self._anchor,
             "features": list(self._features.values()),
         }
+        if self._selection is not None:
+            msg["selection"] = self._selection
+        return msg
 
     def snapshot_message(self):
         with self._lock:
