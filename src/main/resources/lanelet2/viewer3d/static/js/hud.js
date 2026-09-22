@@ -29,6 +29,32 @@ if (PROFILE) {
   }
 }
 
+// The camera and debug rows (and the frame-debug panel) are hidden until the
+// title is clicked, so the panel does not cover the view; the choice is kept
+// per browser.
+const DETAILS_KEY = "ll2viewer.hudDetails";
+
+function setDetails(on) {
+  const panel = el("hud");
+  if (panel) panel.classList.toggle("compact", !on);
+  document.body.classList.toggle("compactHud", !on);
+  const t = el("hudToggle");
+  if (t) t.textContent = on ? "▾ details" : "▸ details";
+  try {
+    localStorage.setItem(DETAILS_KEY, on ? "1" : "0");
+  } catch (_) { /* storage blocked: keep it for this page only */ }
+}
+
+export function installHudToggle() {
+  let on = false;
+  try {
+    on = localStorage.getItem(DETAILS_KEY) === "1";
+  } catch (_) { /* default: compact */ }
+  setDetails(on);
+  const title = el("hudTitle");
+  if (title) title.addEventListener("click", () => setDetails(el("hud").classList.contains("compact")));
+}
+
 const fmt1 = (v) => Number(v).toFixed(1);
 export const fmtVec3 = (v) => `(${fmt1(v.x)}, ${fmt1(v.y)}, ${fmt1(v.z)})`;
 

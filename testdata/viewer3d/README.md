@@ -15,6 +15,8 @@ Not part of `./gradlew build`: they need Chrome and a display-less GL
 node testdata/viewer3d/e2e_viewer.mjs                 # camera + picking; Node 22+, no npm install
 node testdata/viewer3d/e2e_edit.mjs                   # selection, moves, JOSM sync, refusals
 node testdata/viewer3d/e2e_controls.mjs               # keys / pads for camera and selection
+node testdata/viewer3d/e2e_lanelets.mjs               # lanelet surfaces, arrows, surface picking
+node testdata/viewer3d/e2e_heights.mjs                # typed heights, snapping
 node testdata/viewer3d/e2e_viewer.mjs --shots /tmp/v3d  # also save screenshots
 CHROME=/path/to/chrome node testdata/viewer3d/e2e_viewer.mjs
 ```
@@ -40,6 +42,9 @@ range.
 The fake bridge answers every command that carries an `id` with an accepting
 `command_result`; set `session.reply = (cmd) => ({ ok: false, message })` to
 simulate JOSM refusing.
+
+`session.reveal(point)` pans a world point out from under the HUD / toolbars
+before a click; clicking where a panel sits hits the panel, not the map.
 
 Ports are picked free per run, so a viewer already running on 8765/8766 does
 not interfere.

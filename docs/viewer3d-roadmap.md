@@ -144,18 +144,18 @@ by capturing the mouse and disabling edit mode.
 
 Most impactful for editing heights, in my estimate:
 
-- **Numeric entry**: type an exact height (absolute, or +/- offset) for the
-  selection in the edit bar. Dragging is fast but not precise to the
-  centimetre; survey-grade edits need typed values.
-- **Snapping while moving**: snap a dragged node's height (or position) to
-  the nearest other node / the lanelet surface under it, e.g. to make a
-  curbstone follow the road edge.
+- [x] **Numeric entry**: the edit bar's Z field (key Z) shows the
+  selection's height; `112.35` sets it, `+0.2` / `-0.2` shift it, `=-1.5`
+  sets a negative one; up/down step 1 cm. One undo step.
+- [x] **Snapping while moving** (M, ctrl inverts during a drag): a vertical
+  move sticks to the nearest other node's height (within 10 m) or the lanelet
+  surface under the point; a single node sticks onto another node.
 - **Drive JOSM to what the camera looks at**, not to the camera's own XY.
   With an oblique or orbiting view the culled square follows the camera and
   can drop the very area being looked at; the point at the centre of the view
   is the better cull centre.
-- **Compact HUD**: the debug rows (seq, anchor, josm view, frame debug) take
-  a large part of the view; collapse them behind the title.
+- [x] **Compact HUD**: the camera / debug rows and the frame-debug panel are
+  behind the title ("▸ details", remembered per browser).
 
 - Height-jump warnings compare absolute height differences between
   neighbouring nodes (as asked). A slope-based check (Δz over horizontal

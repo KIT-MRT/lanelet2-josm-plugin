@@ -14,6 +14,10 @@
 //                  alt+left/right turn); one key hold = one undo step
 //   I              interpolate heights along the selected way (between its ends,
 //                  or between 2+ selected nodes of it)
+//   Z              type a height for the selection: 112.35 sets it, +0.2 / -0.2
+//                  shift it, =-1.5 sets a negative height; Enter applies
+//   M              snap gizmo moves (height to the nearest node / lanelet
+//                  surface, a single node onto another); ctrl inverts while dragging
 //   Del            delete through JOSM's Delete action;  ctrl+Z / ctrl+Y undo / redo
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
@@ -26,6 +30,7 @@ import { setHighlightVisible } from "./render/highlight.js";
 import { selection } from "./selection.js";
 import { pickNode, nodesUnderCursor, featuresUnderCursor, screenProjector, projectToPage } from "./picking.js";
 import { sendCommand } from "./net.js";
+import { snapHeight, snapToNode, showSnap, hideSnap } from "./snap.js";
 import { setEditHud, toast } from "./hud.js";
 
 const GIZMO_CLICK_NODE_PX = 4; // a click on a gizmo handle selects only a node dot this close
@@ -33,7 +38,7 @@ const CLICK_SLOP_PX = 5;
 const MOVE_EPS_M = 0.0005;     // below this a coordinate counts as unchanged
 
 export const editEvents = new Emitter(); // "mode" (on)
-export const edit = { on: false, tool: "translate", heightOnly: false, keysMove: "camera" };
+export const edit = { on: false, tool: "translate", heightOnly: false, keysMove: "camera", snap: false };
 
 const KEY_MOVE_IDLE_MS = 250;     // a key-driven move is committed this long after the last key
 const KEY_TURN_RAD_S = 0.5;       // alt+left/right turn rate (×3 with shift)
@@ -93,6 +98,11 @@ export function keysMoveSelection() {
   return edit.on && edit.keysMove === "selection" && !selection.isEmpty() && !drag;
 }
 
+export function toggleSnap() {
+  edit.snap = !edit.snap;
+  refreshGizmo();
+}
+
 export function toggleHeightOnly() {
   edit.heightOnly = !edit.heightOnly;
   if (edit.heightOnly) edit.tool = "translate";
@@ -121,6 +131,10 @@ function refreshGizmo() {
       b.classList.toggle("on", edit.keysMove === "selection");
       continue;
     }
+    if (k === "snap") {
+      b.classList.toggle("on", edit.snap);
+      continue;
+    }
     b.classList.toggle("on", (k === "height" && edit.heightOnly) || (k === edit.tool && !edit.heightOnly));
   }
   refreshEditHud();
@@ -138,7 +152,9 @@ function refreshEditHud() {
   const what = one ? (one.type === "node" ? nodeToken(one.id) : one.id) : parts.join(", ");
   const tool = edit.heightOnly ? "height only" : edit.tool === "rotate" ? "rotate" : "move";
   const keys = edit.keysMove === "selection" ? " · keys move selection" : "";
-  setEditHud(`ON · ${what || "nothing selected"} · ${tool}${keys}`);
+  const snap = edit.snap ? " · snap" : "";
+  setEditHud(`ON · ${what || "nothing selected"} · ${tool}${keys}${snap}`);
+  refreshZField();
 }
 
 /** Centre of the nodes a move would act on (mean position). */
@@ -174,7 +190,37 @@ function beginGizmoDrag() {
     if (rec) orig.set(id, [rec.x, rec.y, rec.z]);
   }
   pivot.quaternion.identity();
-  drag = { start: pivot.position.clone(), orig, moved: false };
+  drag = { start: pivot.position.clone(), orig, moved: false, exclude: new Set(orig.keys()) };
+}
+
+// Ctrl while dragging inverts the snap toggle (read from the pointer events,
+// so it follows the key mid-drag).
+let ctrlDown = false;
+canvas.addEventListener("pointermove", (e) => { ctrlDown = e.ctrlKey || e.metaKey; });
+
+/**
+ * Snap the translation `d` of the current drag: heights for a vertical move,
+ * a single node onto another for a free one. The gizmo follows the snap.
+ */
+function snapTranslation(d) {
+  const vertical = edit.heightOnly || transform.axis === "Z";
+  const o = drag.start;
+  if (vertical) {
+    const x = o.x + d.x, y = o.y + d.y, z = o.z + d.z;
+    const hit = snapHeight(x, y, z, drag.exclude);
+    if (!hit) return hideSnap();
+    d.z = hit.z - o.z;
+    showSnap(x, y, hit.z);
+  } else if (drag.orig.size === 1) {
+    const p = drag.orig.values().next().value;
+    const hit = snapToNode([p[0] + d.x, p[1] + d.y, p[2] + d.z], drag.exclude);
+    if (!hit) return hideSnap();
+    d.set(hit.x - p[0], hit.y - p[1], hit.z - p[2]);
+    showSnap(hit.x, hit.y, hit.z);
+  } else {
+    return hideSnap();
+  }
+  pivot.position.copy(o).add(d);
 }
 
 // Drag in progress: move the nodes locally so connected ways follow live.
@@ -196,6 +242,8 @@ function onGizmoChange() {
   } else {
     const d = pivot.position.clone().sub(drag.start);
     if (edit.heightOnly) d.x = d.y = 0;
+    if (edit.snap !== ctrlDown) snapTranslation(d);
+    else hideSnap();
     for (const [id, p] of drag.orig) moves.push({ id, x: p[0] + d.x, y: p[1] + d.y, z: p[2] + d.z });
   }
   drag.moved = true;
@@ -205,6 +253,7 @@ function onGizmoChange() {
 function endGizmoDrag() {
   const d = drag;
   drag = null;
+  hideSnap();
   pivot.quaternion.identity();
   if (!d || !d.moved) return;
   commitMoves(d.orig);
@@ -311,6 +360,102 @@ function finishKeyMove() {
   commitMoves(km.orig);
   placePivot();
 }
+
+// --- numeric height --------------------------------------------------------------------
+// The edit bar's Z field shows the selection's height (mean, range in the
+// tooltip) and takes a typed one: "112.35" sets every selected node to it,
+// "+0.2" / "-0.2" shift them, "=-1.5" sets a negative height. Enter applies
+// (one undo step), Esc drops the edit, up/down arrows step 1 cm (shift 10 cm).
+const zField = document.getElementById("zField");
+let zDirty = false;
+
+function selectionHeights() {
+  const zs = [];
+  for (const id of selection.effectiveNodeIds()) {
+    const rec = store.node(id);
+    if (rec) zs.push(rec.z);
+  }
+  return zs;
+}
+
+const fmtZ = (v) => String(round3(v));
+
+export function refreshZField() {
+  if (!zField || (document.activeElement === zField && zDirty)) return;
+  const zs = edit.on ? selectionHeights() : [];
+  zField.disabled = zs.length === 0;
+  if (!zs.length) {
+    zField.value = "";
+    zField.title = "Select nodes or ways to type their height (Z)";
+    return;
+  }
+  const min = Math.min(...zs), max = Math.max(...zs);
+  zField.value = fmtZ(zs.reduce((a, b) => a + b, 0) / zs.length);
+  zField.title = (min === max ? `${zs.length} node(s) at ${fmtZ(min)} m` : `mean of ${zs.length} nodes, ${fmtZ(min)} … ${fmtZ(max)} m`) +
+    ". Type 112.35 to set, +0.2 / -0.2 to shift, =-1.5 for a negative height; Enter applies.";
+}
+
+/** Parse the field: { set } for an absolute height, { shift } for an offset, or null. */
+export function parseHeightInput(text) {
+  const t = String(text).trim().replace(",", ".");
+  if (!t) return null;
+  const num = (v) => (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(v) ? Number(v) : NaN);
+  if (t.startsWith("=")) {
+    const v = num(t.slice(1).trim());
+    return Number.isFinite(v) ? { set: v } : null;
+  }
+  const v = num(t);
+  if (!Number.isFinite(v)) return null;
+  return t[0] === "+" || t[0] === "-" ? { shift: v } : { set: v };
+}
+
+export function applyHeightInput(text) {
+  const parsed = parseHeightInput(text);
+  if (!parsed) {
+    toast("Height: type 112.35 to set, +0.2 / -0.2 to shift, =-1.5 for a negative height", "warn", 5000);
+    return false;
+  }
+  const orig = new Map();
+  const moves = [];
+  for (const id of selection.effectiveNodeIds()) {
+    const rec = store.node(id);
+    if (!rec) continue;
+    orig.set(id, [rec.x, rec.y, rec.z]);
+    moves.push({ id, x: rec.x, y: rec.y, z: parsed.set !== undefined ? parsed.set : rec.z + parsed.shift });
+  }
+  if (!moves.length) return false;
+  store.moveNodes(moves);
+  commitMoves(orig);
+  placePivot();
+  return true;
+}
+
+if (zField) {
+  zField.addEventListener("input", () => { zDirty = true; });
+  zField.addEventListener("focus", () => { zDirty = false; zField.select(); });
+  zField.addEventListener("blur", () => { zDirty = false; refreshZField(); });
+  zField.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (zDirty) applyHeightInput(zField.value);
+      zDirty = false;
+      zField.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      zDirty = false;
+      zField.blur();
+    } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const cur = Number(zField.value.replace(",", "."));
+      if (!Number.isFinite(cur)) return;
+      const step = (e.shiftKey ? 0.1 : 0.01) * (e.key === "ArrowUp" ? 1 : -1);
+      zField.value = fmtZ(cur + step);
+      zDirty = true;
+    }
+  });
+}
+selection.on("changed", () => refreshZField());
+store.on("nodes-moved", () => refreshZField());
 
 // --- JOSM actions --------------------------------------------------------------------
 
@@ -555,6 +700,12 @@ export function handleEditKey(e) {
   if (k === "r" || k === "R") { setTool("rotate"); return true; }
   if (k === "h" || k === "H") { toggleHeightOnly(); return true; }
   if (k === "i" || k === "I") { interpolateSelection(); return true; }
+  if (k === "m" || k === "M") { toggleSnap(); return true; }
+  if ((k === "z" || k === "Z") && zField && !zField.disabled) {
+    e.preventDefault();
+    zField.focus();
+    return true;
+  }
   if (k === "t" || k === "T") {
     setKeysMove(edit.keysMove === "camera" ? "selection" : "camera");
     toast(`Keys move the ${edit.keysMove}`, "info", 1500);
@@ -573,6 +724,7 @@ for (const b of document.querySelectorAll("#editBar [data-edit]")) {
     else if (k === "undo") undo(false);
     else if (k === "redo") undo(true);
     else if (k === "keys") setKeysMove(edit.keysMove === "camera" ? "selection" : "camera");
+    else if (k === "snap") toggleSnap();
   });
 }
 const editBtn = document.getElementById("editBtn");

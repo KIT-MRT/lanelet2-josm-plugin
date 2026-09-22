@@ -30,7 +30,7 @@ import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
 import { connect, onCommandResult } from "./js/net.js";
 import { installImagery } from "./js/imagery.js";
 import { frameAll } from "./js/framing.js";
-import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } from "./js/hud.js";
+import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine, installHudToggle } from "./js/hud.js";
 
 // edit.js created TransformControls at import, so these listeners come after
 // its pointerdown (see nav.js).
@@ -38,6 +38,7 @@ installNav({ gizmoBusy, pointerLocked: isPointerLocked });
 installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
+installHudToggle();
 
 // A clicked button must not keep keyboard focus, or Enter clicks it again
 // instead of reaching the map. (Space is prevented as a move key anyway.)
@@ -126,7 +127,7 @@ if (TEST_HOOKS) {
       return one && one.type === "node" ? nodeToken(one.id) : null;
     },
     selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
-    edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove }),
+    edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove, snap: edit.snap }),
     node: (id) => {
       const rec = store.node(id);
       return rec ? [rec.x, rec.y, rec.z] : null;

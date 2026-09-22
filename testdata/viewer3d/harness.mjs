@@ -61,10 +61,14 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
   let serverLog = "";
   server.stdout.on("data", (d) => { serverLog += d; });
   server.stderr.on("data", (d) => { serverLog += d; });
-  for (let i = 0; i < 50; i++) {
-    try { if ((await fetch(`http://127.0.0.1:${http}/healthz`)).ok) break; } catch (_) { /* not up yet */ }
-    await sleep(100);
+  // Generous waits: on a busy machine software GL makes everything slow, and
+  // a check that starts before the page is up fails in confusing ways.
+  let up = false;
+  for (let i = 0; i < 150 && !up; i++) {
+    try { up = (await fetch(`http://127.0.0.1:${http}/healthz`)).ok; } catch (_) { /* not up yet */ }
+    if (!up) await sleep(100);
   }
+  if (!up) throw new Error(`viewer server did not start:\n${serverLog}`);
 
   // Fake JOSM bridge: sends scene messages, records forwarded commands and
   // answers those with an "id" like the plugin does. `session.reply(cmd)`
@@ -137,10 +141,12 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
   await cdp("Runtime.enable");
   await cdp("Page.enable");
   await cdp("Page.navigate", { url: `http://127.0.0.1:${http}/?test=1${query ? "&" + query : ""}` });
-  for (let i = 0; i < 100; i++) {
-    if (await evaluate("typeof window.__ll2test === 'object'").catch(() => false)) break;
-    await sleep(100);
+  let ready = false;
+  for (let i = 0; i < 600 && !ready; i++) {
+    ready = await evaluate("typeof window.__ll2test === 'object'").catch(() => false);
+    if (!ready) await sleep(100);
   }
+  if (!ready) throw new Error("viewer page did not load within 60 s (errors: " + errors.join(" | ") + ")");
 
   const BTN = { left: 1, right: 2, middle: 4, none: 0 };
   const MOD = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
@@ -201,6 +207,20 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       if (holdMs) await sleep(holdMs);
       await cdp("Input.dispatchKeyEvent", { type: "keyUp", key, code: c, modifiers: m });
       await sleep(50);
+    },
+    /**
+     * Page pixel of a world point, panning it to the middle of the view first
+     * if it sits under the HUD / toolbars (a click there would hit the panel).
+     */
+    async reveal(p) {
+      const sp = await s.project(p);
+      const onCanvas = await evaluate(
+        `(() => { const e = document.elementFromPoint(${sp[0]}, ${sp[1]}); return !!e && e.tagName === "CANVAS"; })()`);
+      if (onCanvas) return sp;
+      const [w, h] = await evaluate("[innerWidth, innerHeight]");
+      const cx = w / 2, cy = h / 2;
+      await s.drag("middle", cx, cy, cx - sp[0], cy - sp[1]);
+      return s.project(p);
     },
     /** Hold keys: keyDown(...) now, keyUp(...) later (DOM key and code). */
     async keyDown(key, code, modifiers = []) {

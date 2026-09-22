@@ -20,6 +20,10 @@
       pointer-events: none; user-select: none; min-width: 280px;
     }
     #hud b { color: #f2f5fb; }
+    #hudTitle { pointer-events: auto; cursor: pointer; }
+    #hudToggle { color: #7e8aa0; font-size: 11px; }
+    #hud.compact .detail { display: none !important; }
+    body.compactHud #debugHud { display: none; }
     #status { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
       background: #d8534f; margin-right: 6px; vertical-align: middle; }
     #status.live { background: #46c46a; }
@@ -103,6 +107,12 @@
     #editBar button:hover { background: rgba(52, 68, 90, 0.95); }
     #editBar button.on { border-color: #ffd23f; color: #ffe38a; }
     #editBar .sep { width: 1px; background: #3d4d63; margin: 2px 3px; }
+    #editBar .zlab { font: 12px/1 ui-monospace, Menlo, monospace; color: #cdd6e4; display: flex; align-items: center; gap: 4px; }
+    #editBar input {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #e8edf5; width: 78px;
+      background: rgba(10, 14, 20, 0.9); border: 1px solid #3d4d63; border-radius: 5px; padding: 5px 6px;
+    }
+    #editBar input:disabled { opacity: 0.45; }
     #imageryMenu {
       position: fixed; top: 44px; right: 12px; z-index: 13;
       display: flex; flex-direction: column; gap: 3px; min-width: 180px;
@@ -116,7 +126,7 @@
     }
     #imageryMenu button:hover { background: rgba(52, 68, 90, 0.95); }
     #toast {
-      position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 12;
+      position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); z-index: 12;
       font: 12px/1.4 ui-monospace, Menlo, monospace; color: #e8edf5;
       background: rgba(20, 26, 36, 0.95); border: 1px solid #3d4d63; border-radius: 6px;
       padding: 7px 12px; pointer-events: none; max-width: min(640px, 80vw);
@@ -135,26 +145,27 @@
   <div id="app"></div>
   <div id="leftCol">
   <div id="hud">
-    <div><span id="status"></span><b>Lanelet2 3D</b></div>
-    <div class="row">conn: <span id="conn">connecting...</span></div>
+    <div id="hudTitle" title="Show / hide the camera and debug rows"><span id="status"></span><b>Lanelet2 3D</b> <span id="conn">connecting...</span> <span id="hudToggle">▸ details</span></div>
     <div class="row">features: <span id="count">0</span></div>
-    <div class="row">seq: <span id="seq">-</span></div>
-    <div class="row">anchor: <span id="anchor">-</span></div>
     <div class="row">edit: <span id="edit">off</span></div>
-    <div class="row">look: <span id="look">orbit</span></div>
-    <div class="row">cam pos (ENU m): <span id="camPos">-</span></div>
-    <div class="row">cam view: <span id="camAng">-</span></div>
-    <div class="row">orbit pivot: <span id="camPivot">-</span></div>
-    <div class="row">zoom target: <span id="zoomTarget">-</span></div>
-    <div class="row">josm view: <span id="josmView">idle</span></div>
-    <div class="row" id="perfRow" style="display:none">apply: <span id="perf">-</span></div>
-    <div class="row" id="renderRow" style="display:none">render: <span id="render">-</span></div>
+    <div class="row detail">seq: <span id="seq">-</span></div>
+    <div class="row detail">anchor: <span id="anchor">-</span></div>
+    <div class="row detail">look: <span id="look">orbit</span></div>
+    <div class="row detail">cam pos (ENU m): <span id="camPos">-</span></div>
+    <div class="row detail">cam view: <span id="camAng">-</span></div>
+    <div class="row detail">orbit pivot: <span id="camPivot">-</span></div>
+    <div class="row detail">zoom target: <span id="zoomTarget">-</span></div>
+    <div class="row detail">josm view: <span id="josmView">idle</span></div>
+    <div class="row detail" id="perfRow" style="display:none">apply: <span id="perf">-</span></div>
+    <div class="row detail" id="renderRow" style="display:none">render: <span id="render">-</span></div>
   </div>
   <div id="editBar" hidden>
     <button type="button" data-edit="translate" title="Move the selection with the gizmo (G)">Move</button>
     <button type="button" data-edit="rotate" title="Rotate the selection about the vertical through its centre (R)">Rotate</button>
     <button type="button" data-edit="height" title="Height only: the gizmo and keys move straight up/down, lat/lon stay untouched (H)">Height</button>
     <button type="button" data-edit="interpolate" title="Interpolate heights along the selected way, between its ends or between 2+ selected nodes of it (I)">Interp.</button>
+    <label class="zlab">Z <input id="zField" type="text" inputmode="decimal" size="8" disabled autocomplete="off" spellcheck="false"></label>
+    <button type="button" data-edit="snap" title="Snap gizmo moves (M): a height move sticks to the nearest node's height or the lanelet surface; a single node sticks onto another node. Hold ctrl while dragging to invert.">Snap</button>
     <span class="sep"></span>
     <button type="button" data-edit="keys" title="What WASD / Space / C / alt+arrows and the pads move: the camera or the selection (one key hold = one undo step). T toggles.">Keys: camera</button>
     <span class="sep"></span>
@@ -209,7 +220,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
 
   <script type="importmap">
   {

@@ -113,7 +113,10 @@ culling.
   box-selects; middle-click cycles through overlapping items. The gizmo moves
   the whole selection (G), rotates it (R) or only changes heights (H). T makes
   the keys move the selection instead of the camera. I interpolates heights
-  along the selected way. Del, ctrl+Z and ctrl+Y go through JOSM (its delete
+  along the selected way. Z types a height (`112.35` sets, `+0.2` / `-0.2`
+  shifts). M snaps gizmo moves to the nearest node's height, the lanelet
+  surface, or (one node) onto another node; ctrl inverts it while dragging.
+  Del, ctrl+Z and ctrl+Y go through JOSM (its delete
   warnings, its undo stack). Each gesture is one undo step; JOSM refusing it
   (hidden layer, deleted node) puts it back and says why.
 - **Selection** is shared both ways: select in JOSM, adjust in 3D.
@@ -122,8 +125,10 @@ culling.
 - **Street view:** the viewer's button and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
 
-New nodes created in JOSM without `ele` take the height of the nearest node
-(on by default; settings: *Heights*), and a height jump above 2 m between
+New nodes created in JOSM without `ele` get a height (on by default; settings:
+*Heights*): a node inserted into a way, or joining ways, is interpolated
+between the known heights on both sides, a free end or a lone node takes the
+nearest node's height. A height jump above 2 m between
 neighbouring nodes after that, an interpolation or a 3D move raises a
 warning.
 

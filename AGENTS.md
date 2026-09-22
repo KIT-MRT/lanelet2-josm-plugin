@@ -295,7 +295,7 @@ Offline self-containment is verified by fetching `/`, `/app.js` and all three
 
 Browser code has its own checks in `testdata/viewer3d/` (headless Chrome over
 CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
-`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, and
+`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`, and
 `perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
 for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
 exact state under `?test=1` (`window.__ll2test`); use it, not the HUD text.
