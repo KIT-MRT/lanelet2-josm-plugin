@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
 import org.openstreetmap.josm.plugins.lanelet2.infra.Centerline
+import org.openstreetmap.josm.plugins.lanelet2.infra.HeightTools
 import org.openstreetmap.josm.plugins.lanelet2.infra.LonLat
 import kotlin.math.hypot
 
@@ -8,15 +9,59 @@ import kotlin.math.hypot
 object Viewer3dFeatures {
     /** Where along the centerline the direction arrow sits (fraction of its length). */
     const val ARROW_AT = 0.35
-    fun nodeEleMetres(eleTag: String?): Double {
-        if (eleTag.isNullOrEmpty()) return 0.0
-        return eleTag.toDoubleOrNull() ?: 0.0
+
+    /** The node's height, or null without a usable `ele` ([HeightTools.parseEle]). */
+    fun nodeEleMetres(eleTag: String?): Double? = HeightTools.parseEle(eleTag)
+
+    /**
+     * Give the points of one line (x, y, z triples, [count] of them) whose
+     * height is unknown (`known[i]` false) a height to draw at: interpolated
+     * by distance between the nearest known heights before and after, or the
+     * nearest known one at an end, or 0 when the line has none. Display only;
+     * the node keeps its tag.
+     */
+    fun fillUnknownHeights(pts: DoubleArray, known: BooleanArray, count: Int) {
+        var prev = -1
+        var i = 0
+        while (i < count) {
+            if (known[i]) {
+                prev = i
+                i++
+                continue
+            }
+            var next = i
+            while (next < count && !known[next]) next++
+            for (j in i until next) {
+                pts[j * 3 + 2] = when {
+                    prev < 0 && next >= count -> 0.0
+                    prev < 0 -> pts[next * 3 + 2]
+                    next >= count -> pts[prev * 3 + 2]
+                    else -> {
+                        val d0 = along(pts, prev, j)
+                        val d1 = along(pts, j, next)
+                        val z0 = pts[prev * 3 + 2]
+                        val z1 = pts[next * 3 + 2]
+                        if (d0 + d1 < 1e-9) (z0 + z1) / 2 else z0 + (z1 - z0) * d0 / (d0 + d1)
+                    }
+                }
+            }
+            i = next
+        }
+    }
+
+    /** Horizontal length of the polyline from point [a] to point [b] (a <= b). */
+    private fun along(pts: DoubleArray, a: Int, b: Int): Double {
+        var d = 0.0
+        for (k in a until b) d += hypot(pts[k * 3 + 3] - pts[k * 3], pts[k * 3 + 4] - pts[k * 3 + 1])
+        return d
     }
 
     fun featureForWay(way: WaySnapshot, anchor: Anchor): ViewerFeature? {
         val n = way.nodes.size
         var pts = DoubleArray(n * 3)
         var nodeIds = LongArray(n)
+        val known = BooleanArray(n)
+        var allKnown = true
         var k = 0
         for (node in way.nodes) {
             val lat = node.lat ?: continue
@@ -24,11 +69,18 @@ object Viewer3dFeatures {
             val (x, y) = Viewer3dEnu.enu(lat, lon, anchor.lat, anchor.lon)
             pts[k * 3] = Viewer3dEnu.roundCoord(x)
             pts[k * 3 + 1] = Viewer3dEnu.roundCoord(y)
-            pts[k * 3 + 2] = Viewer3dEnu.roundCoord(nodeEleMetres(node.eleTag))
+            val z = nodeEleMetres(node.eleTag)
+            if (z != null) pts[k * 3 + 2] = Viewer3dEnu.roundCoord(z)
+            known[k] = z != null
+            allKnown = allKnown && z != null
             nodeIds[k] = node.uniqueId
             k++
         }
         if (k < 2) return null
+        if (!allKnown) {
+            fillUnknownHeights(pts, known, k)
+            for (i in 0 until k) if (!known[i]) pts[i * 3 + 2] = Viewer3dEnu.roundCoord(pts[i * 3 + 2])
+        }
         if (k < n) {
             pts = pts.copyOf(k * 3)
             nodeIds = nodeIds.copyOf(k)
@@ -63,15 +115,24 @@ object Viewer3dFeatures {
      */
     fun isTwoWay(oneWay: String?): Boolean = oneWay?.trim() in setOf("no", "false", "0")
 
+    /** ENU points of a bound, unknown heights filled like [featureForWay] draws them. */
     private fun enuPoints(nodes: List<NodeSnapshot>, anchor: Anchor): List<DoubleArray> {
-        val out = ArrayList<DoubleArray>(nodes.size)
+        val flat = DoubleArray(nodes.size * 3)
+        val known = BooleanArray(nodes.size)
+        var k = 0
         for (n in nodes) {
             val lat = n.lat ?: continue
             val lon = n.lon ?: continue
             val (x, y) = Viewer3dEnu.enu(lat, lon, anchor.lat, anchor.lon)
-            out.add(doubleArrayOf(x, y, nodeEleMetres(n.eleTag)))
+            val z = nodeEleMetres(n.eleTag)
+            flat[k * 3] = x
+            flat[k * 3 + 1] = y
+            flat[k * 3 + 2] = z ?: 0.0
+            known[k] = z != null
+            k++
         }
-        return out
+        if (known.take(k).any { !it }) fillUnknownHeights(flat, known, k)
+        return List(k) { i -> doubleArrayOf(flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2]) }
     }
 
     /**

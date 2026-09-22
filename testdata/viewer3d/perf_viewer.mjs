@@ -25,6 +25,41 @@ const attr = (s, k) => {
   return m ? m[1] : null;
 };
 
+// HeightTools.parseEle: absent, not a number or beyond 100 km is no height
+// (some tools write -FLT_MAX for "unknown").
+const parseEle = (v) => {
+  const z = Number(v);
+  return v !== null && v.trim() !== "" && Number.isFinite(z) && Math.abs(z) <= 100000 ? z : null;
+};
+
+// Viewer3dFeatures.fillUnknownHeights: unknown heights of a line are
+// interpolated by distance between known ones, copied at the ends, else 0.
+function fillUnknownHeights(p, known) {
+  const n = known.length;
+  const along = (a, b) => {
+    let d = 0;
+    for (let k = a; k < b; k++) d += Math.hypot(p[k * 3 + 3] - p[k * 3], p[k * 3 + 4] - p[k * 3 + 1]);
+    return d;
+  };
+  let prev = -1;
+  for (let i = 0; i < n;) {
+    if (known[i]) { prev = i++; continue; }
+    let next = i;
+    while (next < n && !known[next]) next++;
+    for (let j = i; j < next; j++) {
+      if (prev < 0 && next >= n) p[j * 3 + 2] = 0;
+      else if (prev < 0) p[j * 3 + 2] = p[next * 3 + 2];
+      else if (next >= n) p[j * 3 + 2] = p[prev * 3 + 2];
+      else {
+        const d0 = along(prev, j), d1 = along(j, next);
+        const z0 = p[prev * 3 + 2], z1 = p[next * 3 + 2];
+        p[j * 3 + 2] = Math.round((d0 + d1 < 1e-9 ? (z0 + z1) / 2 : z0 + ((z1 - z0) * d0) / (d0 + d1)) * 1000) / 1000;
+      }
+    }
+    i = next;
+  }
+}
+
 async function readOsm(path) {
   const nodes = new Map(); // id -> [lat, lon, ele]
   const ways = [];
@@ -35,7 +70,7 @@ async function readOsm(path) {
   for await (const raw of rl) {
     const s = raw.trim();
     if (s.startsWith("<node")) {
-      cur = [Number(attr(s, "lat")), Number(attr(s, "lon")), 0];
+      cur = [Number(attr(s, "lat")), Number(attr(s, "lon")), null];
       curKind = "node";
       nodes.set(Number(attr(s, "id")), cur);
       if (s.endsWith("/>")) curKind = null;
@@ -55,7 +90,7 @@ async function readOsm(path) {
     } else if (s.startsWith("<tag")) {
       const k = attr(s, "k");
       const v = attr(s, "v");
-      if (curKind === "node" && k === "ele") cur[2] = Number(v) || 0;
+      if (curKind === "node" && k === "ele") cur[2] = parseEle(v);
       else if (curKind === "way" || curKind === "rel") cur.tags[k] = v;
     } else if (s.startsWith("</")) {
       curKind = null;
@@ -84,13 +119,16 @@ let nPts = 0;
 for (const w of ways) {
   const points = [];
   const nds = [];
+  const known = [];
   for (const id of w.nds) {
     const n = nodes.get(id);
     if (!n) continue;
-    points.push(r3(rad(n[1] - lon0) * cos0 * R), r3(rad(n[0] - lat0) * R), r3(n[2]));
+    points.push(r3(rad(n[1] - lon0) * cos0 * R), r3(rad(n[0] - lat0) * R), n[2] === null ? 0 : r3(n[2]));
+    known.push(n[2] !== null);
     nds.push(id);
   }
   if (nds.length < 2) continue;
+  if (known.includes(false)) fillUnknownHeights(points, known);
   const tags = {};
   for (const k of ["type", "subtype", "participant:bicycle"]) if (w.tags[k] !== undefined) tags[k] = w.tags[k];
   features.push({ id: `way/${w.id}`, kind: "line", tags, pts: points, nodes: nds });
@@ -119,6 +157,16 @@ console.log(`map: ${features.length - nLanelets} ways, ${nLanelets} lanelets, ${
   ` (read+convert ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 
 const v = await openViewer({ shotsDir, query: "profile=1" });
+// Cost of one click / hover pick, averaged over a grid of screen spots.
+const pickCost = () => v.evaluate(`(() => {
+  const spots = [];
+  for (let i = 0; i < 20; i++) for (let j = 0; j < 10; j++) spots.push([40 + i * 60, 40 + j * 64]);
+  let hits = 0;
+  const t0 = performance.now();
+  for (const [x, y] of spots) if (window.__ll2test.pick(x, y)) hits++;
+  const ms = (performance.now() - t0) / spots.length;
+  return "pick " + ms.toFixed(2) + " ms (" + hits + "/" + spots.length + " hit)";
+})()`);
 try {
   console.log(`renderer: ${await v.evaluate("(() => { const gl = document.createElement('canvas').getContext('webgl2'); const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()")}`);
   const tSend = Date.now();
@@ -136,6 +184,7 @@ try {
     const stats = await v.evaluate("window.__ll2test.stats ? { ...window.__ll2test.stats(), lanelets: window.__ll2test.lanelets ? window.__ll2test.lanelets() : null } : null");
     console.log(`${label}: ${JSON.stringify(stats)} | ${await v.hud("render")}`);
     await v.shot(`perf_${key}.png`);
+    console.log(`${label}: ${await pickCost()}`);
   }
   // Street level: from the top-down view, wheel in on the middle of the
   // screen to ~60 m, then tilt to an oblique view (the editing situation).
@@ -147,6 +196,7 @@ try {
   console.log(`street level (${cam.pos[2].toFixed(0)} m up, pitch ${(cam.pitch * 180 / Math.PI).toFixed(0)}°): ` +
     `${stats.drawCalls} draws | ${await v.hud("render")}`);
   await v.shot("perf_street.png");
+  console.log(`street level: ${await pickCost()}`);
   await v.key("l");
   await sleep(2500);
   console.log(`street level, lanelets hidden: ${(await v.evaluate("window.__ll2test.stats()")).drawCalls} draws | ${await v.hud("render")}`);

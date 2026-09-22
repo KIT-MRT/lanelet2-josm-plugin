@@ -17,10 +17,20 @@ import kotlin.math.round
  */
 object HeightTools {
     const val ELE_KEY = "ele"
+
+    /**
+     * Heights beyond this (metres, either sign) are no heights. Some tools
+     * write -FLT_MAX (`-340282349999999991754788743781432688640`) for "unknown".
+     */
+    const val MAX_ABS_ELE_M = 100_000.0
     private const val EPS_M = 0.0005
     private const val M_PER_DEG_LAT = 111_320.0
 
-    fun eleOf(n: Node): Double? = n.get(ELE_KEY)?.trim()?.toDoubleOrNull()
+    fun eleOf(n: Node): Double? = parseEle(n.get(ELE_KEY))
+
+    /** An `ele` value in metres, or null when absent, not a number or implausible. */
+    fun parseEle(value: String?): Double? =
+        value?.trim()?.toDoubleOrNull()?.takeIf { it.isFinite() && abs(it) <= MAX_ABS_ELE_M }
 
     /** Millimetres, trailing zeros dropped: `110`, `110.5`, `-2.125`. */
     fun formatEle(z: Double): String {

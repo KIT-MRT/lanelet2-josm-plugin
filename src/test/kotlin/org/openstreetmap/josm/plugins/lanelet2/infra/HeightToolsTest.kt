@@ -159,6 +159,18 @@ class HeightToolsTest {
     }
 
     @Test
+    fun aNoDataSentinelIsNoHeight() {
+        val a = node(0.0, "100")
+        val bad = node(5.0, "-340282349999999991754788743781432688640") // -FLT_MAX from some tools
+        val b = node(10.0, "104")
+        way(a, bad, b)
+        assertNull(HeightTools.eleOf(bad))
+        assertTrue(HeightTools.heightJumps(listOf(bad), 2.0).isEmpty())
+        assertEquals(bad to 102.0, HeightTools.planInterpolation(ds.ways.single(), emptyList()).changes.single()
+            .let { it.first to Math.round(it.second * 100) / 100.0 })
+    }
+
+    @Test
     fun jumpsAboveTheThresholdAreFound() {
         val a = node(0.0, "100")
         val b = node(5.0, "103.5")
