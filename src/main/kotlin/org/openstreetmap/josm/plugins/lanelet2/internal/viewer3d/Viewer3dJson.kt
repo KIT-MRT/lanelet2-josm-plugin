@@ -36,9 +36,11 @@ object Viewer3dJson {
         return sb.toString()
     }
 
-    private fun encodeResult(msg: OutboundMessage.CommandResult): String =
-        "{\"type\":\"command_result\",\"id\":${jsonString(msg.id)},\"ok\":${msg.ok}," +
-            "\"message\":${jsonString(msg.message)}}"
+    private fun encodeResult(msg: OutboundMessage.CommandResult): String {
+        val warning = msg.warning?.let { ",\"warning\":${jsonString(it)}" } ?: ""
+        return "{\"type\":\"command_result\",\"id\":${jsonString(msg.id)},\"ok\":${msg.ok}," +
+            "\"message\":${jsonString(msg.message)}$warning}"
+    }
 
     private fun encodeSnapshot(msg: OutboundMessage.Snapshot): String {
         val sb = StringBuilder(256 + msg.features.sumOf { 64 + it.pts.size * 9 })
@@ -243,6 +245,7 @@ object Viewer3dJson {
         }
         "select" -> InboundOp.Select(strings(o, "ids"))
         "delete_selection" -> InboundOp.DeleteSelection(strings(o, "ids"))
+        "interpolate_height" -> string(o, "way")?.let { InboundOp.InterpolateHeight(it, strings(o, "anchors")) }
         "undo" -> InboundOp.Undo
         "redo" -> InboundOp.Redo
         else -> null

@@ -9,6 +9,7 @@ import org.openstreetmap.josm.plugins.lanelet2.settings.Lanelet2PreferenceSettin
 import org.openstreetmap.josm.plugins.lanelet2.settings.SettingsActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.EditActions
 import org.openstreetmap.josm.plugins.lanelet2.edit.SmoothSplitActions
+import org.openstreetmap.josm.plugins.lanelet2.hooks.AutoHeightHook
 import org.openstreetmap.josm.plugins.lanelet2.hooks.AutotagHook
 import org.openstreetmap.josm.plugins.lanelet2.hooks.HooksActions
 import org.openstreetmap.josm.plugins.lanelet2.hooks.RoutingRefreshHook
@@ -55,6 +56,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             AutotagHook.installIfEnabled()
             AutotagHook.installDeleteOverride()
             AutotagHook.installAnchorProtection()
+            AutoHeightHook.install()
             ZoomFilterHook.installIfEnabled()
             RoutingRefreshHook.install()
             ExampleScript.registerAll()

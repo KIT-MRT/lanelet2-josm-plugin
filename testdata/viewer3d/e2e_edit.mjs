@@ -202,6 +202,44 @@ try {
   await v.key("e");
   t.check("and applied when edit mode turns on", sameSet((await sel()).nodes, ["node/1002"]), JSON.stringify(await sel()));
 
+  // ---- interpolate heights -------------------------------------------------------------
+  await v.key("Escape");
+  const w11 = await v.project([15, 10, Z]);
+  await v.click(w11[0], w11[1]);
+  v.commands.length = 0;
+  v.reply = () => ({ ok: true, message: "Interpolated 1 height(s) along way/11" });
+  await v.key("i");
+  await waitFor(() => v.ops("interpolate_height").length > 0);
+  let ip = v.ops("interpolate_height")[0];
+  t.check("I interpolates along the selected way, between its ends",
+    ip && ip.way === "way/11" && ip.anchors.length === 0, JSON.stringify(ip));
+  t.check("and shows JOSM's answer", await waitFor(async () => {
+    const tt = await toastNow();
+    return tt && tt.text.includes("Interpolated");
+  }));
+  await v.key("Escape");
+  for (const id of [1101, 1103]) { // 1101 was moved earlier: use where it is now
+    const q = await v.project(await node(id));
+    await v.click(q[0], q[1], { modifiers: ["shift"] });
+  }
+  v.commands.length = 0;
+  await v.key("i");
+  await waitFor(() => v.ops("interpolate_height").length > 0);
+  ip = v.ops("interpolate_height")[0];
+  t.check("two selected nodes of one way are the anchors",
+    ip && ip.way === "way/11" && sameSet(ip.anchors, ["node/1101", "node/1103"]), JSON.stringify(ip));
+
+  // A move JOSM accepts with a warning (height jump) shows the warning.
+  v.reply = () => ({ ok: true, message: "ok", warning: "Height jump of 3.5 m between node/1 and node/2 on way/9" });
+  await v.key("t");
+  await v.hold(" ", "Space", 250);
+  await v.key("t");
+  t.check("a warning in JOSM's answer is shown", await waitFor(async () => {
+    const tt = await toastNow();
+    return tt && tt.kind.includes("warn") && tt.text.includes("Height jump");
+  }, 3000), JSON.stringify(await toastNow()));
+  v.reply = () => ({ ok: true, message: "ok" });
+
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {
   await v.close();

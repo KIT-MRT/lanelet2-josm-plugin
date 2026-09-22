@@ -30,13 +30,13 @@ export function onCommandResult(msg) {
   const resolve = pending.get(msg.id);
   if (!resolve) return;
   pending.delete(msg.id);
-  resolve({ ok: !!msg.ok, message: msg.message || "" });
+  resolve({ ok: !!msg.ok, message: msg.message || "", warning: msg.warning || null });
 }
 
 /**
  * POST ops to /command; the server forwards them to every connected JOSM
  * bridge. Resolves to { delivered, error?, result? } where `result` is JOSM's
- * { ok, message } reply (only with `awaitResult`; { timeout: true } if none
+ * { ok, message, warning } reply (only with `awaitResult`; { timeout: true } if none
  * came). `delivered` is 0 when no JOSM is connected.
  */
 export function sendCommand(ops, { awaitResult = false } = {}) {

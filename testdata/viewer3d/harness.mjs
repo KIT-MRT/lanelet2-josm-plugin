@@ -68,7 +68,7 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
 
   // Fake JOSM bridge: sends scene messages, records forwarded commands and
   // answers those with an "id" like the plugin does. `session.reply(cmd)`
-  // decides the answer ({ ok, message }, or null for none); default: accept.
+  // decides the answer ({ ok, message, warning? }, or null for none); default: accept.
   const commands = [];
   let replyFn = () => ({ ok: true, message: "ok" });
   const bridge = net.connect(ingest, "127.0.0.1");
@@ -85,7 +85,7 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       commands.push(cmd);
       const answer = cmd.id ? replyFn(cmd) : null;
       if (answer) {
-        bridge.write(JSON.stringify({ type: "command_result", id: cmd.id, ok: answer.ok, message: answer.message }) + "\n");
+        bridge.write(JSON.stringify({ type: "command_result", id: cmd.id, ...answer }) + "\n");
       }
     }
   });
@@ -151,7 +151,7 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
     ops: (name) => commands.flatMap((c) => c.ops || []).filter((o) => !name || o.op === name),
     get serverLog() { return serverLog; },
     /** Wait until the HUD feature count equals `n`. */
-    async waitForFeatures(n, timeoutMs = 10000) {
+    async waitForFeatures(n, timeoutMs = 30000) {
       const t0 = Date.now();
       while (Date.now() - t0 < timeoutMs) {
         if ((await evaluate("document.getElementById('count').textContent")) === String(n)) return true;

@@ -12,6 +12,8 @@
 //   G / R / H      move, rotate about the vertical, height only
 //   T              keys move the camera or the selection (WASD / Space / C,
 //                  alt+left/right turn); one key hold = one undo step
+//   I              interpolate heights along the selected way (between its ends,
+//                  or between 2+ selected nodes of it)
 //   Del            delete through JOSM's Delete action;  ctrl+Z / ctrl+Y undo / redo
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
@@ -240,6 +242,8 @@ export function commitMoves(orig) {
     if (refused) {
       store.moveNodes(revert);
       toast(`Move not applied: ${refused}`, "error");
+    } else if (info.result && info.result.warning) {
+      toast(info.result.warning, "warn", 8000);
     }
     return info;
   });
@@ -324,9 +328,50 @@ export function undo(redo = false) {
     .then((info) => reportAction(redo ? "Redo" : "Undo", info));
 }
 
-function reportAction(what, info) {
+function reportAction(what, info, successToast = false) {
+  const r = info.result;
   if (!info.delivered) toast(`${what}: JOSM is not connected`, "error");
-  else if (info.result && info.result.ok === false) toast(`${what}: ${info.result.message}`, "warn");
+  else if (r && r.ok === false) toast(`${what}: ${r.message}`, "warn");
+  else if (r && r.warning) toast(r.warning, "warn", 8000);
+  else if (r && successToast) toast(r.message, "info", 2500);
+}
+
+/**
+ * The way to interpolate along and its anchors, from the selection: one way
+ * (plus any of its nodes that are selected), or 2+ nodes that share a way.
+ */
+function interpolationTarget() {
+  let way = null;
+  if (selection.ways.size === 1) {
+    way = selection.ways.values().next().value;
+  } else if (selection.ways.size === 0 && selection.nodes.size >= 2) {
+    const counts = new Map();
+    for (const id of selection.nodes) {
+      const rec = store.node(id);
+      const seen = new Set();
+      for (const { f } of rec ? rec.refs : []) {
+        if (seen.has(f.id)) continue;
+        seen.add(f.id);
+        counts.set(f.id, (counts.get(f.id) || 0) + 1);
+      }
+    }
+    for (const [fid, n] of counts) if (n === selection.nodes.size) way = fid;
+  }
+  if (!way) return null;
+  const f = store.features.get(way);
+  const onWay = f ? Array.from(selection.nodes).filter((id) => f.nodes.includes(id)) : [];
+  return { way, anchors: onWay.map(nodeToken) };
+}
+
+/** Set heights along the selected way linearly between its anchors (JOSM computes). */
+export function interpolateSelection() {
+  const target = interpolationTarget();
+  if (!target) {
+    toast("Interpolate: select one way (optionally with 2+ of its nodes as anchors), or 2+ nodes of one way", "warn", 5000);
+    return;
+  }
+  sendCommand([{ op: "interpolate_height", way: target.way, anchors: target.anchors }], { awaitResult: true })
+    .then((info) => reportAction("Interpolate", info, true));
 }
 
 // --- pointer: click, box, cycle -------------------------------------------------------
@@ -509,6 +554,7 @@ export function handleEditKey(e) {
   if (k === "g" || k === "G") { setTool("translate"); return true; }
   if (k === "r" || k === "R") { setTool("rotate"); return true; }
   if (k === "h" || k === "H") { toggleHeightOnly(); return true; }
+  if (k === "i" || k === "I") { interpolateSelection(); return true; }
   if (k === "t" || k === "T") {
     setKeysMove(edit.keysMove === "camera" ? "selection" : "camera");
     toast(`Keys move the ${edit.keysMove}`, "info", 1500);
@@ -522,6 +568,7 @@ for (const b of document.querySelectorAll("#editBar [data-edit]")) {
     const k = b.getAttribute("data-edit");
     if (k === "translate" || k === "rotate") setTool(k);
     else if (k === "height") toggleHeightOnly();
+    else if (k === "interpolate") interpolateSelection();
     else if (k === "delete") deleteSelection();
     else if (k === "undo") undo(false);
     else if (k === "redo") undo(true);

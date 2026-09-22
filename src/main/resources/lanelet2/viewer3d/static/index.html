@@ -142,6 +142,7 @@
     <button type="button" data-edit="translate" title="Move the selection with the gizmo (G)">Move</button>
     <button type="button" data-edit="rotate" title="Rotate the selection about the vertical through its centre (R)">Rotate</button>
     <button type="button" data-edit="height" title="Height only: the gizmo and keys move straight up/down, lat/lon stay untouched (H)">Height</button>
+    <button type="button" data-edit="interpolate" title="Interpolate heights along the selected way, between its ends or between 2+ selected nodes of it (I)">Interp.</button>
     <span class="sep"></span>
     <button type="button" data-edit="keys" title="What WASD / Space / C / alt+arrows and the pads move: the camera or the selection (one key hold = one undo step). T toggles.">Keys: camera</button>
     <span class="sep"></span>
@@ -193,7 +194,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · T: keys move selection · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
 
   <script type="importmap">
   {

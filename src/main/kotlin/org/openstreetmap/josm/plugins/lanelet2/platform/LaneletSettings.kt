@@ -55,6 +55,9 @@ object LaneletSettings {
     const val KEY_ZOOMFILTER_FILTERS = "zoomfilter.filters"
     const val KEY_COLLECTION_DIALOG = "collection_dialog.enabled"
     const val KEY_EXTRA_TOOLBAR_VISIBLE = "toolbar.extra_visible"
+    const val KEY_AUTOHEIGHT_ENABLED = "autoheight.enabled"
+    const val KEY_HEIGHT_JUMP_WARN_M = "height.jump_warn_m"
+    const val DEFAULT_HEIGHT_JUMP_WARN_M = 2.0
 
     const val ROUTING_AUTO_DEBOUNCE_MS_DEFAULT = 4000
     const val ROUTING_AUTO_DEBOUNCE_MS_MIN = 0
@@ -349,6 +352,23 @@ object LaneletSettings {
     fun setAutotagEnabled(enabled: Boolean) {
         putBoolean(KEY_AUTOTAG_ENABLED, enabled)
         notifyLaneletDefaultUiChanged()
+    }
+
+    /** New nodes take the height of the nearest node that has one. On unless set to "0". */
+    fun isAutoHeightEnabled(default: Boolean = true): Boolean = getBoolean(KEY_AUTOHEIGHT_ENABLED, default)
+
+    fun setAutoHeightEnabled(enabled: Boolean) {
+        putBoolean(KEY_AUTOHEIGHT_ENABLED, enabled)
+    }
+
+    /** Neighbouring nodes differing by more than this many metres raise a warning. */
+    fun getHeightJumpWarnM(default: Double = DEFAULT_HEIGHT_JUMP_WARN_M): Double {
+        val raw = pref().get(prefKey(KEY_HEIGHT_JUMP_WARN_M), null) ?: return default
+        return raw.trim().toDoubleOrNull()?.takeIf { it > 0 } ?: default
+    }
+
+    fun setHeightJumpWarnM(metres: Double) {
+        put(KEY_HEIGHT_JUMP_WARN_M, metres.toString())
     }
 
     fun getAutotagTagsRaw(default: String = ""): String = get(KEY_AUTOTAG_TAGS, default)

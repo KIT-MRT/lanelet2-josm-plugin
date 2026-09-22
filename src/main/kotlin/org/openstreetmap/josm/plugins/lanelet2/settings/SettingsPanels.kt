@@ -2,6 +2,7 @@ package org.openstreetmap.josm.plugins.lanelet2.settings
 
 import org.openstreetmap.josm.plugins.lanelet2.hooks.AutotagSettingsPanel
 import org.openstreetmap.josm.plugins.lanelet2.hooks.ZoomFilterSettingsPanel
+import org.openstreetmap.josm.plugins.lanelet2.infra.HeightTools
 import org.openstreetmap.josm.plugins.lanelet2.platform.Dialogs
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import java.awt.Component
@@ -16,6 +17,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JRadioButton
 import javax.swing.JSpinner
+import javax.swing.JTextField
 import javax.swing.SpinnerNumberModel
 
 /**
@@ -36,6 +38,7 @@ class SettingsForm internal constructor(
     val sections: List<SettingsSection>,
     val editingDefaults: EditingDefaultsControls,
     val editingOptions: EditingOptionsControls,
+    val heights: HeightControls,
     val mergeGrid: MergeGridControls,
     val routing: RoutingControls,
     val autotag: AutotagSettingsPanel?,
@@ -68,6 +71,10 @@ class SettingsForm internal constructor(
                 SettingsSection(EditingOptionsControls.ID, EditingOptionsControls.KEYS, c::save)
             },
             { p ->
+                val c = HeightControls.addTo(p)
+                SettingsSection(HeightControls.ID, HeightControls.KEYS, c::save)
+            },
+            { p ->
                 val c = MergeGridControls.addTo(p)
                 SettingsSection(MergeGridControls.ID, MergeGridControls.KEYS, c::save)
             },
@@ -96,12 +103,14 @@ class SettingsForm internal constructor(
         ): SettingsForm {
             val editingDefaults = EditingDefaultsControls.addTo(content)
             val editingOptions = EditingOptionsControls.addTo(content)
+            val heights = HeightControls.addTo(content)
             val mergeGrid = MergeGridControls.addTo(content)
             MapStylesPresetsControls.addTo(content, dialogParent)
             val routing = RoutingPanel.addControls(content)
             val sections = mutableListOf(
                 SettingsSection(EditingDefaultsControls.ID, EditingDefaultsControls.KEYS, editingDefaults::save),
                 SettingsSection(EditingOptionsControls.ID, EditingOptionsControls.KEYS, editingOptions::save),
+                SettingsSection(HeightControls.ID, HeightControls.KEYS, heights::save),
                 SettingsSection(MergeGridControls.ID, MergeGridControls.KEYS, mergeGrid::save),
                 SettingsSection(MapStylesPresetsControls.ID, MapStylesPresetsControls.KEYS) {},
                 SettingsSection(RoutingControls.ID, RoutingControls.KEYS, routing::save),
@@ -129,6 +138,7 @@ class SettingsForm internal constructor(
                 sections = sections,
                 editingDefaults = editingDefaults,
                 editingOptions = editingOptions,
+                heights = heights,
                 mergeGrid = mergeGrid,
                 routing = routing,
                 autotag = autotag,
@@ -333,6 +343,48 @@ class EditingDefaultsControls internal constructor(
                 radRoad, radBicycle, radCrosswalk, radOther, comboOther,
                 radUrban, radNonurban, radOwYes, radOwNo,
             )
+        }
+    }
+}
+
+/** Node heights: auto-height for new nodes, height-jump warning threshold. */
+class HeightControls internal constructor(
+    val chkAutoHeight: JCheckBox,
+    val jumpField: JTextField,
+) {
+    fun save() {
+        LaneletSettings.setAutoHeightEnabled(chkAutoHeight.isSelected)
+        val m = jumpField.text.trim().replace(',', '.').toDoubleOrNull()
+        if (m != null && m > 0) LaneletSettings.setHeightJumpWarnM(m)
+    }
+
+    companion object {
+        const val ID = "heights"
+        val KEYS = setOf(LaneletSettings.KEY_AUTOHEIGHT_ENABLED, LaneletSettings.KEY_HEIGHT_JUMP_WARN_M)
+
+        fun addTo(content: JPanel): HeightControls {
+            content.add(JLabel(" "))
+            content.add(JLabel("Heights (ele):"))
+            val chkAutoHeight = JCheckBox(
+                "New nodes take the height of the nearest node",
+                LaneletSettings.isAutoHeightEnabled(),
+            )
+            chkAutoHeight.toolTipText =
+                "A node created without ele gets the ele of the closest existing node that has one, " +
+                    "as its own undo step, so new ways do not drop to 0 m in maps with absolute heights."
+            val autoRow = JPanel(FlowLayout(FlowLayout.LEFT))
+            autoRow.add(chkAutoHeight)
+            content.add(autoRow)
+
+            val jumpField = JTextField(HeightTools.formatEle(LaneletSettings.getHeightJumpWarnM()), 5)
+            jumpField.toolTipText =
+                "Warn when new-node heights, height interpolation or a 3D viewer move leave neighbouring " +
+                    "nodes of a way this far apart in height."
+            val jumpRow = JPanel(FlowLayout(FlowLayout.LEFT))
+            jumpRow.add(JLabel("Warn about height jumps between neighbouring nodes above (m):"))
+            jumpRow.add(jumpField)
+            content.add(jumpRow)
+            return HeightControls(chkAutoHeight, jumpField)
         }
     }
 }

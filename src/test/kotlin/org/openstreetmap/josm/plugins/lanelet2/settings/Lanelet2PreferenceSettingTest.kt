@@ -198,6 +198,8 @@ class Lanelet2PreferenceSettingTest {
             LaneletSettings.KEY_DELETE_TAGGED_NODES,
             LaneletSettings.KEY_PROTECT_MERGE_ANCHORS,
             LaneletSettings.KEY_COLLECTION_DIALOG,
+            LaneletSettings.KEY_AUTOHEIGHT_ENABLED,
+            LaneletSettings.KEY_HEIGHT_JUMP_WARN_M,
             LaneletSettings.KEY_MERGE_GRID_CELL_M,
             LaneletSettings.KEY_ROUTING_DEFAULT_PARTICIPANT,
             LaneletSettings.KEY_ROUTING_AUTO_DEBOUNCE_MS,

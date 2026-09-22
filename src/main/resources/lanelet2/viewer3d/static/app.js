@@ -36,9 +36,10 @@ installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 
 // Only auto-frame the first time data appears; later snapshots (e.g. live
-// edits streamed from JOSM) must not yank the camera the user has set.
-let needFrame = false;
-store.on("snapshot", ({ wasEmpty }) => { if (wasEmpty) needFrame = true; });
+// edits streamed from JOSM) must not yank the camera the user has set. Framed
+// right away rather than on the next frame, so a view chosen in between (B)
+// is not overridden.
+store.on("snapshot", ({ wasEmpty }) => { if (wasEmpty) frameAll(); });
 store.on("applied", (msg) => { if (msg.type === "command_result") onCommandResult(msg); });
 
 connect((msg, meta) => {
@@ -66,7 +67,6 @@ function tick() {
   lastTick = tNow;
   applyHeldCamera(dt);
   maybeSyncJosmView();
-  if (needFrame) { frameAll(); needFrame = false; }
   lineLayer.update();
   updateHighlight();
   iconLayer.update(camera);

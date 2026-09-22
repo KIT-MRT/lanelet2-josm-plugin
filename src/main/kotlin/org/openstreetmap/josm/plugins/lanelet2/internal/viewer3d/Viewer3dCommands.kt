@@ -9,9 +9,12 @@ import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
 import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType
+import org.openstreetmap.josm.data.osm.Way
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.edit.applySequence
+import org.openstreetmap.josm.plugins.lanelet2.infra.HeightTools
+import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
 import java.awt.event.ActionEvent
 
 /**
@@ -170,6 +173,9 @@ object Viewer3dCommands {
      * Data ops (`move_node`, `set_tag`) go into **one** SequenceCommand, so one
      * gesture is one Ctrl+Z; if any of their targets is gone, none is applied.
      * `select` / `delete_selection` / `undo` / `redo` go through [actions].
+     * `interpolate_height` sets `ele` along a way. A change that leaves
+     * neighbouring nodes more than [jumpWarnM] apart in height is applied but
+     * the reply carries a warning.
      *
      * Returns the reply for a command that carries an id (null otherwise).
      */
@@ -180,6 +186,7 @@ object Viewer3dCommands {
         driveView: Boolean,
         setView: (InboundOp.SetView, Anchor) -> Unit,
         actions: EditorActions = JosmEditorActions,
+        jumpWarnM: Double = LaneletSettings.getHeightJumpWarnM(),
     ): OutboundMessage.CommandResult? {
         if (anchor != null) {
             for (op in command.ops) {
@@ -188,8 +195,10 @@ object Viewer3dCommands {
         }
         val edits = command.ops.filter { it !is InboundOp.SetView }
         if (edits.isEmpty()) return null
-        fun reply(ok: Boolean, message: String) =
-            command.id?.let { OutboundMessage.CommandResult(it, ok, message) }
+        fun reply(ok: Boolean, message: String, warning: String? = null) =
+            command.id?.let { OutboundMessage.CommandResult(it, ok, message, warning) }
+        fun jumpWarning(nodes: Collection<Node>) =
+            HeightTools.describeJumps(HeightTools.heightJumps(nodes, jumpWarnM), jumpWarnM)
 
         // Undo / redo act on JOSM's global stack, like its own Ctrl+Z.
         if (edits.all { it is InboundOp.Undo || it is InboundOp.Redo }) {
@@ -220,11 +229,30 @@ object Viewer3dCommands {
             return if (refused == null) reply(true, "Delete sent to JOSM") else reply(false, refused)
         }
 
+        val interpolate = edits.filterIsInstance<InboundOp.InterpolateHeight>().lastOrNull()
+        if (interpolate != null) {
+            val way = lookup(ds, interpolate.way) as? Way
+            if (way == null || way.isDeleted) return reply(false, describeMissing(listOf(interpolate.way)))
+            val (anchors, missing) = resolve(ds, interpolate.anchors)
+            if (missing.isNotEmpty()) return reply(false, describeMissing(missing))
+            val hp = HeightTools.planInterpolation(way, anchors.filterIsInstance<Node>())
+            hp.error?.let { return reply(false, "Cannot interpolate: $it") }
+            if (hp.changes.isEmpty()) return reply(true, "Heights along ${interpolate.way} are already linear")
+            target.commit(hp.changes.map { (n, z) -> ChangePropertyCommand(n, HeightTools.ELE_KEY, HeightTools.formatEle(z)) })
+            return reply(
+                true,
+                "Interpolated ${hp.changes.size} height(s) along ${interpolate.way}",
+                jumpWarning(hp.changes.map { it.first }),
+            )
+        }
+
         val a = anchor ?: return reply(false, "The viewer is not synced with JOSM yet")
         val plan = planDataCommands(edits, ds, a)
         if (plan.missing.isNotEmpty()) return reply(false, describeMissing(plan.missing))
         if (plan.commands.isEmpty()) return reply(false, "Nothing to apply")
         target.commit(plan.commands)
-        return reply(true, "Applied ${plan.commands.size} change(s)")
+        val lifted = edits.filterIsInstance<InboundOp.MoveNode>().filter { it.z != null }
+            .mapNotNull { lookup(ds, it.id) as? Node }
+        return reply(true, "Applied ${plan.commands.size} change(s)", jumpWarning(lifted))
     }
 }

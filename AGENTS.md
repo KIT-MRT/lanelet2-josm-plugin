@@ -217,6 +217,22 @@ Ported in `hooks/`. Quirks to keep:
   hides. Preference `toolbar.extra_visible` defaults on. Closing the last
   layer unwraps the extra rows but must leave that toggle in place.
 
+### Auto-height (new, not a Jython port)
+
+- `hooks/AutoHeightHook`: a node created without `ele` (`isNew`) takes the
+  `ele` of the nearest node that has one (`HeightTools.nearestWithEle`,
+  spatial index, 5 m growing to 500 m). Same shape as autotag: collect in
+  `primitivesAdded`, flush after 300 ms as **one SequenceCommand of its own**
+  ("Set heights of new nodes"), so it is a separate undo step after the draw.
+- **On by default** (`autoheight.enabled`, read through
+  `LaneletSettings.getBoolean`, so `"true"`/`"yes"` count, unlike the
+  Jython-era `"1"`-only keys). Installed once per session and never torn down;
+  the setting is read per event.
+- `height.jump_warn_m` (default 2 m): auto-height, the viewer's
+  `interpolate_height` and 3D moves warn when neighbouring nodes of a way end
+  up further apart in height (a JOSM notification, or `warning` in the
+  viewer's `command_result`). Absolute Δz, not slope.
+
 ## Action metadata lives in three registries, not one
 
 Metadata parity is checked mechanically against the Jython registries, but they

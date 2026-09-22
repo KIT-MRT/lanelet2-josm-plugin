@@ -181,6 +181,44 @@ class Viewer3dEditOpsTest {
     }
 
     @Test
+    fun interpolateHeightAlongAWay() {
+        val mid = Node(LatLon(49.00005, 8.40005)).also { ds.addPrimitive(it) }
+        noEle.put("ele", "112.5")
+        val w = Way().also {
+            it.setNodes(listOf(withEle, mid, noEle))
+            ds.addPrimitive(it)
+        }
+        val r = apply(command("""{"type":"command","id":"i","ops":[{"op":"interpolate_height","way":"way/${w.uniqueId}"}]}"""))!!
+        assertTrue(r.ok, r.message)
+        assertEquals(111.5, mid.get("ele")!!.toDouble(), 0.01) // halfway between 110.5 and 112.5
+        assertNull(r.warning)
+    }
+
+    @Test
+    fun interpolateNeedsAnchorHeights() {
+        val w = Way().also {
+            it.setNodes(listOf(noEle, Node(LatLon(49.0002, 8.4)).also { n -> ds.addPrimitive(n) }, withEle))
+            ds.addPrimitive(it)
+        }
+        val r = apply(command("""{"type":"command","id":"i","ops":[{"op":"interpolate_height","way":"way/${w.uniqueId}"}]}"""))!!
+        assertFalse(r.ok)
+        assertTrue(r.message.contains("no ele"), r.message)
+    }
+
+    @Test
+    fun aHeightJumpFromAMoveIsWarnedAbout() {
+        noEle.put("ele", "110.5")
+        Way().also {
+            it.setNodes(listOf(withEle, noEle))
+            ds.addPrimitive(it)
+        }
+        val r = apply(command("""{"type":"command","id":"m","ops":[{"op":"move_node","id":"node/${noEle.uniqueId}","z":114}]}"""))!!
+        assertTrue(r.ok)
+        assertTrue(r.warning!!.contains("3.5 m"), r.warning)
+        assertTrue(Viewer3dJson.encode(r).contains("\"warning\":"))
+    }
+
+    @Test
     fun resultEncodes() {
         val json = Viewer3dJson.encode(OutboundMessage.CommandResult("c1", false, "No \"layer\""))
         assertEquals("""{"type":"command_result","id":"c1","ok":false,"message":"No \"layer\""}""", json)

@@ -93,8 +93,16 @@ sealed class OutboundMessage {
         val truncated: Boolean = false,
     ) : OutboundMessage()
 
-    /** JOSM's answer to one browser command, matched by the command's [id]. */
-    data class CommandResult(val id: String, val ok: Boolean, val message: String) : OutboundMessage()
+    /**
+     * JOSM's answer to one browser command, matched by the command's [id].
+     * [warning]: applied, but worth a look (e.g. a height jump it introduced).
+     */
+    data class CommandResult(
+        val id: String,
+        val ok: Boolean,
+        val message: String,
+        val warning: String? = null,
+    ) : OutboundMessage()
 }
 
 /** Parsed browser → JOSM command (before JOSM Command construction). */
@@ -120,6 +128,12 @@ sealed class InboundOp {
 
     /** Select [ids] and run JOSM's own Delete action on them (with its warnings). */
     data class DeleteSelection(val ids: List<String>) : InboundOp()
+
+    /**
+     * Interpolate `ele` along [way] between [anchors] (two or more of its
+     * nodes), or between its two ends when fewer are given.
+     */
+    data class InterpolateHeight(val way: String, val anchors: List<String>) : InboundOp()
 
     data object Undo : InboundOp()
 

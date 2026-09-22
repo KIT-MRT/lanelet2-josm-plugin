@@ -68,11 +68,11 @@ by capturing the mouse and disabling edit mode.
 
 ## 4. Height tools
 
-- [ ] Interpolate height along a linestring (between its ends, or between the
+- [x] Interpolate height along a linestring (between its ends, or between the
       selected anchor nodes). Pure Kotlin with tests, exposed in the viewer.
-- [ ] New nodes take the height of the nearest existing node (JOSM hook,
+- [x] New nodes take the height of the nearest existing node (JOSM hook,
       **on by default**, setting to disable).
-- [ ] Height-jump warning after auto-height / interpolation / 3D moves when
+- [x] Height-jump warning after auto-height / interpolation / 3D moves when
       neighbouring nodes differ by more than a threshold (default 2 m,
       configurable); offers to select the offending nodes.
 
@@ -125,6 +125,11 @@ by capturing the mouse and disabling edit mode.
 
 (Larger ideas that are not scheduled yet. Small obvious fixes are done directly.)
 
+- Height-jump warnings compare absolute height differences between
+  neighbouring nodes (as asked). A slope-based check (Δz over horizontal
+  distance) would flag steep short steps without nagging on long gentle ones.
+- Auto-height takes the single nearest node's height. Interpolating from the
+  two ends a new way connects to would suit ways drawn between existing ones.
 - Hover highlight in edit mode (the node / way a click would pick), like
   JOSM's, so there is no guessing before clicking.
 - The rotate gizmo also shows TransformControls' view-axis ring; only its
