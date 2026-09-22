@@ -139,7 +139,8 @@ nearest node's height. An `ele` that is not a number or beyond ±100 km (some
 tools write -3.4e38 for "unknown") counts as no height: the viewer draws such
 a node at the height interpolated along its way. A height jump above 2 m between
 neighbouring nodes after that, an interpolation or a 3D move raises a
-warning.
+warning, which also gives the distance and grade (a 3 m kerb-like step over
+1 m reads differently from 3 m over a 100 m ramp).
 
 ### Needs the `lanelet2` sidecar
 

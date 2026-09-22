@@ -156,9 +156,11 @@ Most impactful for editing heights, in my estimate:
 - [x] **Compact HUD**: the camera / debug rows and the frame-debug panel are
   behind the title ("▸ details", remembered per browser).
 
-- Height-jump warnings compare absolute height differences between
-  neighbouring nodes (as asked). A slope-based check (Δz over horizontal
-  distance) would flag steep short steps without nagging on long gentle ones.
+- [x] Height-jump warnings compare absolute height differences between
+  neighbouring nodes (as asked) and now also say over what distance and at
+  what grade ("3.5 m over 5.0 m (70 % grade)"). A grade-based threshold
+  would flag steep short steps without nagging on long gentle ones; the
+  threshold stays absolute until you want that.
 - [x] Auto-height takes the single nearest node's height. ~~Interpolating from
   the two ends a new way connects to would suit ways drawn between existing
   ones.~~ Done: known heights in two directions along the ways interpolate.

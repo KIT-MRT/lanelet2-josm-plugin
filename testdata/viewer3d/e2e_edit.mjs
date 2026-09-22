@@ -266,7 +266,7 @@ try {
     ip && ip.way === "way/11" && sameSet(ip.anchors, ["node/1101", "node/1103"]), JSON.stringify(ip));
 
   // A move JOSM accepts with a warning (height jump) shows the warning.
-  v.reply = () => ({ ok: true, message: "ok", warning: "Height jump of 3.5 m between node/1 and node/2 on way/9" });
+  v.reply = () => ({ ok: true, message: "ok", warning: "Height jump of 3.5 m over 5.0 m (70 % grade) between node/1 and node/2 on way/9" });
   await v.key("t");
   await v.hold(" ", "Space", 250);
   await v.key("t");

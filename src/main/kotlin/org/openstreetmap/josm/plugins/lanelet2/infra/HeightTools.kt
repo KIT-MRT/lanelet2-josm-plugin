@@ -211,7 +211,8 @@ object HeightTools {
         return out
     }
 
-    data class Jump(val way: Way, val a: Node, val b: Node, val dz: Double)
+    /** [dz] metres of height between neighbours [a] and [b], [runM] metres apart horizontally (null: unknown). */
+    data class Jump(val way: Way, val a: Node, val b: Node, val dz: Double, val runM: Double? = null)
 
     /**
      * Neighbouring nodes on ways through [nodes] whose heights differ by more
@@ -233,19 +234,32 @@ object HeightTools {
                     if (!seen.add(minOf(a.uniqueId, b.uniqueId) to maxOf(a.uniqueId, b.uniqueId))) continue
                     val za = eleOf(a) ?: continue
                     val zb = eleOf(b) ?: continue
-                    if (abs(zb - za) > thresholdM) out.add(Jump(w, a, b, abs(zb - za)))
+                    if (abs(zb - za) > thresholdM) {
+                        val run = a.coor?.let { ca -> b.coor?.let { cb -> ca.greatCircleDistance(cb) } }
+                        out.add(Jump(w, a, b, abs(zb - za), run))
+                    }
                 }
             }
         }
         return out.sortedByDescending { it.dz }
     }
 
-    /** One-line summary for a notification, or null when there are no jumps. */
+    /**
+     * One-line summary for a notification, or null when there are no jumps.
+     * The threshold is absolute; the grade tells a kerb-like step from a
+     * long ramp.
+     */
     fun describeJumps(jumps: List<Jump>, thresholdM: Double): String? {
         if (jumps.isEmpty()) return null
         val j = jumps.first()
         val more = if (jumps.size > 1) " (and ${jumps.size - 1} more)" else ""
-        return "Height jump of ${formatEle(j.dz)} m between node/${j.a.uniqueId} and node/${j.b.uniqueId} " +
+        val over = j.runM?.let { run ->
+            if (run < 0.01) " at one spot" else " over ${formatRun(run)} m (${String.format(Locale.US, "%.0f", 100 * j.dz / run)} % grade)"
+        } ?: ""
+        return "Height jump of ${formatEle(j.dz)} m$over between node/${j.a.uniqueId} and node/${j.b.uniqueId} " +
             "on way/${j.way.uniqueId}$more, above the ${formatEle(thresholdM)} m threshold"
     }
+
+    private fun formatRun(m: Double): String =
+        if (m >= 10) String.format(Locale.US, "%.0f", m) else String.format(Locale.US, "%.1f", m)
 }

@@ -180,7 +180,8 @@ class HeightToolsTest {
         assertEquals(1, jumps.size)
         assertEquals(3.5, jumps.single().dz, 1e-9)
         assertEquals(w, jumps.single().way)
-        assertTrue(HeightTools.describeJumps(jumps, 2.0)!!.contains("3.5 m"))
+        val text = HeightTools.describeJumps(jumps, 2.0)!!
+        assertTrue(text.contains("3.5 m over 5.0 m (70 % grade)"), text)
         assertTrue(HeightTools.heightJumps(listOf(c), 2.0).isEmpty())
     }
 }
