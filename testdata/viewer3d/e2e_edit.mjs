@@ -161,6 +161,9 @@ try {
   await v.key("b");
   await v.key("Escape");
   t.check("Esc clears the selection", (await sel()).nodes.length === 0 && (await sel()).ways.length === 0);
+  // Pan way 11 into open view, clear of the HUD and edit bar on the left.
+  const mid11 = await v.project([10, 10, Z]);
+  await v.drag("middle", mid11[0], mid11[1], 760 - mid11[0], 460 - mid11[1]);
   const b0 = await v.project([-2, 12, Z]);
   const b1 = await v.project([22, 8, Z]);
   await v.drag("left", b0[0], b0[1], b1[0] - b0[0], b1[1] - b0[1], { modifiers: ["ctrl"] });

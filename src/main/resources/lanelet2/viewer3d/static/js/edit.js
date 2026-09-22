@@ -10,10 +10,12 @@
 //   ctrl+drag      box select (shift: add)
 //   middle-click   cycle through everything under the cursor (coincident nodes)
 //   G / R / H      move, rotate about the vertical, height only
+//   T              keys move the camera or the selection (WASD / Space / C,
+//                  alt+left/right turn); one key hold = one undo step
 //   Del            delete through JOSM's Delete action;  ctrl+Z / ctrl+Y undo / redo
 import * as THREE from "three";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
-import { Emitter, round3 } from "./util.js";
+import { Emitter, round3, clamp } from "./util.js";
 import { canvas, scene } from "./scene.js";
 import { camera, view } from "./camera.js";
 import { store, nodeToken } from "./store.js";
@@ -29,7 +31,10 @@ const CLICK_SLOP_PX = 5;
 const MOVE_EPS_M = 0.0005;     // below this a coordinate counts as unchanged
 
 export const editEvents = new Emitter(); // "mode" (on)
-export const edit = { on: false, tool: "translate", heightOnly: false };
+export const edit = { on: false, tool: "translate", heightOnly: false, keysMove: "camera" };
+
+const KEY_MOVE_IDLE_MS = 250;     // a key-driven move is committed this long after the last key
+const KEY_TURN_RAD_S = 0.5;       // alt+left/right turn rate (×3 with shift)
 
 // The gizmo moves this invisible pivot at the selection's centre; the
 // selected nodes follow it.
@@ -75,6 +80,17 @@ export function setTool(tool) {
   refreshGizmo();
 }
 
+/** Whether WASD / Space / C / alt+arrows (and the pads) move the camera or the selection. */
+export function setKeysMove(target) {
+  edit.keysMove = target;
+  refreshGizmo();
+}
+
+/** True when movement keys should move the selection rather than the camera. */
+export function keysMoveSelection() {
+  return edit.on && edit.keysMove === "selection" && !selection.isEmpty() && !drag;
+}
+
 export function toggleHeightOnly() {
   edit.heightOnly = !edit.heightOnly;
   if (edit.heightOnly) edit.tool = "translate";
@@ -98,6 +114,11 @@ function refreshGizmo() {
   }
   for (const b of document.querySelectorAll("#editBar [data-edit]")) {
     const k = b.getAttribute("data-edit");
+    if (k === "keys") {
+      b.textContent = `Keys: ${edit.keysMove}`;
+      b.classList.toggle("on", edit.keysMove === "selection");
+      continue;
+    }
     b.classList.toggle("on", (k === "height" && edit.heightOnly) || (k === edit.tool && !edit.heightOnly));
   }
   refreshEditHud();
@@ -114,7 +135,8 @@ function refreshEditHud() {
   const one = selection.single();
   const what = one ? (one.type === "node" ? nodeToken(one.id) : one.id) : parts.join(", ");
   const tool = edit.heightOnly ? "height only" : edit.tool === "rotate" ? "rotate" : "move";
-  setEditHud(`ON · ${what || "nothing selected"} · ${tool}`);
+  const keys = edit.keysMove === "selection" ? " · keys move selection" : "";
+  setEditHud(`ON · ${what || "nothing selected"} · ${tool}${keys}`);
 }
 
 /** Centre of the nodes a move would act on (mean position). */
@@ -221,6 +243,69 @@ export function commitMoves(orig) {
     }
     return info;
   });
+}
+
+// --- keyboard moves -----------------------------------------------------------------
+// Held keys move / turn the selection like walking the world: right/forward
+// along the camera heading, up/down, turn about the vertical through the
+// selection's centre. Speed follows the camera distance, so close up the
+// selection creeps (precise), far away it travels. The whole hold is one
+// command, sent once no key has moved it for KEY_MOVE_IDLE_MS.
+let keyMove = null; // { orig: Map, cx, cy, ox, oy, oz, yaw, timer }
+
+/**
+ * Apply one frame of held keys. right/forward/up/turn are -1..1 intents,
+ * `fast` is shift. Height-only ignores everything but `up`.
+ */
+export function nudgeSelection({ right = 0, forward = 0, up = 0, turn = 0 }, dt, fast) {
+  if (!keysMoveSelection()) return;
+  if (edit.heightOnly) {
+    right = forward = turn = 0;
+  }
+  if (!right && !forward && !up && !turn) return;
+  if (!keyMove) {
+    const orig = new Map();
+    let cx = 0, cy = 0;
+    for (const id of selection.effectiveNodeIds()) {
+      const rec = store.node(id);
+      if (!rec) continue;
+      orig.set(id, [rec.x, rec.y, rec.z]);
+      cx += rec.x;
+      cy += rec.y;
+    }
+    if (!orig.size) return;
+    keyMove = { orig, cx: cx / orig.size, cy: cy / orig.size, ox: 0, oy: 0, oz: 0, yaw: 0, timer: null };
+  }
+  const km = keyMove;
+  const speed = clamp(0.25 * camera.position.distanceTo(pivot.position), 0.05, 20) * (fast ? 5 : 1);
+  const s = Math.sin(view.yaw), c = Math.cos(view.yaw);
+  // right = (c, s), forward = (-s, c), as camera.walk
+  km.ox += (c * right - s * forward) * speed * dt;
+  km.oy += (s * right + c * forward) * speed * dt;
+  km.oz += up * speed * dt;
+  km.yaw += turn * KEY_TURN_RAD_S * (fast ? 3 : 1) * dt;
+  const cr = Math.cos(km.yaw), sr = Math.sin(km.yaw);
+  const moves = [];
+  for (const [id, p] of km.orig) {
+    let x = p[0], y = p[1];
+    if (km.yaw !== 0) { // unturned moves stay exact (no centre round trip)
+      const dx = x - km.cx, dy = y - km.cy;
+      x = km.cx + cr * dx - sr * dy;
+      y = km.cy + sr * dx + cr * dy;
+    }
+    moves.push({ id, x: x + km.ox, y: y + km.oy, z: p[2] + km.oz });
+  }
+  store.moveNodes(moves);
+  if (km.timer !== null) clearTimeout(km.timer);
+  km.timer = setTimeout(finishKeyMove, KEY_MOVE_IDLE_MS);
+}
+
+function finishKeyMove() {
+  const km = keyMove;
+  keyMove = null;
+  if (!km) return;
+  commitMoves(km.orig);
+  placePivot();
 }
 
 // --- JOSM actions --------------------------------------------------------------------
@@ -424,6 +509,11 @@ export function handleEditKey(e) {
   if (k === "g" || k === "G") { setTool("translate"); return true; }
   if (k === "r" || k === "R") { setTool("rotate"); return true; }
   if (k === "h" || k === "H") { toggleHeightOnly(); return true; }
+  if (k === "t" || k === "T") {
+    setKeysMove(edit.keysMove === "camera" ? "selection" : "camera");
+    toast(`Keys move the ${edit.keysMove}`, "info", 1500);
+    return true;
+  }
   return false;
 }
 
@@ -435,6 +525,7 @@ for (const b of document.querySelectorAll("#editBar [data-edit]")) {
     else if (k === "delete") deleteSelection();
     else if (k === "undo") undo(false);
     else if (k === "redo") undo(true);
+    else if (k === "keys") setKeysMove(edit.keysMove === "camera" ? "selection" : "camera");
   });
 }
 const editBtn = document.getElementById("editBtn");

@@ -15,6 +15,7 @@ export const hud = {
   camPos: el("camPos"),
   camAng: el("camAng"),
   camPivot: el("camPivot"),
+  zoomTarget: el("zoomTarget"),
   josmView: el("josmView"),
   frameDebug: el("frameDebug"),
   perf: el("perf"),
@@ -48,6 +49,12 @@ export function refreshCameraHud(nav) {
   hud.camPos.textContent = fmtVec3(camera.position);
   hud.camAng.textContent =
     `heading ${fmt1(headingDeg())}° pitch ${fmt1((view.pitch * 180) / Math.PI)}° fov ${fmt1(camera.fov)}°`;
+  if (hud.zoomTarget) {
+    const z = nav.zoomTarget;
+    hud.zoomTarget.textContent = z
+      ? `${fmtVec3(z)}, ${fmt1(camera.position.distanceTo(z))} m (point under the cursor)`
+      : "-";
+  }
   if (!hud.camPivot) return;
   const p = nav.lastPivot;
   if (p) {

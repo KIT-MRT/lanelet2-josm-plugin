@@ -114,7 +114,7 @@ if (TEST_HOOKS) {
       return one && one.type === "node" ? nodeToken(one.id) : null;
     },
     selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
-    edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly }),
+    edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove }),
     node: (id) => {
       const rec = store.node(id);
       return rec ? [rec.x, rec.y, rec.z] : null;

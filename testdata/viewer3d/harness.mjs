@@ -198,6 +198,20 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       await cdp("Input.dispatchKeyEvent", { type: "keyUp", key, code: c, modifiers: m });
       await sleep(50);
     },
+    /** Hold keys: keyDown(...) now, keyUp(...) later (DOM key and code). */
+    async keyDown(key, code, modifiers = []) {
+      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key, code, modifiers: mods(modifiers) });
+    },
+    async keyUp(key, code, modifiers = []) {
+      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key, code, modifiers: mods(modifiers) });
+    },
+    /** Hold a key for `ms` (render frames keep running meanwhile). */
+    async hold(key, code, ms, modifiers = []) {
+      await s.keyDown(key, code, modifiers);
+      await sleep(ms);
+      await s.keyUp(key, code, modifiers);
+      await sleep(30);
+    },
     async shot(name) {
       if (!shotsDir) return;
       fs.mkdirSync(shotsDir, { recursive: true });

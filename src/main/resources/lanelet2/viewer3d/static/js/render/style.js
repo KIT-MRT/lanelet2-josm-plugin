@@ -25,6 +25,7 @@ export const VIEWPORT_COLOR = 0x9aa3af; // gray outline of the JOSM viewport on 
 export const EDIT_COLOR = 0x46c46a;
 export const SELECT_COLOR = 0xffd23f;
 export const PIVOT_COLOR = 0x4fc3f7;
+export const ZOOM_COLOR = 0x9dffc0;
 
 const _color = new THREE.Color();
 

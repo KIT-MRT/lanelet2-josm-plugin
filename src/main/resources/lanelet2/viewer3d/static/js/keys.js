@@ -1,12 +1,18 @@
-// Keyboard and on-screen camera controls, plus FPS (captured-mouse) look.
+// Keyboard and on-screen controls, plus FPS (captured-mouse) look.
 //
-// Hold-to-move keys are only recorded here; applyHeldCamera() moves the camera
-// in the render loop, so mouse look under pointer lock cannot starve WASD of
+// Gaming conventions in every mode: WASD / arrows walk, Space / C up / down,
+// Shift fast, alt+left/right turn, alt+up/down up / down. In edit mode with
+// "keys: selection" (T) the same keys and the pads move and turn the selection
+// instead of the camera. FPS mode only adds the captured mouse and turns edit
+// mode off.
+//
+// Hold-to-move keys are only recorded here; applyHeldCamera() acts in the
+// render loop, so mouse look under pointer lock cannot starve WASD of
 // key-repeat events.
 import { canvas } from "./scene.js";
 import { walk, elevate, look } from "./camera.js";
 import { LOOK_RAD_PER_PX, endNav } from "./nav.js";
-import { edit, setEditMode, editEvents, handleEditKey } from "./edit.js";
+import { edit, setEditMode, editEvents, handleEditKey, keysMoveSelection, nudgeSelection } from "./edit.js";
 import { frameAll, bevNorth, defaultBevView } from "./framing.js";
 import { requestJosmRecenter } from "./josmview.js";
 import { setLookHud } from "./hud.js";
@@ -26,34 +32,58 @@ const moveStepM = () => (shiftHeld ? CAM_FAST_STEP_M : CAM_PAN_STEP_M);
 
 export const isPointerLocked = () => document.pointerLockElement === canvas;
 
+/** Held keys as intents: right / forward / up / turn in -1..1. */
+function heldIntents() {
+  let right = 0, forward = 0, up = 0, turn = 0;
+  if (moveKeys.has("KeyW")) forward += 1;
+  if (moveKeys.has("KeyS")) forward -= 1;
+  if (moveKeys.has("KeyA")) right -= 1;
+  if (moveKeys.has("KeyD")) right += 1;
+  if (moveKeys.has("Space")) up += 1;
+  if (moveKeys.has("KeyC")) up -= 1;
+  if (moveKeys.has("ArrowUp")) {
+    if (altHeld) up += 1;
+    else if (!ctrlHeld) forward += 1;
+  }
+  if (moveKeys.has("ArrowDown")) {
+    if (altHeld) up -= 1;
+    else if (!ctrlHeld) forward -= 1;
+  }
+  if (moveKeys.has("ArrowLeft") && !ctrlHeld) {
+    if (altHeld) turn += 1;
+    else right -= 1;
+  }
+  if (moveKeys.has("ArrowRight") && !ctrlHeld) {
+    if (altHeld) turn -= 1;
+    else right += 1;
+  }
+  const len = Math.hypot(right, forward);
+  if (len > 1) {
+    right /= len;
+    forward /= len;
+  }
+  return { right, forward, up: Math.sign(up), turn: Math.sign(turn) };
+}
+
+/** Move the camera or, in "keys: selection", the selection. */
+function applyIntents(intents, dt) {
+  if (keysMoveSelection()) {
+    nudgeSelection(intents, dt, shiftHeld);
+    // Height-only moves the selection vertically only; walking still moves
+    // the camera, so one can go around while adjusting heights.
+    if (!edit.heightOnly) return;
+    intents = { ...intents, up: 0, turn: 0 };
+  }
+  const dist = moveStepM() * (dt / (CAM_HOLD_MS / 1000));
+  if (intents.right || intents.forward) walk(intents.right, intents.forward, dist);
+  if (intents.up) elevate(intents.up, dist);
+  if (intents.turn) look(-intents.turn * (dt / (CAM_HOLD_MS / 1000)) * CAM_ROT_STEP, 0);
+}
+
 /** Per frame: apply held movement keys, scaled to frame time. */
 export function applyHeldCamera(dt) {
   if (!moveKeys.size || dt <= 0) return;
-  let dx = 0, dy = 0, dz = 0;
-  if (moveKeys.has("KeyW")) dy += 1;
-  if (moveKeys.has("KeyS")) dy -= 1;
-  if (moveKeys.has("KeyA")) dx -= 1;
-  if (moveKeys.has("KeyD")) dx += 1;
-  if (moveKeys.has("ArrowUp")) {
-    if (altHeld) dz += 1;
-    else if (!ctrlHeld) dy += 1;
-  }
-  if (moveKeys.has("ArrowDown")) {
-    if (altHeld) dz -= 1;
-    else if (!ctrlHeld) dy -= 1;
-  }
-  if (moveKeys.has("ArrowLeft") && !ctrlHeld && !altHeld) dx -= 1;
-  if (moveKeys.has("ArrowRight") && !ctrlHeld && !altHeld) dx += 1;
-  if (fpsLookEnabled) {
-    if (moveKeys.has("Space")) dz += 1;
-    if (moveKeys.has("KeyC")) dz -= 1;
-  }
-  const dist = moveStepM() * (dt / (CAM_HOLD_MS / 1000));
-  if (dx || dy) {
-    const len = Math.hypot(dx, dy) || 1;
-    walk(dx / len, dy / len, dist);
-  }
-  if (dz) elevate(dz > 0 ? 1 : -1, dist);
+  applyIntents(heldIntents(), dt);
 }
 
 function refreshLookHud() {
@@ -107,17 +137,22 @@ function isTypingTarget(el) {
 }
 
 export function installKeys() {
+  // The pads act on whatever the keys move: one tick is one CAM_HOLD_MS frame.
+  const tick = CAM_HOLD_MS / 1000;
   document.querySelectorAll("#camPan [data-pan]").forEach((btn) => {
     const [dx, dy] = parseVecAttr(btn, "data-pan");
-    bindHoldButton(btn, () => walk(dx, dy, moveStepM()));
+    bindHoldButton(btn, () => applyIntents({ right: dx, forward: dy, up: 0, turn: 0 }, tick));
   });
   document.querySelectorAll("#camRot [data-rot]").forEach((btn) => {
     const [dYaw, dPitch] = parseVecAttr(btn, "data-rot");
-    bindHoldButton(btn, () => look(dYaw * CAM_ROT_STEP, dPitch * CAM_ROT_STEP));
+    bindHoldButton(btn, () => {
+      if (keysMoveSelection()) applyIntents({ right: 0, forward: 0, up: 0, turn: -dYaw }, tick);
+      else look(dYaw * CAM_ROT_STEP, dPitch * CAM_ROT_STEP);
+    });
   });
   document.querySelectorAll("#camElev [data-elev]").forEach((btn) => {
     const dz = Number(btn.getAttribute("data-elev")) || 0;
-    bindHoldButton(btn, () => elevate(dz, moveStepM()));
+    bindHoldButton(btn, () => applyIntents({ right: 0, forward: 0, up: dz, turn: 0 }, tick));
   });
 
   editEvents.on("mode", (on) => { if (on && fpsLookEnabled) setFpsLook(false); });
@@ -148,11 +183,16 @@ export function installKeys() {
   on("defaultBevBtn", () => defaultBevView());
   refreshLookHud();
 
-  document.addEventListener("keydown", (e) => {
-    if (e.code === "AltLeft" || e.code === "AltRight") altHeld = true;
+  // Modifier state comes from every key event, not only from the modifier's
+  // own keydown, which is missed when it was pressed outside the window.
+  const trackModifiers = (e) => {
+    altHeld = e.altKey;
+    ctrlHeld = e.ctrlKey || e.metaKey;
     shiftHeld = e.shiftKey;
-    if (e.code === "ControlLeft" || e.code === "ControlRight"
-        || e.code === "MetaLeft" || e.code === "MetaRight") ctrlHeld = true;
+  };
+
+  document.addEventListener("keydown", (e) => {
+    trackModifiers(e);
     if (isTypingTarget(e.target)) return;
     if (handleEditKey(e)) return;
 
@@ -174,8 +214,7 @@ export function installKeys() {
       moveKeys.add(e.code);
       return;
     }
-    if (fpsLookEnabled && (e.code === "Space" || e.code === "KeyC")
-        && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if ((e.code === "Space" || e.code === "KeyC") && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       moveKeys.add(e.code);
       return;
@@ -193,10 +232,7 @@ export function installKeys() {
   }, true);
 
   document.addEventListener("keyup", (e) => {
-    if (e.code === "AltLeft" || e.code === "AltRight") altHeld = false;
-    shiftHeld = e.shiftKey;
-    if (e.code === "ControlLeft" || e.code === "ControlRight"
-        || e.code === "MetaLeft" || e.code === "MetaRight") ctrlHeld = false;
+    trackModifiers(e);
     moveKeys.delete(e.code);
   }, true);
 

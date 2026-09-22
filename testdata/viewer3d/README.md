@@ -14,6 +14,7 @@ Not part of `./gradlew build`: they need Chrome and a display-less GL
 ```bash
 node testdata/viewer3d/e2e_viewer.mjs                 # camera + picking; Node 22+, no npm install
 node testdata/viewer3d/e2e_edit.mjs                   # selection, moves, JOSM sync, refusals
+node testdata/viewer3d/e2e_controls.mjs               # keys / pads for camera and selection
 node testdata/viewer3d/e2e_viewer.mjs --shots /tmp/v3d  # also save screenshots
 CHROME=/path/to/chrome node testdata/viewer3d/e2e_viewer.mjs
 ```

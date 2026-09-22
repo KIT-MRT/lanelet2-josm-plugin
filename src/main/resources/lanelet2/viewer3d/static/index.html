@@ -133,6 +133,7 @@
     <div class="row">cam pos (ENU m): <span id="camPos">-</span></div>
     <div class="row">cam view: <span id="camAng">-</span></div>
     <div class="row">orbit pivot: <span id="camPivot">-</span></div>
+    <div class="row">zoom target: <span id="zoomTarget">-</span></div>
     <div class="row">josm view: <span id="josmView">idle</span></div>
     <div class="row" id="perfRow" style="display:none">apply: <span id="perf">-</span></div>
     <div class="row" id="renderRow" style="display:none">render: <span id="render">-</span></div>
@@ -140,9 +141,11 @@
   <div id="editBar" hidden>
     <button type="button" data-edit="translate" title="Move the selection with the gizmo (G)">Move</button>
     <button type="button" data-edit="rotate" title="Rotate the selection about the vertical through its centre (R)">Rotate</button>
-    <button type="button" data-edit="height" title="Height only: the gizmo and keys move straight up/down, lat/lon stay untouched (H)">Height only</button>
+    <button type="button" data-edit="height" title="Height only: the gizmo and keys move straight up/down, lat/lon stay untouched (H)">Height</button>
     <span class="sep"></span>
-    <button type="button" data-edit="delete" title="Delete the selection through JOSM's Delete action (Del)">Delete</button>
+    <button type="button" data-edit="keys" title="What WASD / Space / C / alt+arrows and the pads move: the camera or the selection (one key hold = one undo step). T toggles.">Keys: camera</button>
+    <span class="sep"></span>
+    <button type="button" data-edit="delete" title="Delete the selection through JOSM's Delete action (Del)">Del</button>
     <button type="button" data-edit="undo" title="Undo in JOSM (Ctrl+Z)">Undo</button>
     <button type="button" data-edit="redo" title="Redo in JOSM (Ctrl+Shift+Z / Ctrl+Y)">Redo</button>
   </div>
@@ -178,10 +181,10 @@
     <div class="camCol">
       <div class="camLabel">Height</div>
       <div class="camGrid camGridZ" id="camElev">
-        <button type="button" class="camU" data-elev="1" title="Move up (Alt+Arrow Up)">↑</button>
-        <button type="button" class="camD" data-elev="-1" title="Move down (Alt+Arrow Down)">↓</button>
+        <button type="button" class="camU" data-elev="1" title="Move up (Space / Alt+Arrow Up)">↑</button>
+        <button type="button" class="camD" data-elev="-1" title="Move down (C / Alt+Arrow Down)">↓</button>
       </div>
-      <div class="camHint">alt+up/dn</div>
+      <div class="camHint">space / c</div>
     </div>
   </div>
   <div id="toast"></div>
@@ -190,7 +193,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk (shift: 10 m) &nbsp;|&nbsp; alt+up/dn: height &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; E: edit<br/>edit: click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · T: keys move selection · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
 
   <script type="importmap">
   {

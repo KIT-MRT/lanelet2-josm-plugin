@@ -13,13 +13,14 @@ import { now } from "./util.js";
 import { canvas } from "./scene.js";
 import { camera, view, camRefs, orbitCamera, look, pixelsToMetres } from "./camera.js";
 import { pickMapPoint, cursorRay } from "./picking.js";
-import { pivotMarker } from "./render/overlays.js";
+import { pivotMarker, zoomMarker } from "./render/overlays.js";
 
 const NAV_DRAG_THRESHOLD_PX = 3;          // below this a press is a click (selection)
 const ORBIT_RAD_PER_HEIGHT = 2 * Math.PI; // full-height drag = one turn, as OrbitControls
 export const LOOK_RAD_PER_PX = 0.0025;    // right-drag and captured-mouse look
 const WHEEL_STEP = 0.85;                  // distance factor per wheel notch
 const DOLLY_MIN_M = 0.05;
+const ZOOM_MARKER_MS = 700;     // how long the zoom target stays marked after the wheel stops
 const _panRight = new THREE.Vector3();
 const _panUp = new THREE.Vector3();
 const _dolly = new THREE.Vector3();
@@ -33,7 +34,9 @@ export const nav = {
   panDepth: 0,      // view depth of the grabbed point while panning
   lastPivot: null,  // for the HUD
   lastPivotKind: "",
+  zoomTarget: null, // last wheel target (THREE.Vector3) or null over sky
 };
+let zoomMarkerTimer = null;
 
 /** True while a mouse gesture owns the camera. */
 export const navBusy = () => nav.pointerId !== null;
@@ -150,6 +153,13 @@ function onWheel(e, gizmoBusy, pointerLocked) {
     const hit = pickMapPoint(e.clientX, e.clientY);
     wheelPick = { x: e.clientX, y: e.clientY, point: hit ? hit.point : null, pos: new THREE.Vector3() };
   }
+  // Mark the target: the wheel zooms toward the point under the cursor, not
+  // toward the orbit pivot, and without a marker that is easy to misread.
+  nav.zoomTarget = wheelPick.point;
+  zoomMarker.visible = !!wheelPick.point;
+  if (wheelPick.point) zoomMarker.position.copy(wheelPick.point);
+  if (zoomMarkerTimer !== null) clearTimeout(zoomMarkerTimer);
+  zoomMarkerTimer = setTimeout(() => { zoomMarker.visible = false; zoomMarkerTimer = null; }, ZOOM_MARKER_MS);
   if (wheelPick.point) {
     const dist = camera.position.distanceTo(wheelPick.point);
     const next = Math.max(DOLLY_MIN_M, dist * scale);

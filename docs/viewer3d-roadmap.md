@@ -60,11 +60,11 @@ by capturing the mouse and disabling edit mode.
 
 ## 3. Controls
 
-- [ ] Space / C = up / down in every mode (gaming convention); Shift = fast.
-- [ ] Move-target toggle (camera ⇄ selection): WASD / Space / C /
+- [x] Space / C = up / down in every mode (gaming convention); Shift = fast.
+- [x] Move-target toggle (camera ⇄ selection): WASD / Space / C /
       Alt+arrows move and rotate the selection like walking the world.
       One undo step per key hold. UI toggle plus key.
-- [ ] Wheel zoom feedback: marker at the zoom target and a distance readout.
+- [x] Wheel zoom feedback: marker at the zoom target and a distance readout.
 
 ## 4. Height tools
 
