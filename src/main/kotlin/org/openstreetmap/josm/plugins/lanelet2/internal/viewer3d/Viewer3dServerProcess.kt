@@ -14,11 +14,26 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-/** Owns the extracted `server.py` process; probes `GET /healthz` for liveness. */
+/**
+ * Owns the extracted `server.py` process; probes `GET /healthz` for liveness.
+ *
+ * A running server is adopted only when its `/healthz` build id matches
+ * [expectedBuild] (the content hash of the viewer in this jar). A server from
+ * another plugin build keeps its own routes and may serve another extract, so
+ * adopting it would run stale browser code against this plugin.
+ */
 class Viewer3dServerProcess(
     private val python: () -> String? = { locatePython3() },
     private val extract: () -> Viewer3dStore.ExtractPaths = { Viewer3dStore.ensureExtracted() },
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
+    private val expectedBuild: () -> String? = {
+        try {
+            Viewer3dStore.shippedVersion()
+        } catch (e: Exception) {
+            Logging.warn(e)
+            null
+        }
+    },
 ) {
     @Volatile
     private var process: Process? = null
@@ -27,9 +42,19 @@ class Viewer3dServerProcess(
 
     fun isServingUi(host: String, httpPort: Int): Boolean = probeUi(host, httpPort)
 
+    /** True when a server answers and reports the build this jar ships. */
+    fun isCurrentBuild(host: String, httpPort: Int): Boolean {
+        val want = expectedBuild() ?: return true
+        return probeBuild(host, httpPort) == want
+    }
+
     fun statusText(host: String, httpPort: Int): String =
         if (isServingUi(host, httpPort)) {
-            "Running at http://$host:$httpPort/"
+            if (isCurrentBuild(host, httpPort)) {
+                "Running at http://$host:$httpPort/"
+            } else {
+                "Running at http://$host:$httpPort/ from another plugin build; Start restarts it"
+            }
         } else if (isRunning(host, httpPort)) {
             "Responding on http://$host:$httpPort/ but the page is missing (stale extract)"
         } else {
@@ -45,9 +70,11 @@ class Viewer3dServerProcess(
     ): Pair<Boolean, String> {
         val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
         if (isServingUi(h, httpPort)) {
-            return true to "Viewer server is already running."
-        }
-        if (isRunning(h, httpPort)) {
+            if (isCurrentBuild(h, httpPort)) return true to "Viewer server is already running."
+            // Serves a page, but from another plugin build (or one older than
+            // the build handshake): recycle rather than adopt stale code.
+            stop(h, httpPort)
+        } else if (isRunning(h, httpPort)) {
             // A leftover answers /healthz (so the GUI says "running") but
             // cannot serve index.html — usually because extract deleted
             // viewer3d/ from under an older process. Adopt is wrong; recycle.
@@ -290,6 +317,27 @@ class Viewer3dServerProcess(
                 .replace('\u0000', ' ')
         } catch (_: Exception) {
             null
+        }
+
+        private val BUILD_FIELD = Regex("\"build\"\\s*:\\s*\"([^\"]+)\"")
+
+        /** Build id from `/healthz`, or null when absent (older server) or unreachable. */
+        fun probeBuild(host: String, httpPort: Int, timeoutMs: Int = 400): String? {
+            val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
+            for (candidate in listOf(h, "127.0.0.1", "localhost").distinct()) {
+                try {
+                    val conn = URI("http://$candidate:$httpPort/healthz").toURL()
+                        .openConnection() as HttpURLConnection
+                    conn.connectTimeout = timeoutMs
+                    conn.readTimeout = timeoutMs
+                    conn.requestMethod = "GET"
+                    if (conn.responseCode != 200) continue
+                    val body = conn.inputStream.bufferedReader().readText()
+                    return BUILD_FIELD.find(body)?.groupValues?.get(1)
+                } catch (_: Exception) {
+                }
+            }
+            return null
         }
 
         fun probeHealth(host: String, httpPort: Int, timeoutMs: Int = 400): Boolean {

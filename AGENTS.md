@@ -287,9 +287,14 @@ Browser camera and picking (`app.js`):
   listener can see that the press belongs to the gizmo.
 - **Clip planes are fixed** (near 2 cm) behind a logarithmic depth buffer, so
   moving right up to geometry never needs them retuned.
-- **Keep new browser code in `app.js`** unless you also add a `server.py`
-  route. A leftover server that still serves `/` is adopted, and its old
-  whitelist would 404 a new module, which blanks the page.
+- **Browser modules live in `static/js/`**, served by the contained `/js/`
+  route. That is safe only because of the build handshake: `server.py`
+  reports the extracted `.shipped_version` hash in `/healthz`, and
+  `Viewer3dServerProcess.start()` adopts a running server only when that hash
+  matches the jar. A leftover from another build (or from before the
+  handshake) is recycled; adopting it would pair its old routes and files with
+  this plugin. Two JOSMs with different plugin builds on the same port will
+  keep recycling each other's server: give the dev one another port.
 
 ## In-scope `internal/` features
 

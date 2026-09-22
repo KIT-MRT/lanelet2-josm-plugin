@@ -43,6 +43,14 @@ from urllib.parse import unquote, urlparse
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 VIEWER_DIR = Path(__file__).resolve().parent
 
+# Content hash of the shipped viewer, written next to this file by the plugin
+# when it extracts the jar. /healthz reports it, so a JOSM running a different
+# plugin build recycles this process instead of adopting it: an adopted server
+# keeps its own routes and may serve a different extract. None when run from
+# a source tree.
+BUILD_FILE = VIEWER_DIR / ".shipped_version"
+BUILD_ID = None
+
 # Populated in main(). Directory of JOSM MapCSS / preset icons, served at
 # /style_images/<filename>. None if no directory could be found.
 ICONS_DIR = None
@@ -351,10 +359,12 @@ class HttpHandler(BaseHTTPRequestHandler):
             self._serve_static("app.js", "application/javascript; charset=utf-8")
         elif path.startswith("/vendor/"):
             self._serve_vendor(unquote(path[len("/vendor/"):]))
+        elif path.startswith("/js/"):
+            self._serve_module(unquote(path[len("/js/"):]))
         elif path == "/state":
             self._serve_json(HUB.snapshot_message())
         elif path == "/healthz":
-            self._serve_json({"ok": True})
+            self._serve_json({"ok": True, "build": BUILD_ID})
         elif path.startswith("/style_images/"):
             name = unquote(path[len("/style_images/"):])
             self._serve_icon(name)
@@ -416,7 +426,20 @@ class HttpHandler(BaseHTTPRequestHandler):
     def _serve_vendor(self, rel):
         # Version-pinned third-party ES modules (three.js and its controls),
         # shipped so the viewer works without network access.
-        base = (STATIC_DIR / "vendor").resolve()
+        self._serve_contained(STATIC_DIR / "vendor", rel,
+                              "public, max-age=31536000, immutable")
+
+    def _serve_module(self, rel):
+        # The viewer's own ES modules (static/js/). Uncached like app.js so a
+        # restarted server never pairs a new page with old modules.
+        if not rel.endswith(".js"):
+            self.send_error(404, "Not found")
+            return
+        self._serve_contained(STATIC_DIR / "js", rel, "no-store")
+
+    def _serve_contained(self, base_dir, rel, cache_control):
+        """Serve `rel` under `base_dir`, refusing anything that resolves outside."""
+        base = base_dir.resolve()
         try:
             target = (base / rel).resolve()
         except OSError:
@@ -428,14 +451,14 @@ class HttpHandler(BaseHTTPRequestHandler):
         try:
             body = target.read_bytes()
         except OSError:
-            self.send_error(404, "Missing vendor file: %s" % rel)
+            self.send_error(404, "Missing file: %s" % rel)
             return
         ctype = ("application/javascript; charset=utf-8"
                  if target.suffix == ".js" else "application/octet-stream")
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(body)
 
@@ -535,8 +558,12 @@ def main(argv=None):
                              "(auto-detected from the tooling root if omitted)")
     args = parser.parse_args(argv)
 
-    global PROFILE, ICONS_DIR
+    global PROFILE, ICONS_DIR, BUILD_ID
     PROFILE = PROFILE or args.profile
+    try:
+        BUILD_ID = BUILD_FILE.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        BUILD_ID = None
     if PROFILE:
         print("[viewer] profiling ON", flush=True)
 

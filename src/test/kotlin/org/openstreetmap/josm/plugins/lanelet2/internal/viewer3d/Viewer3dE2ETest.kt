@@ -238,6 +238,62 @@ class Viewer3dE2ETest {
         }
     }
 
+    /**
+     * A leftover from another plugin build still serves `/`, so the old
+     * "adopt if the page loads" rule kept it — with its own routes and files.
+     * It must be recycled when its `/healthz` build differs from the jar.
+     */
+    @Test
+    fun startRecyclesAServerFromAnotherBuild(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        Viewer3dStore.extract(root)
+        val viewer = File(root, "viewer3d")
+        val versionFile = File(viewer, Viewer3dResources.VERSION_FILE)
+        val shipped = versionFile.readText().trim()
+        versionFile.writeText("0000other0build")
+        val httpPort = 49075
+        val ingestPort = 49076
+        var stale: Process? = null
+        var managed: Viewer3dServerProcess? = null
+        try {
+            stale = ProcessBuilder(
+                python3,
+                File(viewer, "server.py").absolutePath,
+                "--host", "127.0.0.1",
+                "--http-port", httpPort.toString(),
+                "--ingest-port", ingestPort.toString(),
+                "--icons-dir", File(root, "style_images").absolutePath,
+                "--no-browser",
+            )
+                .directory(viewer)
+                .redirectErrorStream(true)
+                .start()
+            assumeTrue(waitForHealth(httpPort, 5000), "stale server did not become healthy")
+            assertTrue(Viewer3dServerProcess.probeUi("127.0.0.1", httpPort), "leftover should serve the page")
+            assertEquals("0000other0build", Viewer3dServerProcess.probeBuild("127.0.0.1", httpPort))
+
+            managed = Viewer3dServerProcess(
+                python = { python3 },
+                extract = { Viewer3dStore.ensureExtracted(root) },
+                expectedBuild = { shipped },
+            )
+            assertFalse(managed.isCurrentBuild("127.0.0.1", httpPort))
+            val (ok, msg) = managed.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok, msg)
+            assertEquals(shipped, Viewer3dServerProcess.probeBuild("127.0.0.1", httpPort))
+            assertTrue(managed.isCurrentBuild("127.0.0.1", httpPort))
+
+            val (again, againMsg) = managed.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(again && againMsg.contains("already running"), againMsg)
+        } finally {
+            managed?.stop("127.0.0.1", httpPort)
+            stale?.destroyForcibly()
+            stale?.waitFor(2, TimeUnit.SECONDS)
+        }
+    }
+
     private fun waitForHealth(httpPort: Int, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

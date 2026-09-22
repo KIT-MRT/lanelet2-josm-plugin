@@ -20,7 +20,7 @@ by capturing the mouse and disabling edit mode.
 - [x] **Clicking a gizmo handle selects another node** (the "3 m" bug):
       TransformControls clears its axis on pointer-up before the selection
       handler runs, so a click on an arrow is treated as a click on the map.
-- [ ] **Server build handshake.** `/healthz` reports a build id; the plugin
+- [x] **Server build handshake.** `/healthz` reports a build id; the plugin
       recycles a leftover server whose id differs from the jar. Then a generic
       `/js/` module route is safe.
 - [ ] **Split `app.js` into ES modules** (scene, camera/nav, picking, selection,
