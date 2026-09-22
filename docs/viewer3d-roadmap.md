@@ -33,29 +33,29 @@ by capturing the mouse and disabling edit mode.
 - [x] **Incremental JOSM streaming.** Snapshot only dirty ways instead of
       copying every way of the dataset on the EDT per 200 ms cycle.
 - [x] **Incremental node index** in the browser (edit mode rebuilt it per message).
-- [~] **Protocol v2**: flat coordinate arrays and numeric node ids (done;
-      the browser still reads v1), full-precision anchor (was 3 decimals,
-      up to ~50 m off). Open: command ids with an ack/reject reply, inbound
-      parsing with JOSM's bundled jakarta.json.
+- [x] **Protocol v2**: flat coordinate arrays and numeric node ids (the
+      browser still reads v1), full-precision anchor (was 3 decimals, up to
+      ~50 m off), command ids with a `command_result` reply, inbound parsing
+      with JOSM's bundled jakarta.json.
 - [ ] Stream standalone nodes (points not in any way) so they can be edited.
 
 ## 2. Selection and editing core
 
-- [ ] Selection model: nodes and ways; click, Shift+click toggle, Ctrl+drag
+- [x] Selection model: nodes and ways; click, Shift+click toggle, Ctrl+drag
       box, Esc clears. A selected way moves all its nodes.
-- [ ] Middle-click cycles through everything under the cursor (coincident
+- [x] Middle-click cycles through everything under the cursor (coincident
       nodes, overlapping ways), like JOSM.
-- [ ] 3D → JOSM selection sync, and JOSM → 3D sync while in edit mode, so
+- [x] 3D → JOSM selection sync, and JOSM → 3D sync while in edit mode, so
       precise selection can happen in JOSM and the 3D edit in the viewer.
-- [ ] Move the whole selection with the gizmo (centroid); one undo step.
-- [ ] Rotate the selection (about the vertical through its centroid).
-- [ ] Height-only mode toggle: gizmo shows only Z, keyboard moves only up/down.
-- [ ] Delete selection through JOSM's own delete action, so JOSM shows its
+- [x] Move the whole selection with the gizmo (centroid); one undo step.
+- [x] Rotate the selection (about the vertical through its centroid).
+- [x] Height-only mode toggle: gizmo shows only Z, keyboard moves only up/down.
+- [x] Delete selection through JOSM's own delete action, so JOSM shows its
       usual warnings.
-- [ ] Undo / redo from the viewer (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y) → JOSM stack.
-- [ ] Moves send only the changed components: height-only edits keep lat/lon
+- [x] Undo / redo from the viewer (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y) → JOSM stack.
+- [x] Moves send only the changed components: height-only edits keep lat/lon
       untouched; XY-only edits do not add `ele` to nodes without one.
-- [ ] Rejected commands (hidden layer, deleted node) revert the optimistic
+- [x] Rejected commands (hidden layer, deleted node) revert the optimistic
       move in the viewer and say why.
 
 ## 3. Controls
@@ -124,6 +124,13 @@ by capturing the mouse and disabling edit mode.
 ## Backlog: further improvements found along the way
 
 (Larger ideas that are not scheduled yet. Small obvious fixes are done directly.)
+
+- Hover highlight in edit mode (the node / way a click would pick), like
+  JOSM's, so there is no guessing before clicking.
+- The rotate gizmo also shows TransformControls' view-axis ring; only its
+  heading effect is used. A custom single-ring gizmo would be clearer.
+- A pending command's revert assumes no second gesture on the same nodes
+  before JOSM answers (answers take a few ms locally).
 
 - A full snapshot (connect / layer change) still costs ~0.5–1 s on the EDT
   for Karlsruhe without culling: `ds.ways.map { toSnapshot() }` plus

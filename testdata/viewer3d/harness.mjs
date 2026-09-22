@@ -66,8 +66,11 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
     await sleep(100);
   }
 
-  // Fake JOSM bridge: sends scene messages, records forwarded commands.
+  // Fake JOSM bridge: sends scene messages, records forwarded commands and
+  // answers those with an "id" like the plugin does. `session.reply(cmd)`
+  // decides the answer ({ ok, message }, or null for none); default: accept.
   const commands = [];
+  let replyFn = () => ({ ok: true, message: "ok" });
   const bridge = net.connect(ingest, "127.0.0.1");
   await new Promise((r, j) => { bridge.once("connect", r); bridge.once("error", j); });
   let buf = "";
@@ -77,7 +80,13 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
     while ((i = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, i);
       buf = buf.slice(i + 1);
-      if (line.trim()) commands.push(JSON.parse(line));
+      if (!line.trim()) continue;
+      const cmd = JSON.parse(line);
+      commands.push(cmd);
+      const answer = cmd.id ? replyFn(cmd) : null;
+      if (answer) {
+        bridge.write(JSON.stringify({ type: "command_result", id: cmd.id, ok: answer.ok, message: answer.message }) + "\n");
+      }
     }
   });
   const sendScene = (msg) => bridge.write(JSON.stringify(msg) + "\n");
@@ -137,6 +146,9 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
 
   const s = {
     commands, errors, evaluate, cdp, sendScene,
+    set reply(fn) { replyFn = fn; },
+    /** Ops of every command received so far (flattened), optionally by op name. */
+    ops: (name) => commands.flatMap((c) => c.ops || []).filter((o) => !name || o.op === name),
     get serverLog() { return serverLog; },
     /** Wait until the HUD feature count equals `n`. */
     async waitForFeatures(n, timeoutMs = 10000) {

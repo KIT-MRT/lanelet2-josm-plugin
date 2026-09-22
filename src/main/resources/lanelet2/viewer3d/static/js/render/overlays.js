@@ -1,10 +1,10 @@
 // Things drawn over the map: the JOSM viewport rectangle and markers that keep
-// a constant pixel size at any distance (orbit pivot, selected node).
+// a constant pixel size at any distance (the orbit pivot).
 import * as THREE from "three";
 import { store, VIEWPORT_ID } from "../store.js";
 import { overlayRoot } from "../scene.js";
 import { camera, pixelsToMetres } from "../camera.js";
-import { VIEWPORT_COLOR, SELECT_COLOR, PIVOT_COLOR } from "./style.js";
+import { VIEWPORT_COLOR, PIVOT_COLOR } from "./style.js";
 
 // --- JOSM viewport rectangle ------------------------------------------------------
 // A gray closed loop on the floor plane, drawn on top of other geometry so it
@@ -51,9 +51,6 @@ export function screenSphere(color, radiusPx, renderOrder, opacity = 0.9) {
 
 /** Shows what an orbit turns around, for the duration of the drag. */
 export const pivotMarker = screenSphere(PIVOT_COLOR, 5, 1002, 0.85);
-
-/** Handle TransformControls moves for the selected node. */
-export const selectMarker = screenSphere(SELECT_COLOR, 7, 1001);
 
 export function updateScreenSizedMarkers() {
   for (const m of sized) {

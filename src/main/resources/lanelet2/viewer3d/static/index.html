@@ -8,8 +8,12 @@
     :root { color-scheme: dark; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #11151c; }
     #app { position: fixed; inset: 0; }
-    #hud {
+    #leftCol {
       position: fixed; top: 10px; left: 12px; z-index: 10;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+      pointer-events: none;
+    }
+    #hud {
       font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       color: #cdd6e4; background: rgba(20, 26, 36, 0.72);
       padding: 8px 11px; border-radius: 7px; border: 1px solid #2a3340;
@@ -85,10 +89,39 @@
     }
     #camPad .camGridZ .camU { grid-column: 1; grid-row: 1; }
     #camPad .camGridZ .camD { grid-column: 1; grid-row: 2; }
+    #editBar {
+      display: flex; gap: 4px; pointer-events: auto;
+      background: rgba(20, 26, 36, 0.92); border: 1px solid #46c46a; border-radius: 8px;
+      padding: 5px 6px;
+    }
+    #editBar[hidden] { display: none; }
+    #editBar button {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #e8edf5;
+      background: rgba(36, 46, 62, 0.95); border: 1px solid #3d4d63; border-radius: 5px;
+      padding: 6px 9px; cursor: pointer;
+    }
+    #editBar button:hover { background: rgba(52, 68, 90, 0.95); }
+    #editBar button.on { border-color: #ffd23f; color: #ffe38a; }
+    #editBar .sep { width: 1px; background: #3d4d63; margin: 2px 3px; }
+    #toast {
+      position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 12;
+      font: 12px/1.4 ui-monospace, Menlo, monospace; color: #e8edf5;
+      background: rgba(20, 26, 36, 0.95); border: 1px solid #3d4d63; border-radius: 6px;
+      padding: 7px 12px; pointer-events: none; max-width: min(640px, 80vw);
+      opacity: 0; transition: opacity 0.15s;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { border-color: #d8534f; color: #ffb3b0; }
+    #toast.warn { border-color: #ffd23f; color: #ffe38a; }
+    #boxSel {
+      position: fixed; z-index: 9; pointer-events: none; display: none;
+      border: 1px dashed #ffd23f; background: rgba(255, 210, 63, 0.08);
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
+  <div id="leftCol">
   <div id="hud">
     <div><span id="status"></span><b>Lanelet2 3D</b></div>
     <div class="row">conn: <span id="conn">connecting...</span></div>
@@ -104,7 +137,18 @@
     <div class="row" id="perfRow" style="display:none">apply: <span id="perf">-</span></div>
     <div class="row" id="renderRow" style="display:none">render: <span id="render">-</span></div>
   </div>
+  <div id="editBar" hidden>
+    <button type="button" data-edit="translate" title="Move the selection with the gizmo (G)">Move</button>
+    <button type="button" data-edit="rotate" title="Rotate the selection about the vertical through its centre (R)">Rotate</button>
+    <button type="button" data-edit="height" title="Height only: the gizmo and keys move straight up/down, lat/lon stay untouched (H)">Height only</button>
+    <span class="sep"></span>
+    <button type="button" data-edit="delete" title="Delete the selection through JOSM's Delete action (Del)">Delete</button>
+    <button type="button" data-edit="undo" title="Undo in JOSM (Ctrl+Z)">Undo</button>
+    <button type="button" data-edit="redo" title="Redo in JOSM (Ctrl+Shift+Z / Ctrl+Y)">Redo</button>
+  </div>
+  </div>
   <div id="toolbar">
+    <button id="editBtn" type="button" title="Edit mode: select and move nodes / ways (E)">Edit</button>
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
     <button id="fpsBtn" type="button" title="FPS mouse look: click the view to capture the cursor, Esc to release">FPS look</button>
@@ -140,11 +184,13 @@
       <div class="camHint">alt+up/dn</div>
     </div>
   </div>
+  <div id="toast"></div>
+  <div id="boxSel"></div>
   <div id="debugHud">
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn in place) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk (shift: 10 m) &nbsp;|&nbsp; alt+up/dn: height &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; E: edit<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk (shift: 10 m) &nbsp;|&nbsp; alt+up/dn: height &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; E: edit<br/>edit: click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
 
   <script type="importmap">
   {

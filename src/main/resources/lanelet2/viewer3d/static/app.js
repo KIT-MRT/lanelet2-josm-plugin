@@ -19,11 +19,13 @@ import { store, nodeToken } from "./js/store.js";
 import { lineLayer } from "./js/render/lines.js";
 import { iconLayer } from "./js/render/icons.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
+import { updateHighlight } from "./js/render/highlight.js";
+import { selection } from "./js/selection.js";
 import { edit, gizmoBusy } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
-import { connect } from "./js/net.js";
+import { connect, onCommandResult } from "./js/net.js";
 import { frameAll } from "./js/framing.js";
 import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } from "./js/hud.js";
 
@@ -37,6 +39,7 @@ installJosmView({ busy: () => gizmoBusy() || navBusy() });
 // edits streamed from JOSM) must not yank the camera the user has set.
 let needFrame = false;
 store.on("snapshot", ({ wasEmpty }) => { if (wasEmpty) needFrame = true; });
+store.on("applied", (msg) => { if (msg.type === "command_result") onCommandResult(msg); });
 
 connect((msg, meta) => {
   const t0 = PROFILE ? now() : 0;
@@ -65,6 +68,7 @@ function tick() {
   maybeSyncJosmView();
   if (needFrame) { frameAll(); needFrame = false; }
   lineLayer.update();
+  updateHighlight();
   iconLayer.update(camera);
   updateScreenSizedMarkers();
   refreshCameraHud(nav);
@@ -104,7 +108,21 @@ if (TEST_HOOKS) {
     },
     camera: () => ({ pos: camera.position.toArray(), yaw: view.yaw, pitch: view.pitch, fov: camera.fov }),
     pivot: () => ({ point: nav.lastPivot ? nav.lastPivot.toArray() : null, kind: nav.lastPivotKind }),
-    selected: () => (edit.selected === null ? null : nodeToken(edit.selected)),
+    // The one selected node as "node/<id>", else null (older checks use this).
+    selected: () => {
+      const one = selection.single();
+      return one && one.type === "node" ? nodeToken(one.id) : null;
+    },
+    selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
+    edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly }),
+    node: (id) => {
+      const rec = store.node(id);
+      return rec ? [rec.x, rec.y, rec.z] : null;
+    },
+    toast: () => {
+      const el = document.getElementById("toast");
+      return el && el.classList.contains("show") ? { text: el.textContent, kind: el.className } : null;
+    },
     stats: () => ({
       features: store.featureCount(),
       tiles: store.tiles.size,

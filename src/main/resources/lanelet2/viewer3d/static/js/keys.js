@@ -6,7 +6,7 @@
 import { canvas } from "./scene.js";
 import { walk, elevate, look } from "./camera.js";
 import { LOOK_RAD_PER_PX, endNav } from "./nav.js";
-import { edit, setEditMode, editEvents, deselect } from "./edit.js";
+import { edit, setEditMode, editEvents, handleEditKey } from "./edit.js";
 import { frameAll, bevNorth, defaultBevView } from "./framing.js";
 import { requestJosmRecenter } from "./josmview.js";
 import { setLookHud } from "./hud.js";
@@ -154,6 +154,7 @@ export function installKeys() {
     if (e.code === "ControlLeft" || e.code === "ControlRight"
         || e.code === "MetaLeft" || e.code === "MetaRight") ctrlHeld = true;
     if (isTypingTarget(e.target)) return;
+    if (handleEditKey(e)) return;
 
     if ((e.key === "f" || e.key === "F") && !e.repeat) {
       frameAll();
@@ -163,12 +164,8 @@ export function installKeys() {
       bevNorth();
       return;
     }
-    if ((e.key === "e" || e.key === "E") && !e.repeat) {
+    if ((e.key === "e" || e.key === "E") && !e.repeat && !e.ctrlKey && !e.metaKey) {
       setEditMode(!edit.on);
-      return;
-    }
-    if (e.key === "Escape") {
-      deselect();
       return;
     }
     if ((e.code === "KeyW" || e.code === "KeyA" || e.code === "KeyS" || e.code === "KeyD")

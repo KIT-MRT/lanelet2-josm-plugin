@@ -93,6 +93,19 @@ export function reportFrameDebug(label, box, params) {
   ]);
 }
 
+let toastTimer = null;
+
+/** Short message at the top of the view; kind is "info", "warn" or "error". */
+export function toast(text, kind = "info", ms = 4000) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = text;
+  el.className = `show ${kind}`;
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = kind; toastTimer = null; }, ms);
+  if (kind === "error") console.warn("[viewer]", text);
+}
+
 export function setPerfLine(line) {
   if (hud.perf) hud.perf.textContent = line;
 }
