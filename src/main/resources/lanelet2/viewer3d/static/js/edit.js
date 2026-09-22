@@ -28,7 +28,7 @@ import { store, nodeToken } from "./store.js";
 import { lineLayer } from "./render/lines.js";
 import { setHighlightVisible } from "./render/highlight.js";
 import { selection } from "./selection.js";
-import { pickNode, nodesUnderCursor, featuresUnderCursor, screenProjector, projectToPage } from "./picking.js";
+import { pickItem, nodesUnderCursor, featuresUnderCursor, screenProjector, projectToPage } from "./picking.js";
 import { sendCommand } from "./net.js";
 import { snapHeight, snapToNode, showSnap, hideSnap } from "./snap.js";
 import { setEditHud, toast } from "./hud.js";
@@ -587,25 +587,20 @@ function applyPick(item, add) {
   else selection.set([item]);
 }
 
+/**
+ * What a left click at (x, y) selects, or null. A click on a gizmo handle
+ * keeps the selection rather than selecting whichever node lies near the
+ * arrow; only a click squarely on a node dot counts there.
+ */
+export function clickTarget(x, y, onGizmo) {
+  return onGizmo ? pickItem(x, y, { nodePx: GIZMO_CLICK_NODE_PX, nodeOnly: true }) : pickItem(x, y);
+}
+
 function clickSelect(x, y, add, onGizmo) {
-  if (onGizmo) {
-    // A click on a handle keeps the selection rather than selecting whichever
-    // node lies near the arrow; only a click squarely on a node dot counts.
-    const id = pickNode(x, y, GIZMO_CLICK_NODE_PX);
-    if (id !== null) applyPick({ type: "node", id }, add);
-    return;
-  }
-  const id = pickNode(x, y);
-  if (id !== null) {
-    applyPick({ type: "node", id }, add);
-    return;
-  }
-  const ways = featuresUnderCursor(x, y);
-  if (ways.length) {
-    applyPick({ type: "way", id: ways[0].id }, add);
-    return;
-  }
-  if (!add) {
+  const item = clickTarget(x, y, onGizmo);
+  if (item) {
+    applyPick(item, add);
+  } else if (!add && !onGizmo) {
     cycle = null;
     selection.clear();
   }

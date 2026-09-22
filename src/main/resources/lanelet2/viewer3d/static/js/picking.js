@@ -49,17 +49,25 @@ export function projectToPage(pr, x, y, z) {
 }
 
 // Conservative test: can any point of sphere {x,y,z,r} land within `radiusPx`
-// of the cursor?
+// of the cursor? Angles from the eye: every direction within radiusPx of the
+// cursor lies within alpha of the cursor ray (sin alpha <= radiusPx / f, as
+// the image plane is at distance >= f), the sphere covers the directions
+// within beta = asin(r / distance) of its centre, and the two cones meet only
+// if the angle between their axes is at most alpha + beta. Unlike a
+// screen-space bound this stays tight for big spheres around the camera
+// (street level, where half the tiles reach past the near plane).
 function sphereMayBeNear(s, pr, mx, my, radiusPx) {
   toViewSpace(pr.e, s.x, s.y, s.z, _tmp);
-  const d = _tmp[5];
-  const r = s.r;
-  if (d + r < camera.near) return false; // entirely behind the camera
-  if (d - r <= camera.near) return true; // straddles the near plane: no bound
-  const sx = pr.cx + (pr.f * _tmp[3]) / d;
-  const sy = pr.cy - (pr.f * _tmp[4]) / d;
-  const reachPx = (pr.f * r * (1 + Math.hypot(_tmp[3], _tmp[4]) / d)) / (d - r);
-  return Math.hypot(sx - mx, sy - my) <= radiusPx + reachPx;
+  const vx = _tmp[3], vy = _tmp[4], d = _tmp[5]; // centre in view space, d along the view axis
+  const len = Math.hypot(vx, vy, d);
+  if (len <= s.r) return true; // the camera is inside
+  const ax = (mx - pr.cx) / pr.f;
+  const ay = (pr.cy - my) / pr.f; // cursor ray (ax, ay, 1) in the same frame
+  const cosG = (vx * ax + vy * ay + d) / (len * Math.hypot(ax, ay, 1));
+  const sinA = Math.min(1, radiusPx / pr.f);
+  const sinB = s.r / len;
+  const cosAB = Math.sqrt(1 - sinA * sinA) * Math.sqrt(1 - sinB * sinB) - sinA * sinB; // cos(alpha + beta)
+  return cosG >= cosAB;
 }
 
 /** Line features whose tile and own sphere may come within `radiusPx`. */
@@ -244,4 +252,16 @@ function sortCandidates(list) {
 export function pickNode(clientX, clientY, radiusPx = PICK_RADIUS_PX) {
   const list = nodesUnderCursor(clientX, clientY, radiusPx);
   return list.length ? list[0].id : null;
+}
+
+/**
+ * What a click at the cursor selects: the nearest node within `nodePx`, else
+ * the nearest line, else null. `nodeOnly` looks for a node only.
+ */
+export function pickItem(clientX, clientY, { nodePx = PICK_RADIUS_PX, nodeOnly = false } = {}) {
+  const id = pickNode(clientX, clientY, nodePx);
+  if (id !== null) return { type: "node", id };
+  if (nodeOnly) return null;
+  const ways = featuresUnderCursor(clientX, clientY);
+  return ways.length ? { type: "way", id: ways[0].id } : null;
 }

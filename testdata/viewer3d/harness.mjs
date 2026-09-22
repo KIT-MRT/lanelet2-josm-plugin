@@ -187,6 +187,11 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       await mouse("mouseReleased", x0 + dx, y0 + dy, button, { clickCount: 1, modifiers: m });
       await sleep(50);
     },
+    /** Move the mouse without buttons and let three frames render. */
+    async hover(x, y) {
+      await mouse("mouseMoved", x, y, "none", {});
+      await evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))))");
+    },
     async click(x, y, { button = "left", modifiers = [] } = {}) {
       const m = mods(modifiers);
       await mouse("mouseMoved", x, y, "none", { modifiers: m });

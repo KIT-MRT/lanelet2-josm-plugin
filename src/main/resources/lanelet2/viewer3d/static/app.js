@@ -22,8 +22,9 @@ import { iconLayer } from "./js/render/icons.js";
 import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
 import { updateHighlight } from "./js/render/highlight.js";
+import { updateHover, hoverItem } from "./js/hover.js";
 import { selection } from "./js/selection.js";
-import { edit, gizmoBusy, transform } from "./js/edit.js";
+import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
@@ -81,6 +82,7 @@ function tick() {
   maybeSyncJosmView();
   lineLayer.update();
   laneletLayer.update();
+  updateHover(gizmoBusy() || navBusy() || isPointerLocked());
   updateHighlight();
   iconLayer.update(camera);
   updateScreenSizedMarkers();
@@ -127,6 +129,13 @@ if (TEST_HOOKS) {
       return one && one.type === "node" ? nodeToken(one.id) : null;
     },
     selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
+    // What a left click at page pixel (x, y) would select, as { type, id } or null.
+    pick: (x, y) => clickTarget(x, y, false),
+    // What a click at the pointer would select: "node/<id>", "way/<id>" or null.
+    hover: () => {
+      const h = hoverItem();
+      return h ? (h.type === "node" ? nodeToken(h.id) : h.id) : null;
+    },
     edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove, snap: edit.snap }),
     // The gizmo handle under the pointer (null for none) and the handles it has.
     gizmo: () => ({ axis: transform.axis, dragging: transform.dragging, mode: transform.mode,

@@ -24,6 +24,7 @@ const DEFAULT_COLOR = 0x8899aa;
 export const VIEWPORT_COLOR = 0x9aa3af; // gray outline of the JOSM viewport on the floor
 export const EDIT_COLOR = 0x46c46a;
 export const SELECT_COLOR = 0xffd23f;
+export const HOVER_COLOR = 0x3ff0ff; // what a click at the pointer would select
 export const PIVOT_COLOR = 0x4fc3f7;
 export const ZOOM_COLOR = 0x9dffc0;
 

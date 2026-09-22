@@ -50,10 +50,30 @@ try {
   t.check("scene streamed", await v.waitForFeatures(4));
   await v.key("b");
 
-  // ---- selecting ----------------------------------------------------------------
+  // ---- hover and selecting ------------------------------------------------------
+  const hoverAt = async (pt) => {
+    const q = await v.project(pt);
+    await v.hover(q[0], q[1]);
+    return v.evaluate("window.__ll2test.hover()");
+  };
+  t.check("no hover mark outside edit mode", (await hoverAt([5, 0, Z])) === null);
   await v.key("e");
   t.check("E turns edit mode on", (await editState()).on);
   t.check("edit toolbar shows", await v.evaluate("!document.getElementById('editBar').hidden"));
+  t.check("hovering a segment marks the way a click would select", (await hoverAt([5, 0, Z])) === "way/10");
+  t.check("hovering a node marks the node", (await hoverAt([0, 10, Z])) === "node/1101");
+  await v.shot("edit_hover.png");
+  t.check("hovering empty ground marks nothing", (await hoverAt([5, 5, Z])) === null);
+  await hoverAt([0, 10, Z]);
+  await v.keyDown("w", "KeyW");
+  await sleep(200);
+  const whileMoving = await v.evaluate("window.__ll2test.hover()");
+  await v.keyUp("w", "KeyW");
+  await v.hover(...(await v.project([0, 10, Z])).slice(0, 2));
+  t.check("the mark hides while the camera moves and comes back when it rests",
+    whileMoving === null && (await v.evaluate("window.__ll2test.hover()")) === "node/1101", String(whileMoving));
+  await v.key("b");
+  await hoverAt([5, 0, Z]);
 
   let p = await v.project([5, 0, Z]);
   await v.click(p[0], p[1]);
