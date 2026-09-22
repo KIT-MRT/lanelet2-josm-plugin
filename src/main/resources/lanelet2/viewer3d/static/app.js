@@ -39,6 +39,13 @@ installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
 
+// A clicked button must not keep keyboard focus: Space (up) or Enter would
+// click it again instead of reaching the map.
+document.addEventListener("click", (e) => {
+  const b = e.target && e.target.closest ? e.target.closest("button") : null;
+  if (b) b.blur();
+}, true);
+
 // Only auto-frame the first time data appears; later snapshots (e.g. live
 // edits streamed from JOSM) must not yank the camera the user has set. Framed
 // right away rather than on the next frame, so a view chosen in between (B)

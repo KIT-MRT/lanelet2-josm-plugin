@@ -37,7 +37,8 @@ by capturing the mouse and disabling edit mode.
       browser still reads v1), full-precision anchor (was 3 decimals, up to
       ~50 m off), command ids with a `command_result` reply, inbound parsing
       with JOSM's bundled jakarta.json.
-- [ ] Stream standalone nodes (points not in any way) so they can be edited.
+- [ ] ~~Stream standalone nodes~~ deferred: Karlsruhe has 0 nodes outside
+      ways (lanelet2 keeps points in linestrings). Revisit if a map needs it.
 
 ## 2. Selection and editing core
 

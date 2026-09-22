@@ -102,7 +102,30 @@ opens a Three.js view of the loaded map. It does **not** need the `lanelet2`
 Python package. The browser client vendors [three.js](https://threejs.org/)
 r160 (MIT, Copyright 2010–2023 Three.js Authors) under
 `src/main/resources/lanelet2/viewer3d/static/vendor/` so the viewer works
-offline.
+offline. A whole city (Karlsruhe: 144k ways, 48k lanelets) renders without
+culling.
+
+- **Navigate:** left-drag orbits the point under the cursor (over sky it turns
+  in place), right-drag looks, middle / shift-drag pans, the wheel zooms toward
+  the cursor. WASD / arrows walk, Space / C up and down, alt+←/→ turn, Shift
+  is fast. *FPS look* captures the mouse.
+- **Edit (E):** click selects a node, else a way; shift+click adds; ctrl+drag
+  box-selects; middle-click cycles through overlapping items. The gizmo moves
+  the whole selection (G), rotates it (R) or only changes heights (H). T makes
+  the keys move the selection instead of the camera. I interpolates heights
+  along the selected way. Del, ctrl+Z and ctrl+Y go through JOSM (its delete
+  warnings, its undo stack). Each gesture is one undo step; JOSM refusing it
+  (hidden layer, deleted node) puts it back and says why.
+- **Selection** is shared both ways: select in JOSM, adjust in 3D.
+- **Lanelets (L)** show as surfaces with a direction arrow at 35 % of the
+  lanelet2 centerline, double-headed for `one_way=no`.
+- **Street view:** the viewer's button and the *SV* toolbar button open the
+  selection or the view in Mapillary, Google Street View or Apple Maps.
+
+New nodes created in JOSM without `ele` take the height of the nearest node
+(on by default; settings: *Heights*), and a height jump above 2 m between
+neighbouring nodes after that, an interpolation or a 3D move raises a
+warning.
 
 ### Needs the `lanelet2` sidecar
 

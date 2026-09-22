@@ -285,6 +285,16 @@ this repo so the plugin can ship offline. three.js r160 under
 Offline self-containment is verified by fetching `/`, `/app.js` and all three
 `/vendor/` modules with the server running and no network.
 
+Browser code has its own checks in `testdata/viewer3d/` (headless Chrome over
+CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
+`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, and
+`perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
+for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
+exact state under `?test=1` (`window.__ll2test`); use it, not the HUD text.
+Run them after any change under `static/`. `Viewer3dPerfTest` is the JOSM-side
+counterpart (`LL2_PERF_MAP=... ./gradlew test --tests '*Viewer3dPerfTest*'
+-PtestHeap=6g -i`).
+
 Browser camera and picking (`app.js`):
 
 - **No OrbitControls** (still vendored, no longer imported). Its pivot was
