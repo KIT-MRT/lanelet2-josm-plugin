@@ -142,6 +142,22 @@ try {
     `first node moved ${dist3(afterRot[0], beforeRot[0]).toFixed(3)} m`);
   await waitFor(() => v.ops("move_node").length > 0);
   t.check("a rotation sends x/y only", v.ops("move_node").every((o) => o.z === undefined && o.x !== undefined));
+  // Nothing to grab where TransformControls' view-axis ring (radius 0.75,
+  // facing the camera) would be: it hides it while X/Y are hidden, and a
+  // tilt about the view axis must never reach the selection.
+  {
+    const cam = await v.camera();
+    const pxPerUnit = 0.2226 * (await v.evaluate("window.innerHeight")) / (2 * Math.tan((cam.fov * Math.PI) / 360));
+    const s1 = await v.project(c1);
+    const gizmoAt = (await v.evaluate("window.__ll2test.gizmo()")).at;
+    v.commands.length = 0;
+    await v.drag("left", s1[0] + 0.75 * pxPerUnit, s1[1], 0, -70, { steps: 10 });
+    await sleep(200);
+    const afterE = await Promise.all(moved.map(node));
+    t.check("the rotate gizmo has no view-axis ring",
+      gizmoAt && dist3(gizmoAt, c1) < 1e-6 && afterE.every((q, i) => dist3(q, afterRot[i]) === 0)
+      && v.ops("move_node").length === 0, JSON.stringify(gizmoAt));
+  }
   await v.key("g");
 
   // ---- delete, undo, redo -----------------------------------------------------------

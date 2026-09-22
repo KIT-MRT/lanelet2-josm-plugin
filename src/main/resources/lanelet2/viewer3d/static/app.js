@@ -23,7 +23,7 @@ import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
 import { updateHighlight } from "./js/render/highlight.js";
 import { selection } from "./js/selection.js";
-import { edit, gizmoBusy } from "./js/edit.js";
+import { edit, gizmoBusy, transform } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
@@ -128,6 +128,10 @@ if (TEST_HOOKS) {
     },
     selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
     edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove, snap: edit.snap }),
+    // The gizmo handle under the pointer (null for none) and the handles it has.
+    gizmo: () => ({ axis: transform.axis, dragging: transform.dragging, mode: transform.mode,
+      at: transform.object && transform.visible ? transform.object.position.toArray() : null,
+      handles: transform._gizmo.picker[transform.mode].children.map((c) => c.name) }),
     node: (id) => {
       const rec = store.node(id);
       return rec ? [rec.x, rec.y, rec.z] : null;

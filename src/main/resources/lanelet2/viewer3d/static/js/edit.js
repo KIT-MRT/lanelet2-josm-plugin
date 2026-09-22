@@ -58,6 +58,17 @@ export const gizmoBusy = () => transform.dragging;
 
 const _axis = new THREE.Vector3();
 let pendingJosmSelection = null; // JOSM selection received outside edit mode
+
+// Each gesture stamps its nodes with a generation. A refusal from JOSM
+// reverts only nodes no later gesture has touched since, so a slow answer to
+// an older move cannot undo a newer one.
+let genCounter = 0;
+const nodeGen = new Map();
+function touch(ids) {
+  const g = ++genCounter;
+  for (const id of ids) nodeGen.set(id, g);
+  return g;
+}
 let drag = null;                 // { start, orig: Map<id, [x, y, z]>, moved }
 
 // --- mode, tool, gizmo ----------------------------------------------------------------
@@ -190,7 +201,7 @@ function beginGizmoDrag() {
     if (rec) orig.set(id, [rec.x, rec.y, rec.z]);
   }
   pivot.quaternion.identity();
-  drag = { start: pivot.position.clone(), orig, moved: false, exclude: new Set(orig.keys()) };
+  drag = { start: pivot.position.clone(), orig, moved: false, exclude: new Set(orig.keys()), gen: touch(orig.keys()) };
 }
 
 // Ctrl while dragging inverts the snap toggle (read from the pointer events,
@@ -229,8 +240,8 @@ function onGizmoChange() {
   const moves = [];
   if (transform.mode === "rotate") {
     // Only the heading change counts: how the X axis turned in the ground
-    // plane. The X/Y rings are hidden, but the view-axis ring ("E") is not
-    // and would otherwise tilt the selection out of level.
+    // plane. The Z ring is the only handle: with X/Y hidden, TransformControls
+    // also hides its view-axis ring ("E") and trackball ("XYZE").
     _axis.set(1, 0, 0).applyQuaternion(pivot.quaternion);
     const a = Math.atan2(_axis.y, _axis.x);
     const c = Math.cos(a), s = Math.sin(a);
@@ -256,16 +267,17 @@ function endGizmoDrag() {
   hideSnap();
   pivot.quaternion.identity();
   if (!d || !d.moved) return;
-  commitMoves(d.orig);
+  commitMoves(d.orig, d.gen);
   placePivot();
 }
 
 /**
  * Send the nodes' new positions to JOSM as one command. Only changed
  * components go out: a height-only move carries no x/y (lat/lon stay exact),
- * a level move no z (no `ele` added). Reverts locally if JOSM refuses.
+ * a level move no z (no `ele` added). Reverts locally if JOSM refuses, but
+ * only nodes that no later gesture (generation > `gen`) has touched.
  */
-export function commitMoves(orig) {
+export function commitMoves(orig, gen = touch(orig.keys())) {
   const ops = [];
   const revert = [];
   for (const [id, o] of orig) {
@@ -283,17 +295,24 @@ export function commitMoves(orig) {
     ops.push(op);
     revert.push({ id, x: o[0], y: o[1], z: o[2] });
   }
-  if (!ops.length) return Promise.resolve(null);
+  const settle = () => {
+    for (const id of orig.keys()) if (nodeGen.get(id) === gen) nodeGen.delete(id);
+  };
+  if (!ops.length) {
+    settle();
+    return Promise.resolve(null);
+  }
   return sendCommand(ops, { awaitResult: true }).then((info) => {
     const refused = !info.delivered
       ? (info.error ? `could not reach the viewer server (${info.error})` : "JOSM is not connected")
       : info.result && info.result.ok === false ? info.result.message : null;
     if (refused) {
-      store.moveNodes(revert);
+      store.moveNodes(revert.filter((m) => nodeGen.get(m.id) === gen));
       toast(`Move not applied: ${refused}`, "error");
     } else if (info.result && info.result.warning) {
       toast(info.result.warning, "warn", 8000);
     }
+    settle();
     return info;
   });
 }
@@ -327,7 +346,7 @@ export function nudgeSelection({ right = 0, forward = 0, up = 0, turn = 0 }, dt,
       cy += rec.y;
     }
     if (!orig.size) return;
-    keyMove = { orig, cx: cx / orig.size, cy: cy / orig.size, ox: 0, oy: 0, oz: 0, yaw: 0, timer: null };
+    keyMove = { orig, cx: cx / orig.size, cy: cy / orig.size, ox: 0, oy: 0, oz: 0, yaw: 0, timer: null, gen: touch(orig.keys()) };
   }
   const km = keyMove;
   const speed = clamp(0.25 * camera.position.distanceTo(pivot.position), 0.05, 20) * (fast ? 5 : 1);
@@ -357,7 +376,7 @@ function finishKeyMove() {
   const km = keyMove;
   keyMove = null;
   if (!km) return;
-  commitMoves(km.orig);
+  commitMoves(km.orig, km.gen);
   placePivot();
 }
 

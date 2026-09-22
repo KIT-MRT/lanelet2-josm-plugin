@@ -164,10 +164,12 @@ Most impactful for editing heights, in my estimate:
   two ends a new way connects to would suit ways drawn between existing ones.
 - Hover highlight in edit mode (the node / way a click would pick), like
   JOSM's, so there is no guessing before clicking.
-- The rotate gizmo also shows TransformControls' view-axis ring; only its
-  heading effect is used. A custom single-ring gizmo would be clearer.
-- A pending command's revert assumes no second gesture on the same nodes
-  before JOSM answers (answers take a few ms locally).
+- [x] ~~The rotate gizmo also shows TransformControls' view-axis ring.~~ It
+  does not: TransformControls hides "E" and "XYZE" unless X, Y and Z all
+  show, and rotate shows Z only. A check in e2e_edit guards it.
+- [x] A pending command's revert assumed no second gesture on the same nodes
+  before JOSM answers. Gestures now stamp their nodes with a generation; a
+  refusal reverts only nodes no later gesture touched (e2e_heights).
 
 - A full snapshot (connect / layer change) still costs ~1.5 s on the EDT for
   Karlsruhe without culling (ways 0.15 s + lanelet alignment 0.3 s +

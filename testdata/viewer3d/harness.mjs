@@ -72,7 +72,8 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
 
   // Fake JOSM bridge: sends scene messages, records forwarded commands and
   // answers those with an "id" like the plugin does. `session.reply(cmd)`
-  // decides the answer ({ ok, message, warning? }, or null for none); default: accept.
+  // decides the answer ({ ok, message, warning? }, or null for none, or a
+  // Promise of either); default: accept.
   const commands = [];
   let replyFn = () => ({ ok: true, message: "ok" });
   const bridge = net.connect(ingest, "127.0.0.1");
@@ -87,10 +88,11 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       if (!line.trim()) continue;
       const cmd = JSON.parse(line);
       commands.push(cmd);
-      const answer = cmd.id ? replyFn(cmd) : null;
-      if (answer) {
-        bridge.write(JSON.stringify({ type: "command_result", id: cmd.id, ...answer }) + "\n");
-      }
+      if (!cmd.id) continue;
+      // The answer may be a Promise, to answer late (after a later command).
+      Promise.resolve(replyFn(cmd)).then((answer) => {
+        if (answer) bridge.write(JSON.stringify({ type: "command_result", id: cmd.id, ...answer }) + "\n");
+      });
     }
   });
   const sendScene = (msg) => bridge.write(JSON.stringify(msg) + "\n");

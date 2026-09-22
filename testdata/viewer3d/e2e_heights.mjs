@@ -95,6 +95,27 @@ try {
   await sleep(150);
   t.check("arrow up in the field steps 1 cm", (await node(1002))[2] === 99.01, String((await node(1002))[2]));
 
+  // ---- a late refusal reverts only what no later gesture moved -------------------------
+  let refuseFirst = null;
+  v.reply = (cmd) => {
+    if (!refuseFirst && (cmd.ops || []).some((o) => o.op === "move_node")) {
+      return new Promise((r) => { refuseFirst = () => r({ ok: false, message: "refused for the test" }); });
+    }
+    return { ok: true, message: "ok" };
+  };
+  await select([1001, 1002]);
+  const before1001 = (await node(1001))[2];
+  await typeHeight("=101"); // refused, but only after the next move
+  await select([1002]);
+  await typeHeight("=102");
+  refuseFirst();
+  await sleep(300);
+  t.check("a late refusal reverts the nodes only it moved", (await node(1001))[2] === before1001,
+    `${(await node(1001))[2]} (was ${before1001})`);
+  t.check("... but not a node a later accepted move moved again", (await node(1002))[2] === 102,
+    String((await node(1002))[2]));
+  v.reply = () => ({ ok: true, message: "ok" });
+
   // ---- snap a single node onto another ------------------------------------------------
   await v.key("m");
   t.check("M turns snapping on", (await editState()).snap);
