@@ -93,8 +93,20 @@ by capturing the mouse and disabling edit mode.
 
 ## 7. Performance targets (Karlsruhe, 415k nodes / 144k ways / 48k lanelets)
 
-- [ ] Measure: JOSM snapshot + serialise, transfer, browser parse / build,
+- [~] Measure: JOSM snapshot + serialise, transfer, browser parse / build,
       frame time, edit round trip. Record numbers here.
+
+  Browser, full map, no culling (`testdata/viewer3d/perf_viewer.mjs`,
+  headless Chrome with software GL, so frame times are CPU-bound):
+
+  | | before (e493a7c) | batched tiles (cd0a1f1) |
+  |---|---|---|
+  | draw calls | 182,454 | 851 |
+  | frame time | 2,551–5,626 ms | 35–48 ms |
+  | snapshot sent → all shown | 14.0 s | 3.9 s |
+  | page parse + build | 1.57 s | 0.53 s |
+
+  Snapshot: 143,677 ways, 520,042 points, 35 MB JSON.
 - [ ] Full map viewable without culling at interactive frame rates.
 
 ## Backlog: further improvements found along the way

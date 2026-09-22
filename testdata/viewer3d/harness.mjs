@@ -9,7 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const VIEWER_DIR = path.resolve(HERE, "../../src/main/resources/lanelet2/viewer3d");
+// LL2_VIEWER_DIR points the harness at another viewer tree (e.g. an older
+// commit's, to compare performance).
+export const VIEWER_DIR = process.env.LL2_VIEWER_DIR
+  || path.resolve(HERE, "../../src/main/resources/lanelet2/viewer3d");
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function freePort() {
@@ -48,7 +51,7 @@ export class Checks {
  * Start server + fake bridge + Chrome, load the viewer with `?test=1`.
  * Returns a session with input helpers and `close()`.
  */
-export async function openViewer({ width = 1280, height = 800, shotsDir = null } = {}) {
+export async function openViewer({ width = 1280, height = 800, shotsDir = null, query = "" } = {}) {
   const http = await freePort();
   const ingest = await freePort();
   const cdpPort = await freePort();
@@ -120,7 +123,7 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null }
 
   await cdp("Runtime.enable");
   await cdp("Page.enable");
-  await cdp("Page.navigate", { url: `http://127.0.0.1:${http}/?test=1` });
+  await cdp("Page.navigate", { url: `http://127.0.0.1:${http}/?test=1${query ? "&" + query : ""}` });
   for (let i = 0; i < 100; i++) {
     if (await evaluate("typeof window.__ll2test === 'object'").catch(() => false)) break;
     await sleep(100);

@@ -19,6 +19,14 @@ CHROME=/path/to/chrome node testdata/viewer3d/e2e_viewer.mjs
 
 Exit code 0 means every check passed.
 
+Performance on a real map (streams the whole `.osm` as one snapshot and
+reports load time, draw calls and frame time):
+
+```bash
+node testdata/viewer3d/perf_viewer.mjs ~/lanelet2_maps_autoware/karlsruhe_city/lanelet2_map.osm
+LL2_VIEWER_DIR=/path/to/other/viewer3d node testdata/viewer3d/perf_viewer.mjs map.osm  # compare builds
+```
+
 ## How the checks see the page
 
 The page is opened with `?test=1`, which makes `app.js` expose
