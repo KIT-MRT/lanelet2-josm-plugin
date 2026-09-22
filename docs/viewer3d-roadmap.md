@@ -1,6 +1,7 @@
 # 3D viewer / editor roadmap
 
 Branch: `viewer3d-editor`. Status: `[x]` done, `[~]` in progress, `[ ]` open.
+All scheduled phases are done; what is left is in the backlog at the end.
 Each phase lands as one or more commits; this file is updated with them.
 
 Mouse scheme (decided, same in all modes): left-drag orbits the point under
@@ -140,6 +141,21 @@ by capturing the mouse and disabling edit mode.
 ## Backlog: further improvements found along the way
 
 (Larger ideas that are not scheduled yet. Small obvious fixes are done directly.)
+
+Most impactful for editing heights, in my estimate:
+
+- **Numeric entry**: type an exact height (absolute, or +/- offset) for the
+  selection in the edit bar. Dragging is fast but not precise to the
+  centimetre; survey-grade edits need typed values.
+- **Snapping while moving**: snap a dragged node's height (or position) to
+  the nearest other node / the lanelet surface under it, e.g. to make a
+  curbstone follow the road edge.
+- **Drive JOSM to what the camera looks at**, not to the camera's own XY.
+  With an oblique or orbiting view the culled square follows the camera and
+  can drop the very area being looked at; the point at the centre of the view
+  is the better cull centre.
+- **Compact HUD**: the debug rows (seq, anchor, josm view, frame debug) take
+  a large part of the view; collapse them behind the title.
 
 - Height-jump warnings compare absolute height differences between
   neighbouring nodes (as asked). A slope-based check (Δz over horizontal
