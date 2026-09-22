@@ -150,10 +150,9 @@ Most impactful for editing heights, in my estimate:
 - [x] **Snapping while moving** (M, ctrl inverts during a drag): a vertical
   move sticks to the nearest other node's height (within 10 m) or the lanelet
   surface under the point; a single node sticks onto another node.
-- **Drive JOSM to what the camera looks at**, not to the camera's own XY.
-  With an oblique or orbiting view the culled square follows the camera and
-  can drop the very area being looked at; the point at the centre of the view
-  is the better cull centre.
+- [x] **Drive JOSM to what the camera looks at**, not to the camera's own XY:
+  the view axis meets the local map height (at most 150 m ahead). Turning in
+  place now pans JOSM too (e2e_controls).
 - [x] **Compact HUD**: the camera / debug rows and the frame-debug panel are
   behind the title ("▸ details", remembered per browser).
 
@@ -162,8 +161,25 @@ Most impactful for editing heights, in my estimate:
   distance) would flag steep short steps without nagging on long gentle ones.
 - Auto-height takes the single nearest node's height. Interpolating from the
   two ends a new way connects to would suit ways drawn between existing ones.
-- Hover highlight in edit mode (the node / way a click would pick), like
-  JOSM's, so there is no guessing before clicking.
+- [x] Hover highlight in edit mode (cyan: the node / way a click would pick,
+  same rule as the click). Hidden while the camera moves; a slow pick spaces
+  out the next one.
+- [x] **Heights of -3.4e38.** Karlsruhe has 8,407 nodes with
+  `ele=-340282349999999991754788743781432688640` (-FLT_MAX as "unknown"). The
+  viewer drew them at -3.4e38 m: lines into the abyss, and bounding spheres
+  that made every pick walk half the map (74 ms per pick in the overview).
+  `HeightTools.parseEle` now treats non-finite and |ele| > 100 km as no
+  height everywhere (auto-height, interpolation, jump warnings), and the
+  viewer fills them along the way.
+- [x] **Pick pruning** tests bounding spheres by angle from the eye (cursor
+  cone vs sphere cone) instead of in screen space, which gave up on every
+  sphere reaching past the near plane. One click / hover pick on Karlsruhe
+  (SwiftShader machine, 200 spots, identical to brute force):
+
+  | view | before | sentinel fixed | + angular test |
+  |---|---|---|---|
+  | overview (F) | 73.7 ms | 1.6 ms | 1.0 ms |
+  | street level | – | 12.4 ms | 1.6 ms |
 - [x] ~~The rotate gizmo also shows TransformControls' view-axis ring.~~ It
   does not: TransformControls hides "E" and "XYZE" unless X, Y and Z all
   show, and rotate shows Z only. A check in e2e_edit guards it.

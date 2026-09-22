@@ -35,6 +35,36 @@ try {
   t.check("scene streamed", await v.waitForFeatures(2));
   await v.key("b");
 
+  // ---- JOSM follows the point the camera looks at (all nodes still at Z) ---------------------
+  const views = () => v.ops("set_view");
+  const recenter = async () => {
+    v.commands.length = 0;
+    await v.evaluate("document.getElementById('recenterJosmBtn').click()");
+    await waitFor(() => views().length > 0);
+    return views()[0];
+  };
+  let cam = await v.camera();
+  let op = await recenter();
+  t.check("top-down: Recenter JOSM centres JOSM under the camera",
+    op && Math.hypot(op.x - cam.pos[0], op.y - cam.pos[1]) < 0.01, JSON.stringify(op));
+  await v.drag("right", 640, 360, 0, -400); // tilt up to an oblique view
+  cam = await v.camera();
+  op = await recenter();
+  const centre = await v.evaluate("(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()");
+  const onScreen = await v.project([op.x, op.y, Z]);
+  t.check("oblique: it centres JOSM on the ground point in the middle of the view",
+    dist2(onScreen, centre) < 3 && Math.hypot(op.x - cam.pos[0], op.y - cam.pos[1]) > 5,
+    `${JSON.stringify(op)} is ${dist2(onScreen, centre).toFixed(1)} px from the centre, pitch ${(cam.pitch * 180 / Math.PI).toFixed(0)} deg`);
+  v.commands.length = 0;
+  const posBefore = cam.pos;
+  await v.drag("right", 640, 360, 400, 0); // turn in place
+  const followed = await waitFor(() => views().length > 0, 3000);
+  t.check("turning in place pans JOSM toward the new view direction",
+    followed && dist3((await v.camera()).pos, posBefore) < 1e-9 && Math.hypot(views()[0].x - op.x, views()[0].y - op.y) > 20,
+    JSON.stringify(views()));
+
+  await v.key("b");
+
   // ---- Space / C move the camera in the normal (non-FPS) mode ---------------------------
   let c0 = await v.camera();
   await v.hold(" ", "Space", 300);

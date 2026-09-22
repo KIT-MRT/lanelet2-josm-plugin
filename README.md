@@ -109,8 +109,9 @@ culling.
   in place), right-drag looks, middle / shift-drag pans, the wheel zooms toward
   the cursor. WASD / arrows walk, Space / C up and down, alt+←/→ turn, Shift
   is fast. *FPS look* captures the mouse.
-- **Edit (E):** click selects a node, else a way; shift+click adds; ctrl+drag
-  box-selects; middle-click cycles through overlapping items. The gizmo moves
+- **Edit (E):** click selects a node, else a way (cyan marks what a click
+  would select); shift+click adds; ctrl+drag box-selects; middle-click cycles
+  through overlapping items. The gizmo moves
   the whole selection (G), rotates it (R) or only changes heights (H). T makes
   the keys move the selection instead of the camera. I interpolates heights
   along the selected way. Z types a height (`112.35` sets, `+0.2` / `-0.2`
@@ -120,6 +121,9 @@ culling.
   warnings, its undo stack). Each gesture is one undo step; JOSM refusing it
   (hidden layer, deleted node) puts it back and says why.
 - **Selection** is shared both ways: select in JOSM, adjust in 3D.
+- **JOSM follows** the point the camera looks at (once it moved 30 m, or at
+  once with *Recenter JOSM*), so turning the view at street level pans JOSM
+  and its cull box too.
 - **Lanelets (L)** show as surfaces with a direction arrow at 35 % of the
   lanelet2 centerline, double-headed for `one_way=no`.
 - **Street view:** the viewer's button and the *SV* toolbar button open the
@@ -128,7 +132,9 @@ culling.
 New nodes created in JOSM without `ele` get a height (on by default; settings:
 *Heights*): a node inserted into a way, or joining ways, is interpolated
 between the known heights on both sides, a free end or a lone node takes the
-nearest node's height. A height jump above 2 m between
+nearest node's height. An `ele` that is not a number or beyond ±100 km (some
+tools write -3.4e38 for "unknown") counts as no height: the viewer draws such
+a node at the height interpolated along its way. A height jump above 2 m between
 neighbouring nodes after that, an interpolation or a 3D move raises a
 warning.
 

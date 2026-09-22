@@ -219,6 +219,12 @@ Ported in `hooks/`. Quirks to keep:
 
 ### Auto-height (new, not a Jython port)
 
+- **One height parser:** `HeightTools.parseEle` / `eleOf`. Not a number,
+  non-finite or |ele| > 100 km (`MAX_ABS_ELE_M`) is no height; real maps
+  carry `-340282349999999991754788743781432688640` (-FLT_MAX) for "unknown".
+  The viewer draws such nodes at the height interpolated along the way
+  (`Viewer3dFeatures.fillUnknownHeights`, display only; 0 if the way has no
+  height at all), and `perf_viewer.mjs` mirrors that rule.
 - `hooks/AutoHeightHook`: a node created without `ele` (`isNew`) gets one.
   With a known height along its ways in **two directions** (inserted into a
   way, the joint of two ways, inside a new way between existing nodes) it is
@@ -299,7 +305,11 @@ CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
 `perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
 for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
 exact state under `?test=1` (`window.__ll2test`); use it, not the HUD text.
-Run them after any change under `static/`. `Viewer3dPerfTest` is the JOSM-side
+The fake bridge's `session.reply` may return a Promise to answer late
+(ordering races); `hover(x, y)` waits for rendered frames, not a fixed time.
+`perf_viewer.mjs` also reports the cost of one pick (`__ll2test.pick`); a
+pick costing tens of ms means some feature's bounding sphere is huge (check
+for absurd `ele` first). Run them after any change under `static/`. `Viewer3dPerfTest` is the JOSM-side
 counterpart (`LL2_PERF_MAP=... ./gradlew test --tests '*Viewer3dPerfTest*'
 -PtestHeap=6g -i`).
 
@@ -378,7 +388,10 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
   deliberate change from the Jython, which skipped missing nodes): if any
   target is gone, nothing is applied, so the viewer can revert its
-  optimistic move. `set_view` is a camera move, not a command.
+  optimistic move. `set_view` is a camera move, not a command. The browser
+  sends the **focus point** (`josmview.focusPoint`: the view axis meets the
+  local map height, ≤150 m ahead), not the camera XY, after 30 m of travel
+  of that point or on *Recenter JOSM*.
 - **Replies:** a command with an `"id"` gets `{"type":"command_result","id",
   "ok","message"}` back through the ingest socket and SSE (e.g. "edit layer is
   hidden"). `OsmDataLayer` cannot be built headless (JCS cache manager), so

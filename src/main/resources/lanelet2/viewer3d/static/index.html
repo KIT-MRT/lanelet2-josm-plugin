@@ -181,7 +181,7 @@
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
     <button id="fpsBtn" type="button" title="FPS mouse look: click the view to capture the cursor, Esc to release">FPS look</button>
-    <button id="recenterJosmBtn" type="button" title="Send the current 3D camera XY to JOSM now (set_view). Use this to test whether JOSM pans and the cull box moves.">Recenter JOSM</button>
+    <button id="recenterJosmBtn" type="button" title="Centre JOSM now on the map point the 3D camera looks at (set_view). JOSM also follows by itself once that point moved 30 m.">Recenter JOSM</button>
   </div>
   <div id="camPad">
     <div class="camCol">
@@ -220,7 +220,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to camera</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {
