@@ -23,7 +23,7 @@ class Viewer3dDiffTest {
             id = Viewer3dConstants.VIEWPORT_ID,
             kind = "viewport",
             tags = emptyMap(),
-            points = listOf(listOf(0.0, 0.0, 0.0), listOf(1.0, 0.0, 0.0)),
+            pts = doubleArrayOf(0.0, 0.0, 0.0, 1.0, 0.0, 0.0),
         )
         val snap = engine.computeFull(listOf(way(1, 8.4 to 49.0, 8.401 to 49.001)), null)!!
         assertTrue(snap.features.any { it.id == Viewer3dConstants.VIEWPORT_ID })
@@ -35,7 +35,7 @@ class Viewer3dDiffTest {
     fun emptyLayerSendsSnapshotWithEmptyFeaturesNotClear() {
         val engine = Viewer3dDiffEngine()
         engine.forceSnapshot = true
-        engine.sent["way/1"] = FeatureSignature(emptyList(), emptyList(), null, null, null)
+        engine.sent["way/1"] = FeatureSignature(LongArray(0), DoubleArray(0), null, null, null)
         val snap = engine.computeFull(emptyList(), null)!!
         assertNull(snap.anchor)
         assertTrue(snap.features.isEmpty())
@@ -47,7 +47,7 @@ class Viewer3dDiffTest {
         val engine = Viewer3dDiffEngine()
         engine.anchor = anchor
         engine.forceSnapshot = false
-        engine.sent["way/1"] = FeatureSignature(listOf("node/0"), listOf(Triple(0.0, 0.0, 0.0)), null, null, null)
+        engine.sent["way/1"] = FeatureSignature(longArrayOf(0), doubleArrayOf(0.0, 0.0, 0.0), null, null, null)
         engine.markWayDirty(1)
         val patch = engine.computeIncremental(mapOf(1L to way(1).copy(deleted = true)), null).patch!!
         assertEquals(1, patch.ops.size)
@@ -68,6 +68,59 @@ class Viewer3dDiffTest {
         val result = engine.computeIncremental(ways, null)
         assertEquals(999, result.patch?.ops?.size ?: 999)
         assertTrue(result.morePending)
+    }
+
+    @Test
+    fun incrementalReadsOnlyTheDirtyWays() {
+        val engine = Viewer3dDiffEngine()
+        engine.anchor = anchor
+        engine.forceSnapshot = false
+        engine.markWayDirty(7)
+        val asked = mutableListOf<Long>()
+        val result = engine.computeIncremental({ id ->
+            asked.add(id)
+            way(id, 8.4 to 49.0, 8.401 to 49.001)
+        }, null)
+        assertEquals(listOf(7L), asked)
+        val feat = (result.patch!!.ops.single() as PatchOp.Upsert).feature
+        assertEquals("way/7", feat.id)
+        assertEquals(2, feat.vertexCount)
+        assertEquals(listOf(0L, 1L), feat.nodeIds.toList())
+    }
+
+    @Test
+    fun unchangedWayIsNotResent() {
+        val engine = Viewer3dDiffEngine()
+        engine.anchor = anchor
+        engine.forceSnapshot = false
+        val w = way(3, 8.4 to 49.0, 8.401 to 49.001)
+        engine.markWayDirty(3)
+        assertEquals(1, engine.computeIncremental({ w }, null).patch!!.ops.size)
+        engine.markWayDirty(3)
+        assertNull(engine.computeIncremental({ way(3, 8.4 to 49.0, 8.401 to 49.001) }, null).patch)
+    }
+
+    @Test
+    fun cullSyncAddsVisibleWaysAndDropsTheRest() {
+        val engine = Viewer3dDiffEngine(cullEnabled = true, cullRangeM = 200.0)
+        engine.anchor = anchor
+        engine.forceSnapshot = false
+        engine.sent["way/2"] = FeatureSignature(LongArray(0), DoubleArray(0), null, null, null)
+        val near = way(1, 8.4 to 49.0, 8.4001 to 49.0001)
+        val far = way(2, 8.5 to 49.1, 8.5001 to 49.1001)
+        val patch = engine.syncCullVisibility(listOf(near, far), 49.0 to 8.4)!!
+        assertTrue(patch.ops.any { it is PatchOp.Upsert && it.feature.id == "way/1" })
+        assertTrue(patch.ops.any { it is PatchOp.Remove && it.id == "way/2" })
+    }
+
+    @Test
+    fun latLonBoxContainsTheCullSquare() {
+        val bounds = EnuBounds(-150.0, -150.0, 150.0, 150.0)
+        val box = Viewer3dFeatures.latLonBoxOf(bounds, anchor)
+        for ((x, y) in listOf(-150.0 to -150.0, 150.0 to 150.0, -150.0 to 150.0, 150.0 to -150.0)) {
+            val (lat, lon) = Viewer3dEnu.enuToLatLon(x, y, anchor.lat, anchor.lon)
+            assertTrue(lon > box[0] && lat > box[1] && lon < box[2] && lat < box[3], "$x,$y outside")
+        }
     }
 
     @Test

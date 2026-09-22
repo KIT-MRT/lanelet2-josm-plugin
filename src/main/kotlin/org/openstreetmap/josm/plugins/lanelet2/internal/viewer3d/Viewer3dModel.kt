@@ -17,23 +17,50 @@ data class WaySnapshot(
     val participantBicycle: String?,
 )
 
-data class ViewerFeature(
+/**
+ * One renderable object for the viewer. Wire format (protocol v2):
+ * `{"id","kind","tags","pts":[x,y,z,...],"nodes":[uniqueId,...],"center"}`.
+ */
+class ViewerFeature(
     val id: String,
     val kind: String,
     val tags: Map<String, String>,
-    val points: List<List<Double>>,
-    val nodes: List<String> = emptyList(),
+    /** x, y, z per vertex: local ENU metres, rounded to millimetres. */
+    val pts: DoubleArray,
+    /** JOSM unique id of the node behind each vertex; empty for overlays. */
+    val nodeIds: LongArray = LongArray(0),
     val center: List<Double>? = null,
-)
+) {
+    val vertexCount: Int get() = pts.size / 3
 
-/** Exact change signature for diffing (mirrors Jython `_feature_sig`). */
-data class FeatureSignature(
-    val nodes: List<String>,
-    val points: List<Triple<Double, Double, Double>>,
+    fun copy(tags: Map<String, String> = this.tags, center: List<Double>? = this.center) =
+        ViewerFeature(id, kind, tags, pts, nodeIds, center)
+
+    override fun equals(other: Any?): Boolean =
+        other is ViewerFeature && id == other.id && kind == other.kind && tags == other.tags &&
+            pts.contentEquals(other.pts) && nodeIds.contentEquals(other.nodeIds) && center == other.center
+
+    override fun hashCode(): Int = 31 * id.hashCode() + pts.contentHashCode()
+}
+
+/**
+ * Exact change signature for diffing (mirrors Jython `_feature_sig`). Shares
+ * the feature's arrays rather than copying them, so the engine's `sent` map
+ * costs no extra memory per streamed way.
+ */
+class FeatureSignature(
+    val nodeIds: LongArray,
+    val pts: DoubleArray,
     val type: String?,
     val subtype: String?,
     val participantBicycle: String?,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        other is FeatureSignature && nodeIds.contentEquals(other.nodeIds) && pts.contentEquals(other.pts) &&
+            type == other.type && subtype == other.subtype && participantBicycle == other.participantBicycle
+
+    override fun hashCode(): Int = 31 * nodeIds.contentHashCode() + pts.contentHashCode()
+}
 
 sealed class PatchOp {
     abstract val op: String

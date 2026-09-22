@@ -8,23 +8,25 @@ object Viewer3dFeatures {
     }
 
     fun featureForWay(way: WaySnapshot, anchor: Anchor): ViewerFeature? {
-        val pts = ArrayList<List<Double>>()
-        val nodeIds = ArrayList<String>()
-        for (n in way.nodes) {
-            val lat = n.lat ?: continue
-            val lon = n.lon ?: continue
+        val n = way.nodes.size
+        var pts = DoubleArray(n * 3)
+        var nodeIds = LongArray(n)
+        var k = 0
+        for (node in way.nodes) {
+            val lat = node.lat ?: continue
+            val lon = node.lon ?: continue
             val (x, y) = Viewer3dEnu.enu(lat, lon, anchor.lat, anchor.lon)
-            val z = Viewer3dEnu.roundCoord(nodeEleMetres(n.eleTag))
-            pts.add(
-                listOf(
-                    Viewer3dEnu.roundCoord(x),
-                    Viewer3dEnu.roundCoord(y),
-                    z,
-                ),
-            )
-            nodeIds.add("node/${n.uniqueId}")
+            pts[k * 3] = Viewer3dEnu.roundCoord(x)
+            pts[k * 3 + 1] = Viewer3dEnu.roundCoord(y)
+            pts[k * 3 + 2] = Viewer3dEnu.roundCoord(nodeEleMetres(node.eleTag))
+            nodeIds[k] = node.uniqueId
+            k++
         }
-        if (pts.size < 2) return null
+        if (k < 2) return null
+        if (k < n) {
+            pts = pts.copyOf(k * 3)
+            nodeIds = nodeIds.copyOf(k)
+        }
         val tags = linkedMapOf<String, String>()
         way.type?.let { tags["type"] = it }
         way.subtype?.let { tags["subtype"] = it }
@@ -33,23 +35,19 @@ object Viewer3dFeatures {
             id = "way/${way.uniqueId}",
             kind = "line",
             tags = tags,
-            points = pts,
-            nodes = nodeIds,
+            pts = pts,
+            nodeIds = nodeIds,
         )
     }
 
-    fun featureSignature(feat: ViewerFeature): FeatureSignature {
-        val pts = feat.points.map { p ->
-            Triple(p[0], p[1], p.getOrElse(2) { 0.0 })
-        }
-        return FeatureSignature(
-            nodes = feat.nodes.toList(),
-            points = pts,
+    fun featureSignature(feat: ViewerFeature): FeatureSignature =
+        FeatureSignature(
+            nodeIds = feat.nodeIds,
+            pts = feat.pts,
             type = feat.tags["type"],
             subtype = feat.tags["subtype"],
             participantBicycle = feat.tags["participant:bicycle"],
         )
-    }
 
     fun wayBBoxEnu(way: WaySnapshot, anchor: Anchor): EnuBounds? {
         var wminX = 1.0e18
@@ -107,25 +105,40 @@ object Viewer3dFeatures {
     }
 
     fun featureFromEnuBounds(bounds: EnuBounds): ViewerFeature {
-        val pts = listOf(
-            listOf(bounds.minX, bounds.minY, 0.0),
-            listOf(bounds.minX, bounds.maxY, 0.0),
-            listOf(bounds.maxX, bounds.maxY, 0.0),
-            listOf(bounds.maxX, bounds.minY, 0.0),
-            listOf(bounds.minX, bounds.minY, 0.0),
-        ).map { p ->
-            listOf(
-                Viewer3dEnu.roundCoord(p[0]),
-                Viewer3dEnu.roundCoord(p[1]),
-                Viewer3dEnu.roundCoord(p[2]),
-            )
-        }
+        val corners = listOf(
+            bounds.minX to bounds.minY,
+            bounds.minX to bounds.maxY,
+            bounds.maxX to bounds.maxY,
+            bounds.maxX to bounds.minY,
+            bounds.minX to bounds.minY,
+        )
         return ViewerFeature(
             id = Viewer3dConstants.VIEWPORT_ID,
             kind = "viewport",
             tags = emptyMap(),
-            points = pts,
+            pts = floorLoop(corners),
         )
+    }
+
+    /** Closed loop on the floor (z = 0), rounded like every streamed coordinate. */
+    private fun floorLoop(corners: List<Pair<Double, Double>>): DoubleArray {
+        val pts = DoubleArray(corners.size * 3)
+        corners.forEachIndexed { i, (x, y) ->
+            pts[i * 3] = Viewer3dEnu.roundCoord(x)
+            pts[i * 3 + 1] = Viewer3dEnu.roundCoord(y)
+        }
+        return pts
+    }
+
+    /**
+     * Lat/lon box (minLon, minLat, maxLon, maxLat) that contains [bounds], for
+     * JOSM's spatial index. Slightly generous; callers still apply the exact
+     * ENU test ([wayInCull]).
+     */
+    fun latLonBoxOf(bounds: EnuBounds, anchor: Anchor, marginM: Double = 1.0): DoubleArray {
+        val (lat0, lon0) = Viewer3dEnu.enuToLatLon(bounds.minX - marginM, bounds.minY - marginM, anchor.lat, anchor.lon)
+        val (lat1, lon1) = Viewer3dEnu.enuToLatLon(bounds.maxX + marginM, bounds.maxY + marginM, anchor.lat, anchor.lon)
+        return doubleArrayOf(minOf(lon0, lon1), minOf(lat0, lat1), maxOf(lon0, lon1), maxOf(lat0, lat1))
     }
 
     fun finalizeViewportFeature(
@@ -164,19 +177,11 @@ object Viewer3dFeatures {
             bounds.maxLat to bounds.minLon,
             bounds.minLat to bounds.minLon,
         )
-        val pts = corners.map { (la, lo) ->
-            val (x, y) = Viewer3dEnu.enu(la, lo, anchor.lat, anchor.lon)
-            listOf(
-                Viewer3dEnu.roundCoord(x),
-                Viewer3dEnu.roundCoord(y),
-                0.0,
-            )
-        }
         val base = ViewerFeature(
             id = Viewer3dConstants.VIEWPORT_ID,
             kind = "viewport",
             tags = emptyMap(),
-            points = pts,
+            pts = floorLoop(corners.map { (la, lo) -> Viewer3dEnu.enu(la, lo, anchor.lat, anchor.lon) }),
         )
         return finalizeViewportFeature(base, viewCenterEnu, followCamera)
     }

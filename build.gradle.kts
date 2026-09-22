@@ -30,6 +30,9 @@ tasks.test {
     // output, so that resource paths are verified as JOSM will see them.
     dependsOn("dist")
     systemProperty("java.awt.headless", "true")
+    // Real-map benchmarks (Viewer3dPerfTest) need more: -PtestHeap=6g
+    maxHeapSize = (findProperty("testHeap") as String?) ?: "512m"
+    System.getenv("LL2_PERF_MAP")?.let { systemProperty("lanelet2.perfMap", it) }
     systemProperty(
         "lanelet2.jar",
         layout.buildDirectory.file("dist/lanelet2.jar").get().asFile.absolutePath,

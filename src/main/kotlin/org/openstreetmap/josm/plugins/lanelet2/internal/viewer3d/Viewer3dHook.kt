@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
 import org.openstreetmap.josm.data.coor.LatLon
+import org.openstreetmap.josm.data.osm.BBox
 import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
 import org.openstreetmap.josm.data.osm.OsmPrimitive
@@ -218,27 +219,60 @@ object Viewer3dHook {
             return
         }
         val ds = attachedDs ?: return
-        val ways = ds.ways.map { it.toSnapshot() }
         val viewCenter = mapViewCenter()
         if (engine.forceSnapshot || engine.sent.isEmpty() || engine.anchor == null) {
-            engine.computeFull(ways, viewCenter)?.let { socket?.enqueue(it) }
+            if (engine.anchor == null) engine.anchor = anchorOf(ds)
+            engine.computeFull(candidateWays(ds, viewCenter), viewCenter)?.let { socket?.enqueue(it) }
             return
         }
         if (engine.dirtyAll) {
-            engine.seedRescan(ways, viewCenter)?.let { socket?.enqueue(it) }
+            engine.seedRescan(candidateWays(ds, viewCenter), viewCenter)?.let { socket?.enqueue(it) }
         }
-        val waysById = ways.associateBy { it.uniqueId }
-        val result = engine.computeIncremental(waysById, viewCenter)
+        // Only the dirty ways are read: one edit no longer copies the dataset
+        // (~150 ms on the EDT for Karlsruhe's 144k ways).
+        val result = engine.computeIncremental({ id -> ds.wayById(id) }, viewCenter)
         result.patch?.let { socket?.enqueue(it) }
         if (result.morePending) scheduleEdit()
+    }
+
+    /**
+     * Ways that can be streamed: with culling, those JOSM's spatial index
+     * finds in the cull square (the engine still applies the exact test);
+     * without, every way.
+     */
+    private fun candidateWays(ds: DataSet, viewCenter: Pair<Double, Double>?): List<WaySnapshot> {
+        val a = engine.anchor
+        if (!engine.cullEnabled || a == null) return ds.waysSnapshot()
+        val bounds = Viewer3dFeatures.cullBoundsEnu(viewCenter, a, engine.cullRangeM) ?: return emptyList()
+        val box = Viewer3dFeatures.latLonBoxOf(bounds, a)
+        return ds.searchWays(BBox(box[0], box[1], box[2], box[3])).map { it.toSnapshot() }
+    }
+
+    /** Same anchor as [Viewer3dFeatures.computeAnchor] over all ways, without snapshotting them. */
+    private fun anchorOf(ds: DataSet): Anchor? {
+        var minLat = 1.0e9
+        var maxLat = -1.0e9
+        var minLon = 1.0e9
+        var maxLon = -1.0e9
+        var found = false
+        for (w in ds.ways) {
+            for (n in w.nodes) {
+                val c = n.coor ?: continue
+                found = true
+                minLat = minOf(minLat, c.lat())
+                maxLat = maxOf(maxLat, c.lat())
+                minLon = minOf(minLon, c.lon())
+                maxLon = maxOf(maxLon, c.lon())
+            }
+        }
+        return if (found) Anchor((minLat + maxLat) / 2.0, (minLon + maxLon) / 2.0) else null
     }
 
     private fun sendViewport() {
         if (socket?.connected != true) return
         if (engine.cullEnabled) {
             val ds = attachedDs ?: return
-            val ways = ds.ways.map { it.toSnapshot() }
-            engine.syncCullVisibility(ways, mapViewCenter())?.let { socket?.enqueue(it) }
+            engine.syncCullVisibility(candidateWays(ds, mapViewCenter()), mapViewCenter())?.let { socket?.enqueue(it) }
         }
         engine.viewportPatch(mapViewBounds(), mapViewCenter(), engine.followView)?.let {
             socket?.enqueue(it)

@@ -16,8 +16,8 @@ class Viewer3dJsonTest {
                         id = "way/1",
                         kind = "line",
                         tags = mapOf("type" to "line_thin"),
-                        points = listOf(listOf(0.0, 0.0, 0.0), listOf(1.0, 0.0, 0.0)),
-                        nodes = listOf("node/1", "node/2"),
+                        pts = doubleArrayOf(0.0, 0.0, 0.0, 1.0, 0.0, 12.345),
+                        nodeIds = longArrayOf(1, -2),
                     ),
                 ),
             ),
@@ -25,7 +25,8 @@ class Viewer3dJsonTest {
         assertTrue(!json.contains(" "))
         assertTrue(json.contains("\"type\":\"snapshot\""))
         assertTrue(json.contains("\"anchor\":{\"lat\":49,\"lon\":8.4}"))
-        assertTrue(json.contains("\"nodes\":[\"node/1\",\"node/2\"]"))
+        assertTrue(json.contains("\"pts\":[0,0,0,1,0,12.345]"), json)
+        assertTrue(json.contains("\"nodes\":[1,-2]"), json)
     }
 
     @Test
@@ -35,13 +36,30 @@ class Viewer3dJsonTest {
                 listOf(
                     PatchOp.Remove("way/9"),
                     PatchOp.Upsert(
-                        ViewerFeature("way/1", "line", emptyMap(), listOf(listOf(0.0, 0.0, 0.0))),
+                        ViewerFeature("way/1", "line", emptyMap(), doubleArrayOf(0.0, 0.0, 0.0)),
                     ),
                 ),
             ),
         )
         assertTrue(json.contains("\"op\":\"remove\",\"id\":\"way/9\""))
         assertTrue(json.contains("\"op\":\"upsert\""))
+    }
+
+    @Test
+    fun anchorKeepsItsPrecision() {
+        val json = Viewer3dJson.encode(OutboundMessage.Snapshot(Anchor(49.0032012345, 8.42983), emptyList()))
+        assertTrue(json.contains("\"anchor\":{\"lat\":49.003201235,\"lon\":8.42983}"), json)
+    }
+
+    /** The fast formatter must print millimetre values exactly like `%.3f` trimmed did. */
+    @Test
+    fun fastNumberFormatMatchesTheOldFormat() {
+        val rnd = java.util.Random(7)
+        val values = mutableListOf(0.0, -0.0, 1.0, -1.0, 0.1, 0.01, 0.001, -0.001, 12.5, 1234.567, -7030.2, 2147483.647)
+        repeat(20000) { values.add(Viewer3dEnu.roundCoord((rnd.nextDouble() - 0.5) * 20000.0)) }
+        for (v in values) {
+            assertEquals(Viewer3dJson.formatNumSlow(v), Viewer3dJson.formatNum(v), "value $v")
+        }
     }
 
     @Test

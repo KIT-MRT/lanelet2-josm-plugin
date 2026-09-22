@@ -128,12 +128,15 @@ def _sse_encode(msg):
 #   clear    : empty the scene
 #     {"type":"clear"}
 #
-#   feature  : one renderable object (a polyline for v0)
+#   feature  : one renderable object (protocol v2: flat arrays)
 #     {"id":"way/-123",
 #      "kind":"line",
 #      "tags":{"type":"line_thin","subtype":"dashed"},
-#      "points":[[x,y,z], ...],         # local ENU metres relative to anchor
+#      "pts":[x,y,z, x,y,z, ...],       # local ENU metres relative to anchor
+#      "nodes":[-5, 17, ...],           # JOSM node unique id per vertex
 #      "color":"#ffffff"}               # optional; browser falls back to tags
+#     (The browser also still reads v1 "points":[[x,y,z],...] with
+#     "nodes":["node/-5",...].) The server never looks inside a feature.
 #
 # The browser overlays style_images icons for traffic_sign / traffic_light /
 # arrow / symbol from `tags` (see static/app.js). The server just serves the

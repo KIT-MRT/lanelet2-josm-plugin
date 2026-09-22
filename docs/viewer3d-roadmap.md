@@ -30,11 +30,13 @@ by capturing the mouse and disabling edit mode.
 - [x] **Batched rendering for huge maps.** One draw call per spatial chunk
       instead of one `THREE.Line` per way (Karlsruhe: 144k ways = 144k draw
       calls). Features kept as plain data; live edits patch chunk buffers.
-- [ ] **Incremental JOSM streaming.** Snapshot only dirty ways instead of
+- [x] **Incremental JOSM streaming.** Snapshot only dirty ways instead of
       copying every way of the dataset on the EDT per 200 ms cycle.
 - [x] **Incremental node index** in the browser (edit mode rebuilt it per message).
-- [ ] **Protocol v2**: flat coordinate arrays, command ids with an
-      ack/reject reply, inbound parsing with JOSM's bundled jakarta.json.
+- [~] **Protocol v2**: flat coordinate arrays and numeric node ids (done;
+      the browser still reads v1), full-precision anchor (was 3 decimals,
+      up to ~50 m off). Open: command ids with an ack/reject reply, inbound
+      parsing with JOSM's bundled jakarta.json.
 - [ ] Stream standalone nodes (points not in any way) so they can be edited.
 
 ## 2. Selection and editing core
@@ -106,12 +108,27 @@ by capturing the mouse and disabling edit mode.
   | snapshot sent → all shown | 14.0 s | 3.9 s |
   | page parse + build | 1.57 s | 0.53 s |
 
-  Snapshot: 143,677 ways, 520,042 points, 35 MB JSON.
+  Snapshot: 143,677 ways, 520,042 points, 35 MB JSON (v1). With protocol v2
+  (flat arrays): 30 MB, page parse 256 → 152 ms, shown after 3.3 s.
+
+  JOSM side (`Viewer3dPerfTest`, same map, culling off):
+
+  | | before | after |
+  |---|---|---|
+  | one edit (EDT) | 147–167 ms | 0.1–0.2 ms |
+  | culling candidates (EDT) | 125–280 ms (copy every way) | 0.3–0.5 ms (`searchWays`) |
+  | encode snapshot JSON | 1.1–1.7 s | 0.13–0.22 s |
+  | full snapshot diff (EDT, connect only) | 620–960 ms | 380–810 ms |
 - [ ] Full map viewable without culling at interactive frame rates.
 
 ## Backlog: further improvements found along the way
 
 (Larger ideas that are not scheduled yet. Small obvious fixes are done directly.)
 
+- A full snapshot (connect / layer change) still costs ~0.5–1 s on the EDT
+  for Karlsruhe without culling: `ds.ways.map { toSnapshot() }` plus
+  `computeFull`, dominated by per-node allocations (`Pair`, boxed doubles).
+  Snapshotting on the EDT and building features on the sender thread would
+  take most of it off the UI.
 - `one_way:<participant>` overrides (e.g. `one_way:bicycle=no`) could get a
   distinct arrow style; lanelet2 treats them per participant.

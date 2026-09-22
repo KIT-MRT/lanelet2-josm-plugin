@@ -10,15 +10,17 @@ object Viewer3dJson {
     }
 
     private fun encodeSnapshot(msg: OutboundMessage.Snapshot): String {
-        val sb = StringBuilder(256)
+        val sb = StringBuilder(256 + msg.features.sumOf { 64 + it.pts.size * 9 })
         sb.append("{\"type\":\"snapshot\"")
         if (msg.anchor == null) {
             sb.append(",\"anchor\":null")
         } else {
+            // Full precision: the viewer converts its ENU metres back to lat/lon
+            // with this, and 3 decimals of a degree are up to ~50 m off.
             sb.append(",\"anchor\":{\"lat\":")
-            sb.append(formatNum(msg.anchor.lat))
+            appendDegrees(sb, msg.anchor.lat)
             sb.append(",\"lon\":")
-            sb.append(formatNum(msg.anchor.lon))
+            appendDegrees(sb, msg.anchor.lon)
             sb.append('}')
         }
         sb.append(",\"features\":")
@@ -65,13 +67,17 @@ object Viewer3dJson {
         sb.append(jsonString(feat.kind))
         sb.append(",\"tags\":")
         encodeTags(sb, feat.tags)
-        sb.append(",\"points\":")
-        encodePoints(sb, feat.points)
-        if (feat.nodes.isNotEmpty()) {
+        sb.append(",\"pts\":[")
+        for (i in feat.pts.indices) {
+            if (i > 0) sb.append(',')
+            appendNum(sb, feat.pts[i])
+        }
+        sb.append(']')
+        if (feat.nodeIds.isNotEmpty()) {
             sb.append(",\"nodes\":[")
-            feat.nodes.forEachIndexed { i, n ->
+            for (i in feat.nodeIds.indices) {
                 if (i > 0) sb.append(',')
-                sb.append(jsonString(n))
+                sb.append(feat.nodeIds[i])
             }
             sb.append(']')
         }
@@ -79,7 +85,7 @@ object Viewer3dJson {
             sb.append(",\"center\":[")
             feat.center.forEachIndexed { i, v ->
                 if (i > 0) sb.append(',')
-                sb.append(formatNum(v))
+                appendNum(sb, v)
             }
             sb.append(']')
         }
@@ -97,25 +103,56 @@ object Viewer3dJson {
         sb.append('}')
     }
 
-    private fun encodePoints(sb: StringBuilder, points: List<List<Double>>) {
-        sb.append('[')
-        points.forEachIndexed { i, p ->
-            if (i > 0) sb.append(',')
-            sb.append('[')
-            p.forEachIndexed { j, v ->
-                if (j > 0) sb.append(',')
-                sb.append(formatNum(v))
-            }
-            sb.append(']')
+    /**
+     * Coordinate in metres with at most 3 decimals, trailing zeros dropped
+     * (`2`, `0.1`, `-12.345`). Same text as `%.3f` trimmed for the millimetre-
+     * rounded values the bridge sends, without `String.format`, which cost
+     * over a second per city-size snapshot.
+     */
+    internal fun appendNum(sb: StringBuilder, v: Double) {
+        if (v.isNaN() || v.isInfinite() || kotlin.math.abs(v) >= 1e12) {
+            sb.append(formatNumSlow(v))
+            return
         }
-        sb.append(']')
+        var milli = Math.round(v * 1000.0)
+        if (milli == 0L) {
+            sb.append('0')
+            return
+        }
+        if (milli < 0) {
+            sb.append('-')
+            milli = -milli
+        }
+        sb.append(milli / 1000)
+        var frac = (milli % 1000).toInt()
+        if (frac == 0) return
+        sb.append('.')
+        var width = 3
+        while (frac % 10 == 0) {
+            frac /= 10
+            width--
+        }
+        val digits = frac.toString()
+        repeat(width - digits.length) { sb.append('0') }
+        sb.append(digits)
     }
 
-    private fun formatNum(v: Double): String {
+    internal fun formatNum(v: Double): String = StringBuilder(12).also { appendNum(it, v) }.toString()
+
+    internal fun formatNumSlow(v: Double): String {
         if (v.isNaN() || v.isInfinite()) return v.toString()
         if (v == v.toLong().toDouble()) return v.toLong().toString()
         return String.format(Locale.US, "%.3f", v).trimEnd('0').trimEnd('.')
             .ifEmpty { "0" }
+    }
+
+    /** Degrees with up to 9 decimals (~0.1 mm), trailing zeros dropped. */
+    private fun appendDegrees(sb: StringBuilder, v: Double) {
+        if (v == v.toLong().toDouble()) {
+            sb.append(v.toLong())
+            return
+        }
+        sb.append(String.format(Locale.US, "%.9f", v).trimEnd('0').trimEnd('.'))
     }
 
     fun jsonString(s: String): String {

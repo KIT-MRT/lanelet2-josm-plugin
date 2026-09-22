@@ -8,9 +8,10 @@ const DEG = 180 / Math.PI;
 const t = new Checks();
 
 // ---- scene: a 100 m lane, an elevated crossing line, two nodes 30 cm apart --
+// Protocol v2, as Viewer3dJson sends it: flat pts, numeric node ids.
 function line(id, nodeBase, pts) {
-  return { id: `way/${id}`, kind: "line", tags: { type: "line_thin" }, points: pts,
-    nodes: pts.map((_, i) => `node/${nodeBase + i}`) };
+  return { id: `way/${id}`, kind: "line", tags: { type: "line_thin" }, pts: pts.flat(),
+    nodes: pts.map((_, i) => nodeBase + i) };
 }
 const ys = Array.from({ length: 11 }, (_, i) => i * 10);
 const features = [
@@ -19,13 +20,17 @@ const features = [
   line(3, 301, [-20, -10, 0, 10, 20].map((x) => [x, 50, 6])),
   line(4, 401, [[5, 20, 0], [5.3, 20, 0]]),
 ];
+// One feature in the v1 wire format (nested points, "node/<id>" strings),
+// which the browser still reads.
+features.push({ id: "way/5", kind: "line", tags: { type: "virtual" },
+  points: [[-30, 90, 0], [-30, 100, 0]], nodes: ["node/501", "node/502"] });
 const N1 = [5, 20, 0];
 const N2 = [5.3, 20, 0];
 
 const v = await openViewer({ shotsDir });
 try {
   v.sendScene({ type: "snapshot", anchor: { lat: 49, lon: 8.4 }, features });
-  t.check("scene streamed", await v.waitForFeatures(4));
+  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(5));
 
   // ---- camera ---------------------------------------------------------------
   await v.key("b");

@@ -1,7 +1,7 @@
 // Load a whole .osm map into the viewer (headless) and report timings.
 //   node testdata/viewer3d/perf_viewer.mjs path/to/lanelet2_map.osm [--shots DIR]
 //
-// Converts the map like Viewer3dFeatures.featureForWay does (ENU around the
+// Converts the map like Viewer3dFeatures.featureForWay does (protocol v2; ENU around the
 // bbox centre of all way nodes, `ele` as z, type/subtype/participant:bicycle
 // tags), streams it as one snapshot, and measures how long the page takes to
 // show it, plus draw calls and frame time. Software GL (SwiftShader): frame
@@ -81,14 +81,14 @@ for (const w of ways) {
   for (const id of w.nds) {
     const n = nodes.get(id);
     if (!n) continue;
-    points.push([r3(rad(n[1] - lon0) * cos0 * R), r3(rad(n[0] - lat0) * R), r3(n[2])]);
-    nds.push(`node/${id}`);
+    points.push(r3(rad(n[1] - lon0) * cos0 * R), r3(rad(n[0] - lat0) * R), r3(n[2]));
+    nds.push(id);
   }
-  if (points.length < 2) continue;
+  if (nds.length < 2) continue;
   const tags = {};
   for (const k of ["type", "subtype", "participant:bicycle"]) if (w.tags[k] !== undefined) tags[k] = w.tags[k];
-  features.push({ id: `way/${w.id}`, kind: "line", tags, points, nodes: nds });
-  nPts += points.length;
+  features.push({ id: `way/${w.id}`, kind: "line", tags, pts: points, nodes: nds });
+  nPts += nds.length;
 }
 const snapshot = JSON.stringify({ type: "snapshot", anchor: { lat: lat0, lon: lon0 }, features });
 console.log(`map: ${features.length} ways, ${nPts} points, snapshot ${(snapshot.length / 1e6).toFixed(1)} MB` +

@@ -128,6 +128,16 @@ class Viewer3dDiffEngine(
     fun computeIncremental(
         waysById: Map<Long, WaySnapshot>,
         viewCenter: Pair<Double, Double>?,
+    ): IncrementalResult = computeIncremental({ waysById[it] }, viewCenter)
+
+    /**
+     * Diff the dirty ways (at most [Viewer3dConstants.MAX_WAYS_PER_CYCLE]).
+     * [wayById] is asked only for those, so one edit costs its own ways rather
+     * than a snapshot of the whole dataset.
+     */
+    fun computeIncremental(
+        wayById: (Long) -> WaySnapshot?,
+        viewCenter: Pair<Double, Double>?,
     ): IncrementalResult {
         val a = anchor ?: return IncrementalResult(null, false)
         val bounds = if (cullEnabled) Viewer3dFeatures.cullBoundsEnu(viewCenter, a, cullRangeM) else null
@@ -141,7 +151,7 @@ class Viewer3dDiffEngine(
         val ops = ArrayList<PatchOp>()
         for (wid in batch) {
             val fid = "way/$wid"
-            val w = waysById[wid]
+            val w = wayById(wid)
             if (w == null || w.deleted) {
                 if (fid in sent) {
                     ops.add(PatchOp.Remove(fid))
@@ -184,11 +194,12 @@ class Viewer3dDiffEngine(
         val key = Viewer3dEnu.cullBoundsKey(bounds)
         if (cullBoundsKey == key) return null
         cullBoundsKey = key
-        val visibleIds = linkedSetOf<Long>()
+        val visible = linkedMapOf<Long, WaySnapshot>()
         for (w in ways) {
             if (w.deleted) continue
-            if (Viewer3dFeatures.wayInCull(w, a, bounds, true)) visibleIds.add(w.uniqueId)
+            if (Viewer3dFeatures.wayInCull(w, a, bounds, true)) visible[w.uniqueId] = w
         }
+        val visibleIds = visible.keys
         val ops = ArrayList<PatchOp>()
         for (fid in sent.keys.toList()) {
             if (fid == Viewer3dConstants.VIEWPORT_ID) continue
@@ -201,7 +212,7 @@ class Viewer3dDiffEngine(
         var batch = 0
         for (wid in visibleIds) {
             if ("way/$wid" in sent) continue
-            val w = ways.firstOrNull { it.uniqueId == wid } ?: continue
+            val w = visible[wid] ?: continue
             val feat = Viewer3dFeatures.featureForWay(w, a) ?: continue
             val sig = Viewer3dFeatures.featureSignature(feat)
             ops.add(PatchOp.Upsert(feat))
