@@ -269,6 +269,28 @@ this repo so the plugin can ship offline. three.js r160 under
 Offline self-containment is verified by fetching `/`, `/app.js` and all three
 `/vendor/` modules with the server running and no network.
 
+Browser camera and picking (`app.js`):
+
+- **No OrbitControls** (still vendored, no longer imported). Its pivot was
+  `controls.target`, which framing put at the centre of the whole map and
+  walking/looking kept at the same distance, so every orbit swung around a
+  point hundreds of metres away. The camera is now position + heading/pitch
+  (Z up, no roll, no target). Left-drag orbits the map point under the cursor
+  and turns in place over sky; right-drag looks; middle/shift-drag pans; the
+  wheel dollies toward the cursor.
+- **Picking tolerances are screen pixels** (`pickMapPoint`, `pickNode`).
+  three's Line/Points raycast thresholds are world metres, which picked the
+  wrong node up close. Lanes between two bounds have no geometry, so a miss
+  falls back to a level plane at the height of the nearest line on screen.
+- **Mouse listeners must be registered after `new TransformControls(...)`.**
+  The gizmo sets `dragging` inside its own `pointerdown`, so only a later
+  listener can see that the press belongs to the gizmo.
+- **Clip planes are fixed** (near 2 cm) behind a logarithmic depth buffer, so
+  moving right up to geometry never needs them retuned.
+- **Keep new browser code in `app.js`** unless you also add a `server.py`
+  route. A leftover server that still serves `/` is adopted, and its old
+  whitelist would 404 a new module, which blanks the page.
+
 ## In-scope `internal/` features
 
 Only three of the original `internal/` features are in this repo (the rest,

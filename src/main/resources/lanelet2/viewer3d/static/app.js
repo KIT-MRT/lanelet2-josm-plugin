@@ -9,7 +9,6 @@
 // scene is centred near the origin. We render on the XY plane (Z up).
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 
 // Profiling is opt-in via ?profile=1. When on, the browser logs a per-stage
@@ -330,7 +329,10 @@ function attachIcon(group, feature, spec) {
 
 // --- scene setup -----------------------------------------------------------
 const appEl = document.getElementById("app");
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// The logarithmic depth buffer keeps depth precision from a few centimetres
+// (nudging a node) out to a whole map, so the clip planes can stay fixed while
+// the camera moves right up to geometry.
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 appEl.appendChild(renderer.domElement);
@@ -338,15 +340,100 @@ appEl.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x11151c);
 
-const camera = new THREE.PerspectiveCamera(
-  55, window.innerWidth / window.innerHeight, 0.1, 100000);
-camera.up.set(0, 0, 1); // Z is up (ENU)
-camera.position.set(40, -60, 50);
+// --- camera ------------------------------------------------------------------
+// The camera has no look-at target. It is a position plus a heading
+// (`view.yaw`: rotation about world Z, 0 = looking north along +Y,
+// counter-clockwise positive) and a pitch (0 = level, -90° = straight down).
+// World Z is always screen-up, so there is no roll, and a straight-down BEV is
+// an ordinary state with a defined north rather than a lookAt singularity.
+// Mouse navigation (orbit around the point under the cursor, turn in place,
+// pan, dolly) lives in the "mouse navigation" section below.
+const CAM_NEAR_M = 0.02;
+const CAM_FAR_M = 500000;
+const HALF_PI = Math.PI / 2;
+const _worldUp = new THREE.Vector3(0, 0, 1);
+const _camX = new THREE.Vector3(1, 0, 0);
+const _qYaw = new THREE.Quaternion();
+const _qPitch = new THREE.Quaternion();
+const _qOrbit = new THREE.Quaternion();
+const _orbitAxis = new THREE.Vector3();
+const _orbitOffset = new THREE.Vector3();
+const _lookDir = new THREE.Vector3();
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.enableKeys = false; // WASD / arrows are handled in the render loop
+const camera = new THREE.PerspectiveCamera(
+  55, window.innerWidth / window.innerHeight, CAM_NEAR_M, CAM_FAR_M);
+camera.up.copy(_worldUp); // Z is up (ENU)
+const view = { yaw: 0, pitch: 0 };
+
+// Mouse-navigation state. Declared here because the camera HUD reads it from
+// module init on.
+const nav = {
+  pointerId: null,  // pointer that owns the current drag gesture
+  mode: null,       // "orbit" | "look" | "pan"
+  moving: false,    // drag threshold passed
+  downX: 0, downY: 0, lastX: 0, lastY: 0,
+  pivot: null,      // orbit pivot of the current drag; null turns in place
+  panDepth: 0,      // view depth of the grabbed point while panning
+  lastPivot: null,  // for the HUD
+  lastPivotKind: "",
+  refDist: 20,      // distance of the last map pick; scales moves over sky
+  groundZ: 0,       // map height near the cursor; ground-plane fallback
+};
+
+function clampPitch(p) {
+  return Math.max(-HALF_PI, Math.min(HALF_PI, p));
+}
+
+// Rebuild the camera orientation from `view`: tip the default -Z look
+// direction up to the horizon (+90° about X), then turn it about world Z.
+function applyCameraRotation() {
+  _qYaw.setFromAxisAngle(_worldUp, view.yaw);
+  _qPitch.setFromAxisAngle(_camX, HALF_PI + view.pitch);
+  camera.quaternion.multiplyQuaternions(_qYaw, _qPitch);
+  camera.updateMatrixWorld();
+}
+
+function setCameraView(position, yaw, pitch) {
+  if (position) camera.position.copy(position);
+  view.yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  view.pitch = clampPitch(pitch);
+  applyCameraRotation();
+}
+
+// Aim at `target` from the current position. Straight up or down has no
+// heading, so that keeps `yawIfVertical` (default: the current heading).
+function lookAtPoint(target, yawIfVertical) {
+  _lookDir.subVectors(target, camera.position);
+  const horiz = Math.hypot(_lookDir.x, _lookDir.y);
+  const yaw = horiz > 1e-9
+    ? Math.atan2(-_lookDir.x, _lookDir.y)
+    : (yawIfVertical === undefined ? view.yaw : yawIfVertical);
+  setCameraView(null, yaw, Math.atan2(_lookDir.z, horiz));
+}
+
+// Rotate the camera about `pivot`: heading about the vertical through the
+// pivot, pitch about the camera's horizontal right axis through it. Position
+// and orientation turn by the same rotation, so the pivot stays on the same
+// pixel and nothing snaps to centre it.
+function orbitCamera(pivot, dYaw, dPitch) {
+  const pitch = clampPitch(view.pitch + dPitch);
+  _orbitOffset.subVectors(camera.position, pivot);
+  _orbitAxis.set(Math.cos(view.yaw), Math.sin(view.yaw), 0); // camera right
+  _qOrbit.setFromAxisAngle(_orbitAxis, pitch - view.pitch);
+  _orbitOffset.applyQuaternion(_qOrbit);
+  _qOrbit.setFromAxisAngle(_worldUp, dYaw);
+  _orbitOffset.applyQuaternion(_qOrbit);
+  setCameraView(_orbitOffset.add(pivot), view.yaw + dYaw, pitch);
+}
+
+// Metres spanned by `px` screen pixels at `depth` metres in front of the camera.
+function pixelsToMetres(px, depth) {
+  const h = renderer.domElement.clientHeight || window.innerHeight || 1;
+  return (px * 2 * depth * Math.tan((camera.fov * Math.PI) / 360)) / h;
+}
+
+camera.position.set(40, -60, 50);
+lookAtPoint(new THREE.Vector3(0, 0, 0));
 
 // Ground grid + axes for spatial reference.
 const grid = new THREE.GridHelper(400, 40, 0x2a3340, 0x20262f);
@@ -371,9 +458,8 @@ const hud = {
   edit: document.getElementById("edit"),
   look: document.getElementById("look"),
   camPos: document.getElementById("camPos"),
-  camTgt: document.getElementById("camTgt"),
   camAng: document.getElementById("camAng"),
-  camUp: document.getElementById("camUp"),
+  camPivot: document.getElementById("camPivot"),
   josmView: document.getElementById("josmView"),
   frameDebug: document.getElementById("frameDebug"),
   perf: document.getElementById("perf"),
@@ -507,8 +593,8 @@ function applyViewportCameraFollow(feature) {
   const cz = feature.center.length > 2 ? feature.center[2] : 0;
 
   // Record the JOSM/cull centre even when we are not translating the 3D camera
-  // (drive-view echo, follow off, or a gizmo drag).
-  if (!follow || transform.dragging || now() < ignoreFollowUntil) {
+  // (drive-view echo, follow off, a gizmo drag, or a mouse orbit/pan).
+  if (!follow || transform.dragging || nav.pointerId !== null || now() < ignoreFollowUntil) {
     lastFollowCenter = [cx, cy, cz];
     return;
   }
@@ -524,15 +610,12 @@ function applyViewportCameraFollow(feature) {
   lastFollowCenter = [cx, cy, cz];
   if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4 && Math.abs(dz) < 1e-4) return;
 
-  // Translate target + camera together so orbit angle and height stay fixed.
-  controls.target.x += dx;
-  controls.target.y += dy;
-  controls.target.z += dz;
+  // Translate the camera only, so heading, pitch and height above the map stay.
   camera.position.x += dx;
   camera.position.y += dy;
   camera.position.z += dz;
+  camera.updateMatrixWorld();
   lastViewSyncXY = [camera.position.x, camera.position.y];
-  controls.update();
   refreshCameraHud();
 }
 
@@ -669,14 +752,19 @@ function fmtVec3(v) {
 
 function refreshCameraHud() {
   if (!hud.camPos) return;
-  const az = controls.getAzimuthalAngle() * RAD2DEG;
-  const pol = controls.getPolarAngle() * RAD2DEG;
-  const dist = camera.position.distanceTo(controls.target);
+  const heading = (((-view.yaw * RAD2DEG) % 360) + 360) % 360; // compass, clockwise
   hud.camPos.textContent = fmtVec3(camera.position);
-  hud.camTgt.textContent = fmtVec3(controls.target);
   hud.camAng.textContent =
-    `az ${fmt1(az)}° pol ${fmt1(pol)}° dist ${fmt1(dist)} m fov ${fmt1(camera.fov)}°`;
-  hud.camUp.textContent = fmtVec3(camera.up);
+    `heading ${fmt1(heading)}° pitch ${fmt1(view.pitch * RAD2DEG)}° fov ${fmt1(camera.fov)}°`;
+  if (hud.camPivot) {
+    const p = nav.lastPivot;
+    if (p) {
+      hud.camPivot.textContent =
+        `${fmtVec3(p)} on ${nav.lastPivotKind}, ${fmt1(camera.position.distanceTo(p))} m`;
+    } else {
+      hud.camPivot.textContent = nav.lastPivotKind === "none" ? "none (turned in place)" : "-";
+    }
+  }
 }
 
 function setFrameDebug(lines) {
@@ -703,14 +791,8 @@ function reportFrameDebug(label, boxInfo, params) {
     `bbox min ${fmtVec3(boxInfo.min)} max ${fmtVec3(boxInfo.max)}`,
     `center ${fmtVec3(boxInfo.center)} size (${fmt1(boxInfo.size.x)}, ${fmt1(boxInfo.size.y)}, ${fmt1(boxInfo.size.z)}) m`,
     `frame radius ${fmt1(params.radius)} m dist ${fmt1(params.dist)} m`,
-    `placed cam ${fmtVec3(params.camPos)} tgt ${fmtVec3(params.target)} up ${fmtVec3(params.up)}`,
+    `placed cam ${fmtVec3(params.camPos)} looking at ${fmtVec3(params.target)}`,
   ]);
-}
-
-function applyClipPlanes(dist) {
-  camera.near = Math.max(0.1, dist / 1000);
-  camera.far = Math.max(camera.near + 1, dist * 1000);
-  camera.updateProjectionMatrix();
 }
 
 function frameEle(z) {
@@ -751,28 +833,21 @@ function frameAll() {
   const box = mapBoundsBox();
   const boxInfo = describeBoundsBox(box);
   if (boxInfo.empty) {
-    reportFrameDebug("frameAll (F)", boxInfo, {
-      radius: 0, dist: 0,
-      camPos: camera.position.clone(),
-      target: controls.target.clone(),
-      up: camera.up.clone(),
-    });
+    reportFrameDebug("frameAll (F)", boxInfo, null);
     refreshCameraHud();
     return;
   }
   const center = boxInfo.center;
   const radius = Math.max(boxInfo.size.x, boxInfo.size.y, boxInfo.size.z, 5) * 0.5;
   const dist = radius / Math.tan((camera.fov * Math.PI) / 180 / 2) * 1.6;
-  const up = new THREE.Vector3(0, 0, 1);
   const camPos = new THREE.Vector3(
     center.x + dist * 0.4, center.y - dist * 0.8, center.z + dist * 0.6,
   );
-  camera.up.copy(up);
-  controls.target.copy(center);
   camera.position.copy(camPos);
-  applyClipPlanes(dist);
-  controls.update();
-  reportFrameDebug("frameAll (F)", boxInfo, { radius, dist, camPos, target: center, up });
+  lookAtPoint(center);
+  nav.groundZ = center.z;
+  nav.refDist = camPos.distanceTo(center);
+  reportFrameDebug("frameAll (F)", boxInfo, { radius, dist, camPos, target: center });
   refreshCameraHud();
   if (PROFILE) plog(`frameAll objects=${objects.size} ms=${(now() - tf).toFixed(1)}`);
 }
@@ -784,42 +859,26 @@ function setBevNorth() {
   const box = mapBoundsBox();
   const boxInfo = describeBoundsBox(box);
   if (boxInfo.empty) {
-    reportFrameDebug("BEV north (B)", boxInfo, {
-      radius: 0, dist: 0,
-      camPos: camera.position.clone(),
-      target: controls.target.clone(),
-      up: camera.up.clone(),
-    });
+    reportFrameDebug("BEV north (B)", boxInfo, null);
     refreshCameraHud();
     return;
   }
   const center = boxInfo.center;
   const radius = Math.max(boxInfo.size.x, boxInfo.size.y, 5) * 0.5;
   const dist = radius / Math.tan((camera.fov * Math.PI) / 180 / 2) * 1.6;
-  const up = new THREE.Vector3(0, 1, 0);
   const camPos = new THREE.Vector3(center.x, center.y, center.z + dist);
-  camera.up.copy(up);
-  controls.target.copy(center);
-  camera.position.copy(camPos);
-  camera.lookAt(center);
-  applyClipPlanes(dist);
-  controls.update();
-  reportFrameDebug("BEV north (B)", boxInfo, { radius, dist, camPos, target: center, up });
+  setCameraView(camPos, 0, -HALF_PI); // straight down, north (+Y) up
+  nav.groundZ = center.z;
+  nav.refDist = dist;
+  reportFrameDebug("BEV north (B)", boxInfo, { radius, dist, camPos, target: center });
   refreshCameraHud();
   if (PROFILE) plog(`setBevNorth objects=${objects.size} ms=${(now() - tf).toFixed(1)}`);
 }
 
 // Fixed sanity view when auto-framing fails or data is far from the origin.
 function setDefaultBevView() {
-  const target = new THREE.Vector3(0, 0, 0);
-  const up = new THREE.Vector3(0, 1, 0);
-  const camPos = new THREE.Vector3(0, 0, DEFAULT_BEV_HEIGHT_M);
-  camera.up.copy(up);
-  controls.target.copy(target);
-  camera.position.copy(camPos);
-  camera.lookAt(target);
-  applyClipPlanes(DEFAULT_BEV_HEIGHT_M);
-  controls.update();
+  setCameraView(new THREE.Vector3(0, 0, DEFAULT_BEV_HEIGHT_M), 0, -HALF_PI);
+  nav.refDist = DEFAULT_BEV_HEIGHT_M;
   setFrameDebug([
     "default BEV @ origin",
     `fixed tgt (0.0, 0.0, 0.0) cam (0.0, 0.0, ${fmt1(DEFAULT_BEV_HEIGHT_M)}) m`,
@@ -833,12 +892,6 @@ const CAM_PAN_STEP_M = 1;    // metres per pan / height tick (walk)
 const CAM_FAST_STEP_M = 10;  // metres per tick with Shift (WASD / arrows / pad)
 const CAM_ROT_STEP = 0.05;   // radians per step (~3°)
 const CAM_HOLD_MS = 50;
-const CAM_PITCH_MAX = 0.995; // |look·up| clamp (~85° from horizontal)
-const _worldUp = new THREE.Vector3(0, 0, 1);
-const _tmpLook = new THREE.Vector3();
-const _tmpForward = new THREE.Vector3();
-const _tmpRight = new THREE.Vector3();
-const _tmpQuat = new THREE.Quaternion();
 const moveKeys = new Set();
 let altHeld = false;
 let ctrlHeld = false;
@@ -848,63 +901,27 @@ function moveStepM() {
   return shiftHeld ? CAM_FAST_STEP_M : CAM_PAN_STEP_M;
 }
 
+// Walk level along the heading, so forward is screen-up even in a straight-down BEV.
 function cameraPan(dx, dy, meters) {
   const step = meters == null ? CAM_PAN_STEP_M : meters;
-  _tmpForward.subVectors(controls.target, camera.position);
-  _tmpForward.z = 0;
-  if (_tmpForward.lengthSq() < 1e-8) {
-    _tmpForward.set(-camera.up.x, -camera.up.y, 0);
-    if (_tmpForward.lengthSq() < 1e-8) _tmpForward.set(0, 1, 0);
-  }
-  _tmpForward.normalize();
-  _tmpRight.crossVectors(_tmpForward, _worldUp);
-  if (_tmpRight.lengthSq() < 1e-8) _tmpRight.set(1, 0, 0);
-  else _tmpRight.normalize();
-  const tx = _tmpRight.x * dx + _tmpForward.x * dy;
-  const ty = _tmpRight.y * dx + _tmpForward.y * dy;
-  camera.position.x += tx * step;
-  camera.position.y += ty * step;
-  controls.target.x += tx * step;
-  controls.target.y += ty * step;
-  controls.update();
+  const s = Math.sin(view.yaw);
+  const c = Math.cos(view.yaw);
+  // right = (c, s), forward = (-s, c)
+  camera.position.x += (c * dx - s * dy) * step;
+  camera.position.y += (s * dx + c * dy) * step;
+  camera.updateMatrixWorld();
   refreshCameraHud();
 }
 
 function cameraElevate(dz, meters) {
-  const step = (meters == null ? CAM_PAN_STEP_M : meters) * dz;
-  camera.position.z += step;
-  controls.target.z += step;
-  controls.update();
+  camera.position.z += (meters == null ? CAM_PAN_STEP_M : meters) * dz;
+  camera.updateMatrixWorld();
   refreshCameraHud();
 }
 
+// FPS look: turn in place. Positive yaw turns right, positive pitch looks up.
 function cameraLook(yawRad, pitchRad) {
-  // FPS look: rotate around the camera, keep world Z as up (no roll).
-  const dist = Math.max(1, camera.position.distanceTo(controls.target));
-  _tmpLook.subVectors(controls.target, camera.position);
-  if (_tmpLook.lengthSq() < 1e-12) _tmpLook.set(0, 1, 0);
-  _tmpLook.normalize();
-
-  if (yawRad) {
-    _tmpQuat.setFromAxisAngle(_worldUp, -yawRad);
-    _tmpLook.applyQuaternion(_tmpQuat);
-  }
-
-  if (pitchRad) {
-    _tmpRight.crossVectors(_tmpLook, _worldUp);
-    if (_tmpRight.lengthSq() < 1e-12) _tmpRight.set(1, 0, 0);
-    else _tmpRight.normalize();
-    _tmpQuat.setFromAxisAngle(_tmpRight, pitchRad);
-    const pitched = _tmpForward.copy(_tmpLook).applyQuaternion(_tmpQuat);
-    if (Math.abs(pitched.dot(_worldUp)) < CAM_PITCH_MAX) {
-      _tmpLook.copy(pitched).normalize();
-    }
-  }
-
-  camera.up.copy(_worldUp);
-  controls.target.copy(camera.position).addScaledVector(_tmpLook, dist);
-  camera.lookAt(controls.target);
-  controls.update();
+  setCameraView(null, view.yaw - yawRad, view.pitch + pitchRad);
   refreshCameraHud();
 }
 
@@ -961,7 +978,7 @@ function refreshLookHud() {
   if (!hud.look) return;
   if (isPointerLocked()) hud.look.textContent = "FPS (mouse captured)";
   else if (fpsLookEnabled) hud.look.textContent = "FPS (click view)";
-  else hud.look.textContent = "orbit";
+  else hud.look.textContent = "orbit at cursor";
 }
 
 function setFpsLook(on) {
@@ -981,9 +998,7 @@ function requestFpsLock() {
 }
 
 document.addEventListener("pointerlockchange", () => {
-  const locked = isPointerLocked();
-  controls.enableRotate = !locked;
-  controls.enablePan = !locked;
+  if (isPointerLocked()) endNav(); // captured mouse look replaces any drag
   refreshLookHud();
 });
 
@@ -1130,7 +1145,8 @@ let selectedNode = null;
 let dragMoved = false; // true once a gizmo drag actually changed the position
 let nodeIndexDirty = true; // node index is stale; rebuild lazily on demand
 
-// Pickable point cloud of all node vertices (only shown in edit mode).
+// Point cloud of all node vertices, shown in edit mode. Clicks are resolved
+// in screen space by pickNode(), not by raycasting this cloud.
 const pickGeom = new THREE.BufferGeometry();
 pickGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(0), 3));
 const pickMat = new THREE.PointsMaterial({ color: EDIT_COLOR, size: 6, sizeAttenuation: false });
@@ -1138,11 +1154,13 @@ const pickPoints = new THREE.Points(pickGeom, pickMat);
 pickPoints.visible = false;
 pickPoints.renderOrder = 1000;
 scene.add(pickPoints);
-let pickIds = []; // pick vertex index -> nodeId
 
-// Selected-node handle that TransformControls manipulates.
+// Selected-node handle that TransformControls manipulates. Unit sphere,
+// rescaled every frame to a constant screen size (see updateScreenSizedMarkers)
+// so it neither hides neighbouring nodes up close nor vanishes far away.
+const SELECT_MARKER_PX = 7;
 const marker = new THREE.Mesh(
-  new THREE.SphereGeometry(0.6, 16, 12),
+  new THREE.SphereGeometry(1, 16, 12),
   new THREE.MeshBasicMaterial({ color: SELECT_COLOR, depthTest: false, transparent: true, opacity: 0.9 }),
 );
 marker.visible = false;
@@ -1152,12 +1170,7 @@ scene.add(marker);
 const transform = new TransformControls(camera, renderer.domElement);
 transform.setSize(0.9);
 transform.addEventListener("dragging-changed", (e) => {
-  controls.enabled = !e.value;
-  if (!e.value) {
-    const locked = isPointerLocked();
-    controls.enableRotate = !locked;
-    controls.enablePan = !locked;
-  }
+  if (e.value) endNav(); // the gizmo owns this drag
 });
 transform.addEventListener("mouseDown", () => { dragMoved = false; });
 transform.addEventListener("objectChange", onGizmoChange);
@@ -1207,13 +1220,11 @@ function rebuildPickCloud() {
   const tp = PROFILE ? now() : 0;
   const count = nodePos.size;
   const positions = new Float32Array(count * 3);
-  pickIds = new Array(count);
   let i = 0;
-  for (const [nid, p] of nodePos) {
+  for (const p of nodePos.values()) {
     positions[i * 3 + 0] = p[0];
     positions[i * 3 + 1] = p[1];
     positions[i * 3 + 2] = p[2];
-    pickIds[i] = nid;
     i++;
   }
   pickGeom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -1303,33 +1314,374 @@ function sendCommand(ops) {
 }
 
 // Click (not drag) selection of the nearest node vertex.
-const raycaster = new THREE.Raycaster();
-raycaster.params.Points.threshold = 1.5;
-const pointer = new THREE.Vector2();
 let downX = 0, downY = 0;
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
   downX = e.clientX; downY = e.clientY;
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!editMode || transform.dragging) return;
+  if (!editMode || transform.dragging || e.button !== 0) return;
   if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return; // was a drag
-  const rect = renderer.domElement.getBoundingClientRect();
-  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObject(pickPoints, false);
-  if (hits.length > 0 && hits[0].index !== undefined && pickIds[hits[0].index]) {
-    selectNode(pickIds[hits[0].index]);
-  } else {
-    deselect();
-  }
+  const nid = pickNode(e.clientX, e.clientY);
+  if (nid) selectNode(nid);
+  else deselect();
 });
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "e" || e.key === "E") setEditMode(!editMode);
   else if (e.key === "Escape") deselect();
 });
+
+// --- screen-space picking ----------------------------------------------------
+// Tolerances are in screen pixels. three's Line/Points raycast thresholds are
+// world metres, which grabs the wrong vertex up close (nodes 20 cm apart) and
+// misses everything far away.
+const PICK_RADIUS_PX = 10;       // a line / node this close counts as under the cursor
+const PICK_TIE_PX = 1.5;         // candidates this close on screen: nearer one wins
+const HEIGHT_PROBE_PX = 160;     // nearest line within this sets the local ground height
+const GROUND_PICK_MAX_M = 5000;  // ground hits further out count as sky
+const raycaster = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+const _segA = new Float64Array(6); // world x, y, z, view x, view y, depth
+const _segB = new Float64Array(6);
+const _segHit = { px: 0, depth: 0, x: 0, y: 0, z: 0 };
+
+function screenProjector() {
+  camera.updateMatrixWorld();
+  const rect = renderer.domElement.getBoundingClientRect();
+  return {
+    e: camera.matrixWorldInverse.elements,
+    f: rect.height / 2 / Math.tan((camera.fov * Math.PI) / 360), // pixels per unit at depth 1
+    cx: rect.left + rect.width / 2,
+    cy: rect.top + rect.height / 2,
+  };
+}
+
+function toViewSpace(e, x, y, z, out) {
+  out[0] = x; out[1] = y; out[2] = z;
+  out[3] = e[0] * x + e[4] * y + e[8] * z + e[12];
+  out[4] = e[1] * x + e[5] * y + e[9] * z + e[13];
+  out[5] = -(e[2] * x + e[6] * y + e[10] * z + e[14]); // the camera looks down -Z
+}
+
+// Conservative test: can any point of `sphere` land within `radiusPx` of the
+// cursor? Lets a pick skip whole features instead of walking every segment.
+function sphereMayBeNear(sphere, pr, mx, my, radiusPx) {
+  const c = sphere.center;
+  const r = sphere.radius;
+  toViewSpace(pr.e, c.x, c.y, c.z, _segA);
+  const d = _segA[5];
+  if (d + r < camera.near) return false; // entirely behind the camera
+  if (d - r <= camera.near) return true; // straddles the near plane: no bound
+  const sx = pr.cx + (pr.f * _segA[3]) / d;
+  const sy = pr.cy - (pr.f * _segA[4]) / d;
+  const reachPx = (pr.f * r * (1 + Math.hypot(_segA[3], _segA[4]) / d)) / (d - r);
+  return Math.hypot(sx - mx, sy - my) <= radiusPx + reachPx;
+}
+
+// Closest approach of the cursor to segment A-B on screen, clipped at the near
+// plane. Fills _segHit with the pixel distance and the 3D point on the segment
+// under that screen position (perspective-correct).
+function segmentUnderCursor(pr, mx, my, A, B) {
+  const near = camera.near;
+  const da = A[5];
+  const db = B[5];
+  if (da < near && db < near) return false;
+  const t0 = da < near ? (near - da) / (db - da) : 0;
+  const t1 = db < near ? (near - da) / (db - da) : 1;
+  const d0 = da + (db - da) * t0;
+  const d1 = da + (db - da) * t1;
+  const sx0 = pr.cx + (pr.f * (A[3] + (B[3] - A[3]) * t0)) / d0;
+  const sy0 = pr.cy - (pr.f * (A[4] + (B[4] - A[4]) * t0)) / d0;
+  const sx1 = pr.cx + (pr.f * (A[3] + (B[3] - A[3]) * t1)) / d1;
+  const sy1 = pr.cy - (pr.f * (A[4] + (B[4] - A[4]) * t1)) / d1;
+  const ex = sx1 - sx0;
+  const ey = sy1 - sy0;
+  const len2 = ex * ex + ey * ey;
+  let s = len2 > 1e-12 ? ((mx - sx0) * ex + (my - sy0) * ey) / len2 : 0;
+  s = s < 0 ? 0 : s > 1 ? 1 : s;
+  // Screen fraction s -> fraction u of the clipped 3D segment, then back to A-B.
+  const u = (s * d0) / ((1 - s) * d1 + s * d0);
+  const t = t0 + (t1 - t0) * u;
+  _segHit.px = Math.hypot(sx0 + ex * s - mx, sy0 + ey * s - my);
+  _segHit.depth = d0 + (d1 - d0) * u;
+  _segHit.x = A[0] + (B[0] - A[0]) * t;
+  _segHit.y = A[1] + (B[1] - A[1]) * t;
+  _segHit.z = A[2] + (B[2] - A[2]) * t;
+  return true;
+}
+
+function isBetterPick(px, depth, best) {
+  if (!best) return true;
+  if (px < best.px - PICK_TIE_PX) return true;
+  return px <= best.px + PICK_TIE_PX && depth < best.depth;
+}
+
+function keepPick(best, featureId) {
+  const out = best || {};
+  out.px = _segHit.px;
+  out.depth = _segHit.depth;
+  out.x = _segHit.x;
+  out.y = _segHit.y;
+  out.z = _segHit.z;
+  out.featureId = featureId;
+  return out;
+}
+
+// The map point under the cursor: the nearest line within PICK_RADIUS_PX;
+// else the cursor ray on a level plane at the height of the nearest line
+// (the map height near the cursor, e.g. a lane surface between its bounds);
+// else null (sky). Returns { point, kind: "line" | "ground", featureId, depth }.
+function pickMapPoint(clientX, clientY) {
+  const pr = screenProjector();
+  let hit = null;
+  let probe = null;
+  for (const [fid, entry] of objects) {
+    if (fid === "viewport") continue;
+    const line = featureLine(entry.object);
+    const geom = line && line.geometry;
+    const attr = geom && geom.getAttribute("position");
+    if (!attr || attr.count < 2) continue;
+    if (!geom.boundingSphere) geom.computeBoundingSphere();
+    if (!sphereMayBeNear(geom.boundingSphere, pr, clientX, clientY, HEIGHT_PROBE_PX)) continue;
+    const arr = attr.array;
+    let A = _segA;
+    let B = _segB;
+    for (let i = 0; i < attr.count; i++) {
+      toViewSpace(pr.e, arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2], B);
+      if (i > 0 && segmentUnderCursor(pr, clientX, clientY, A, B)) {
+        const { px, depth } = _segHit;
+        if (px <= HEIGHT_PROBE_PX && isBetterPick(px, depth, probe)) probe = keepPick(probe, fid);
+        if (px <= PICK_RADIUS_PX && isBetterPick(px, depth, hit)) hit = keepPick(hit, fid);
+      }
+      const prev = A;
+      A = B;
+      B = prev;
+    }
+  }
+  if (hit) {
+    nav.groundZ = hit.z;
+    return {
+      point: new THREE.Vector3(hit.x, hit.y, hit.z),
+      kind: "line", featureId: hit.featureId, depth: hit.depth,
+    };
+  }
+  if (probe) nav.groundZ = probe.z;
+  const ray = cursorRay(clientX, clientY);
+  if (Math.abs(ray.direction.z) < 1e-9) return null;
+  const t = (nav.groundZ - ray.origin.z) / ray.direction.z;
+  if (!(t > camera.near) || t > GROUND_PICK_MAX_M) return null;
+  const point = ray.at(t, new THREE.Vector3());
+  toViewSpace(pr.e, point.x, point.y, point.z, _segA);
+  return { point, kind: "ground", featureId: null, depth: _segA[5] };
+}
+
+function cursorRay(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  _ndc.set(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  camera.updateMatrixWorld();
+  raycaster.setFromCamera(_ndc, camera);
+  return raycaster.ray;
+}
+
+// Node id nearest the cursor within PICK_RADIUS_PX (nearer to the camera on
+// near-ties), or null.
+function pickNode(clientX, clientY) {
+  ensureNodeIndex();
+  const pr = screenProjector();
+  let best = null;
+  let bestPx = Infinity;
+  let bestDepth = Infinity;
+  for (const [nid, p] of nodePos) {
+    toViewSpace(pr.e, p[0], p[1], p[2], _segA);
+    const d = _segA[5];
+    if (d < camera.near) continue;
+    const px = Math.hypot(
+      pr.cx + (pr.f * _segA[3]) / d - clientX,
+      pr.cy - (pr.f * _segA[4]) / d - clientY,
+    );
+    if (px > PICK_RADIUS_PX) continue;
+    if (best === null || px < bestPx - PICK_TIE_PX || (px <= bestPx + PICK_TIE_PX && d < bestDepth)) {
+      best = nid;
+      bestPx = px;
+      bestDepth = d;
+    }
+  }
+  return best;
+}
+
+// --- mouse navigation ----------------------------------------------------------
+// Replaces OrbitControls. Its pivot was a fixed target that framing put at the
+// centre of the whole map and that walking / looking kept at the same
+// distance, so every orbit swung around a point hundreds of metres away.
+//
+//   left-drag              orbit around the map point under the cursor at
+//                          press time; over empty sky, turn in place
+//   right-drag             turn in place (FPV look)
+//   middle / shift+left    pan; the grabbed point stays under the cursor
+//   wheel                  move toward / away from the point under the cursor
+//
+// These listeners are registered after TransformControls', so a press on the
+// gizmo is already `transform.dragging` when they run.
+const NAV_DRAG_THRESHOLD_PX = 3;          // below this a press is a click (node selection)
+const ORBIT_RAD_PER_HEIGHT = 2 * Math.PI; // full-height drag = one turn, as OrbitControls
+const WHEEL_STEP = 0.85;                  // distance factor per wheel notch
+const DOLLY_MIN_M = 0.05;
+const PIVOT_MARKER_PX = 5;
+const PIVOT_COLOR = 0x4fc3f7;
+const canvas = renderer.domElement;
+const _panRight = new THREE.Vector3();
+const _panUp = new THREE.Vector3();
+const _dolly = new THREE.Vector3();
+
+// Shows what an orbit turns around, for the duration of the drag.
+const pivotMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(1, 16, 12),
+  new THREE.MeshBasicMaterial({ color: PIVOT_COLOR, depthTest: false, transparent: true, opacity: 0.85 }),
+);
+pivotMarker.visible = false;
+pivotMarker.renderOrder = 1002;
+scene.add(pivotMarker);
+
+canvas.style.touchAction = "none";
+canvas.addEventListener("contextmenu", (e) => e.preventDefault()); // right-drag looks
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (nav.pointerId !== null || isPointerLocked() || transform.dragging) return;
+  let mode = null;
+  if (e.button === 0) mode = e.shiftKey ? "pan" : "orbit";
+  else if (e.button === 1) mode = "pan";
+  else if (e.button === 2) mode = "look";
+  if (!mode) return;
+  if (e.button === 1) e.preventDefault(); // no middle-click autoscroll
+  nav.pointerId = e.pointerId;
+  nav.mode = mode;
+  nav.moving = false;
+  nav.downX = nav.lastX = e.clientX;
+  nav.downY = nav.lastY = e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== nav.pointerId) return;
+  if (!nav.moving) {
+    if (Math.hypot(e.clientX - nav.downX, e.clientY - nav.downY) < NAV_DRAG_THRESHOLD_PX) return;
+    beginNavDrag();
+  }
+  const dx = e.clientX - nav.lastX;
+  const dy = e.clientY - nav.lastY;
+  nav.lastX = e.clientX;
+  nav.lastY = e.clientY;
+  dragNav(dx, dy);
+});
+
+canvas.addEventListener("pointerup", endNav);
+canvas.addEventListener("pointercancel", endNav);
+canvas.addEventListener("lostpointercapture", endNav);
+
+// Pick lazily once the press turns into a drag, so plain clicks stay cheap.
+// Nothing has moved since the press, so picking at the press position is exact.
+function beginNavDrag() {
+  nav.moving = true;
+  if (nav.mode === "look") return;
+  const hit = pickMapPoint(nav.downX, nav.downY);
+  if (hit) nav.refDist = Math.max(DOLLY_MIN_M, camera.position.distanceTo(hit.point));
+  if (nav.mode === "orbit") {
+    nav.pivot = hit ? hit.point : null;
+    nav.lastPivot = nav.pivot;
+    nav.lastPivotKind = hit ? hit.kind : "none";
+    pivotMarker.visible = !!hit;
+    if (hit) pivotMarker.position.copy(hit.point);
+  } else {
+    nav.panDepth = hit ? Math.max(DOLLY_MIN_M, hit.depth) : nav.refDist;
+  }
+}
+
+function dragNav(dx, dy) {
+  if (nav.mode === "pan") {
+    // Screen-parallel move that keeps the grabbed depth under the cursor.
+    const m = pixelsToMetres(1, nav.panDepth);
+    _panRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _panUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    camera.position.addScaledVector(_panRight, -dx * m).addScaledVector(_panUp, dy * m);
+    camera.updateMatrixWorld();
+    refreshCameraHud();
+  } else if (nav.mode === "orbit" && nav.pivot) {
+    // Drag right swings the camera left around the pivot (the scene turns with
+    // the cursor); drag down lifts it to look down more.
+    const k = ORBIT_RAD_PER_HEIGHT / (canvas.clientHeight || 1);
+    orbitCamera(nav.pivot, -dx * k, -dy * k);
+    refreshCameraHud();
+  } else {
+    cameraLook(dx * CAM_MOUSE_SENS, -dy * CAM_MOUSE_SENS);
+  }
+}
+
+function endNav(e) {
+  if (nav.pointerId === null || (e && e.pointerId !== nav.pointerId)) return;
+  const id = nav.pointerId;
+  nav.pointerId = null;
+  nav.mode = null;
+  nav.moving = false;
+  nav.pivot = null;
+  pivotMarker.visible = false;
+  if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+}
+
+// Dolly along the cursor ray toward the point under it. Moving along that ray
+// keeps the point on the same pixel, so while the cursor and camera rest the
+// previous pick stays valid and is reused rather than re-walking every line.
+let wheelPick = null; // { x, y, t, point, pos, yaw, pitch }
+
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  if (transform.dragging || isPointerLocked()) return;
+  let notches = e.deltaMode === 1 ? e.deltaY / 3 : e.deltaMode === 2 ? e.deltaY : e.deltaY / 100;
+  notches = Math.max(-5, Math.min(5, notches));
+  if (!notches) return;
+  const scale = Math.pow(WHEEL_STEP, -notches); // < 1 moves closer
+  const t = now();
+  const reuse = wheelPick && t - wheelPick.t < 400
+    && Math.hypot(e.clientX - wheelPick.x, e.clientY - wheelPick.y) <= 2
+    && camera.position.distanceToSquared(wheelPick.pos) < 1e-10
+    && view.yaw === wheelPick.yaw && view.pitch === wheelPick.pitch;
+  if (!reuse) {
+    const hit = pickMapPoint(e.clientX, e.clientY);
+    wheelPick = { x: e.clientX, y: e.clientY, point: hit ? hit.point : null, pos: new THREE.Vector3() };
+  }
+  if (wheelPick.point) {
+    const dist = camera.position.distanceTo(wheelPick.point);
+    const next = Math.max(DOLLY_MIN_M, dist * scale);
+    _dolly.subVectors(camera.position, wheelPick.point).setLength(next);
+    camera.position.copy(wheelPick.point).add(_dolly);
+    nav.refDist = next;
+  } else {
+    // Over sky: step along the cursor ray, sized like the last real target.
+    const ray = cursorRay(e.clientX, e.clientY);
+    camera.position.addScaledVector(ray.direction, nav.refDist * (1 - scale));
+  }
+  camera.updateMatrixWorld();
+  wheelPick.t = t;
+  wheelPick.pos.copy(camera.position);
+  wheelPick.yaw = view.yaw;
+  wheelPick.pitch = view.pitch;
+  refreshCameraHud();
+}, { passive: false });
+
+// Pivot and selection spheres keep a constant pixel size at any distance.
+function updateScreenSizedMarkers() {
+  if (pivotMarker.visible) {
+    const d = Math.max(camera.near, camera.position.distanceTo(pivotMarker.position));
+    pivotMarker.scale.setScalar(pixelsToMetres(PIVOT_MARKER_PX, d));
+  }
+  if (marker.visible) {
+    const d = Math.max(camera.near, camera.position.distanceTo(marker.position));
+    marker.scale.setScalar(pixelsToMetres(SELECT_MARKER_PX, d));
+  }
+}
 
 // --- SSE connection (with auto-reconnect via EventSource) ------------------
 function connect() {
@@ -1361,7 +1713,7 @@ function tick() {
   applyHeldCamera(dt);
   maybeSyncJosmView();
   if (needFrame) { frameAll(); needFrame = false; }
-  controls.update();
+  updateScreenSizedMarkers();
   refreshCameraHud();
   const tr = PROFILE ? now() : 0;
   renderer.render(scene, camera);
