@@ -50,6 +50,11 @@ class Viewer3dPerfTest {
             val snapshot = timed("[$round] computeFull with ${lanelets.size} lanelets") {
                 engine.computeFull(ways, center, lanelets)!!
             }
+            // The hook's split: begin + commit on the EDT, build on a worker.
+            engine.resetForLayerChange()
+            val job = timed("[$round] EDT: beginFull") { engine.beginFull(ways, center, lanelets) }
+            val built = timed("[$round] worker: build") { job.build() }
+            timed("[$round] EDT: commitFull") { engine.commitFull(job, built)!! }
             val json = timed("[$round] encode snapshot JSON") { Viewer3dJson.encode(snapshot) }
             println("[viewer3d-perf] snapshot JSON ${"%.1f".format(json.length / 1e6)} MB")
         }

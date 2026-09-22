@@ -8,6 +8,10 @@ package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
  *
  * The hook **never sends `clear`** despite the protocol defining it; an emptied
  * layer is a [OutboundMessage.Snapshot] with `features: []`.
+ *
+ * A full snapshot comes in three steps so the expensive middle one can run
+ * off the EDT: [beginFull] (engine state, EDT), [FullJob.build] (pure),
+ * [commitFull] (engine state, EDT). [computeFull] does all three at once.
  */
 class Viewer3dDiffEngine(
     var cullEnabled: Boolean = false,
@@ -23,7 +27,12 @@ class Viewer3dDiffEngine(
     val dirtyLanelets: MutableSet<Long> = linkedSetOf()
     val sent: MutableMap<String, FeatureSignature> = linkedMapOf()
 
+    /** Bumped by [resetForLayerChange]: a snapshot begun before is dropped at commit. */
+    var epoch: Int = 0
+        private set
+
     fun resetForLayerChange() {
+        epoch++
         anchor = null
         sent.clear()
         viewportFeature = null
@@ -64,22 +73,60 @@ class Viewer3dDiffEngine(
         viewCenter: Pair<Double, Double>?,
         lanelets: List<LaneletSnapshot> = emptyList(),
     ): OutboundMessage.Snapshot? {
+        val job = beginFull(ways, viewCenter, lanelets)
+        return commitFull(job, job.build())
+    }
+
+    /**
+     * The inputs of one full snapshot, fixed on the EDT. [build] only reads
+     * these immutable snapshots, so it may run on any thread.
+     */
+    class FullJob internal constructor(
+        internal val epoch: Int,
+        val anchor: Anchor?,
+        private val bounds: EnuBounds?,
+        private val cullEnabled: Boolean,
+        private val ways: List<WaySnapshot>,
+        private val lanelets: List<LaneletSnapshot>,
+        internal val emptyNeeded: Boolean,
+    ) {
+        val size: Int get() = ways.size + lanelets.size
+
+        fun build(): List<Pair<ViewerFeature, FeatureSignature>> {
+            val a = anchor ?: return emptyList()
+            val out = LinkedHashMap<String, Pair<ViewerFeature, FeatureSignature>>(ways.size + lanelets.size)
+            for (w in ways) {
+                if (w.deleted) continue
+                if (!Viewer3dFeatures.wayInCull(w, a, bounds, cullEnabled)) continue
+                val feat = Viewer3dFeatures.featureForWay(w, a) ?: continue
+                out[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
+            }
+            // Lanelets after their bound ways, which the viewer builds surfaces from.
+            for (l in lanelets) {
+                if (l.deleted) continue
+                if (!Viewer3dFeatures.laneletInCull(l, a, bounds, cullEnabled)) continue
+                val feat = Viewer3dFeatures.featureForLanelet(l, a) ?: continue
+                out[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
+            }
+            return out.values.toList()
+        }
+    }
+
+    /**
+     * Start a full snapshot of [ways] / [lanelets]: fixes the anchor and cull
+     * box, and clears the dirty marks, which the snapshot covers. Marks made
+     * while it builds survive the commit and go out as patches after it.
+     */
+    fun beginFull(
+        ways: List<WaySnapshot>,
+        viewCenter: Pair<Double, Double>?,
+        lanelets: List<LaneletSnapshot> = emptyList(),
+    ): FullJob {
         if (anchor == null) {
             anchor = Viewer3dFeatures.computeAnchor(ways)
         }
         val a = anchor
-        if (a == null) {
-            if (forceSnapshot || sent.isNotEmpty()) {
-                sent.clear()
-                forceSnapshot = false
-                dirtyWays.clear()
-                dirtyLanelets.clear()
-                dirtyAll = false
-                return OutboundMessage.Snapshot(null, emptyList())
-            }
-            return null
-        }
-        val bounds = if (cullEnabled) {
+        val bounds = if (cullEnabled && a != null) {
             Viewer3dFeatures.cullBoundsEnu(viewCenter, a, cullRangeM).also {
                 cullBoundsKey = it?.let { b -> Viewer3dEnu.cullBoundsKey(b) }
             }
@@ -87,28 +134,31 @@ class Viewer3dDiffEngine(
             cullBoundsKey = null
             null
         }
-        val current = linkedMapOf<String, Pair<ViewerFeature, FeatureSignature>>()
-        for (w in ways) {
-            if (w.deleted) continue
-            if (!Viewer3dFeatures.wayInCull(w, a, bounds, cullEnabled)) continue
-            val feat = Viewer3dFeatures.featureForWay(w, a) ?: continue
-            current[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
-        }
-        // Lanelets after their bound ways, which the viewer builds surfaces from.
-        for (l in lanelets) {
-            if (l.deleted) continue
-            if (!Viewer3dFeatures.laneletInCull(l, a, bounds, cullEnabled)) continue
-            val feat = Viewer3dFeatures.featureForLanelet(l, a) ?: continue
-            current[feat.id] = feat to Viewer3dFeatures.featureSignature(feat)
-        }
-        val feats = current.values.map { it.first }.toMutableList()
-        viewportFeature?.let { feats.add(it) }
-        sent.clear()
-        sent.putAll(current.mapValues { it.value.second })
+        val emptyNeeded = forceSnapshot || sent.isNotEmpty()
         forceSnapshot = false
         dirtyWays.clear()
         dirtyLanelets.clear()
         dirtyAll = false
+        return FullJob(epoch, a, bounds, cullEnabled, ways, lanelets, emptyNeeded)
+    }
+
+    /**
+     * Adopt a built snapshot: what was sent is now exactly [built]. Null when
+     * the layer changed since [beginFull] (the job is stale) or when there is
+     * no map and nothing to clear.
+     */
+    fun commitFull(job: FullJob, built: List<Pair<ViewerFeature, FeatureSignature>>): OutboundMessage.Snapshot? {
+        if (job.epoch != epoch) return null
+        val a = job.anchor
+        if (a == null) {
+            if (!job.emptyNeeded) return null
+            sent.clear()
+            return OutboundMessage.Snapshot(null, emptyList())
+        }
+        val feats = built.mapTo(ArrayList(built.size + 1)) { it.first }
+        viewportFeature?.let { feats.add(it) }
+        sent.clear()
+        for ((f, sig) in built) sent[f.id] = sig
         return OutboundMessage.Snapshot(a, feats)
     }
 

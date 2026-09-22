@@ -159,8 +159,9 @@ Most impactful for editing heights, in my estimate:
 - Height-jump warnings compare absolute height differences between
   neighbouring nodes (as asked). A slope-based check (Δz over horizontal
   distance) would flag steep short steps without nagging on long gentle ones.
-- Auto-height takes the single nearest node's height. Interpolating from the
-  two ends a new way connects to would suit ways drawn between existing ones.
+- [x] Auto-height takes the single nearest node's height. ~~Interpolating from
+  the two ends a new way connects to would suit ways drawn between existing
+  ones.~~ Done: known heights in two directions along the ways interpolate.
 - [x] Hover highlight in edit mode (cyan: the node / way a click would pick,
   same rule as the click). Hidden while the camera moves; a slow pick spaces
   out the next one.
@@ -187,11 +188,14 @@ Most impactful for editing heights, in my estimate:
   before JOSM answers. Gestures now stamp their nodes with a generation; a
   refusal reverts only nodes no later gesture touched (e2e_heights).
 
-- A full snapshot (connect / layer change) still costs ~1.5 s on the EDT for
-  Karlsruhe without culling (ways 0.15 s + lanelet alignment 0.3 s +
-  `computeFull` 1.0–1.25 s, of which lanelet centerlines ~0.5 s).
-  Snapshotting on the EDT and building features on a worker thread would take
-  most of it off the UI; with culling on it is small.
+- [x] A full snapshot (connect / layer change) cost ~1.5–2 s on the EDT for
+  Karlsruhe without culling. The feature build (centerlines, arrays) now runs
+  on a worker (`beginFull` / `FullJob.build` / `commitFull`); the EDT keeps
+  reading the dataset into snapshots (ways ~0.2 s, lanelet alignment ~0.35 s)
+  and begin + commit (~40 ms). Nothing else is sent while it builds, so no
+  patch overtakes the snapshot; edits meanwhile follow as patches.
+- The lanelet alignment (~0.35 s) still reads live relations on the EDT.
+  It could run on the worker under the dataset's read lock.
 - Draw-distance LOD: hide chunks far beyond the view (or draw them without
   surfaces / arrows) so a whole-city view at a shallow angle does not pay for
   the horizon. Currently ~45 fps on an integrated GPU, fine but not free.

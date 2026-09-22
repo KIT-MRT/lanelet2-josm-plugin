@@ -405,7 +405,13 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   viewport overlay).
 - Threading: all DataSet/MapView reads and command application on the **EDT**;
   JSON serialisation and socket writes on a `viewer3d-sender` daemon thread with
-  a bounded queue that resyncs on overflow; a separate reader thread.
+  a bounded queue that resyncs on overflow; a separate reader thread. A full
+  snapshot's features build on `ll2-viewer3d-snapshot` from immutable
+  snapshots taken on the EDT (`engine.beginFull` -> `FullJob.build` ->
+  `engine.commitFull` back on the EDT). While `building`, `computeAndSend`
+  and `sendViewport` do nothing (the commit reschedules them), so nothing
+  overtakes the snapshot; dirty marks made meanwhile survive the commit; a
+  layer change bumps `engine.epoch` and the commit drops the stale job.
 - **`_MAX_WAYS_PER_CYCLE` is 999**, not the 3000 the upstream `AGENTS.md`
   claims. Trust the code.
 - **`Viewer3dSocketClient.requestResync()` must never call its `onConnected`

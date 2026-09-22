@@ -25,6 +25,8 @@ import org.openstreetmap.josm.gui.layer.OsmDataLayer
 import org.openstreetmap.josm.plugins.lanelet2.infra.Lanelet
 import org.openstreetmap.josm.plugins.lanelet2.infra.LaneletUtils
 import org.openstreetmap.josm.tools.Logging
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 
@@ -47,6 +49,12 @@ object Viewer3dHook {
     private var editTimer: Timer? = null
     private var viewportTimer: Timer? = null
     private var selectionTimer: Timer? = null
+
+    // Full snapshots build their features here (see buildSnapshot).
+    private val snapshotWorker: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor { r -> Thread(r, "ll2-viewer3d-snapshot").apply { isDaemon = true } }
+    }
+    private var building = false
     @Volatile private var viewFrom3d = false
 
     fun serverProcess(): Viewer3dServerProcess = server
@@ -247,6 +255,7 @@ object Viewer3dHook {
     }
 
     private fun computeAndSend() {
+        if (building) return // the commit schedules the next round
         if (socket?.connected != true) {
             engine.forceSnapshot = true
             return
@@ -256,8 +265,7 @@ object Viewer3dHook {
         if (engine.forceSnapshot || engine.sent.isEmpty() || engine.anchor == null) {
             if (engine.anchor == null) engine.anchor = anchorOf(ds)
             val ways = candidateWayPrimitives(ds, viewCenter)
-            engine.computeFull(ways.map { it.toSnapshot() }, viewCenter, laneletsOf(ways))
-                ?.let { socket?.enqueue(it) }
+            buildSnapshot(engine.beginFull(ways.map { it.toSnapshot() }, viewCenter, laneletsOf(ways)))
             return
         }
         if (engine.dirtyAll) {
@@ -273,6 +281,38 @@ object Viewer3dHook {
         )
         result.patch?.let { socket?.enqueue(it) }
         if (result.morePending) scheduleEdit()
+    }
+
+    /**
+     * Build a full snapshot's features on a worker (a whole city is ~1 s of
+     * centerlines and arrays, which froze JOSM on connect) and adopt it on the
+     * EDT. The dataset was already read into immutable snapshots on the EDT.
+     * Nothing else goes out meanwhile, so no patch or cull update overtakes
+     * the snapshot; edits made during the build stay dirty and follow as
+     * patches. A layer change meanwhile makes the commit drop the job.
+     */
+    private fun buildSnapshot(job: Viewer3dDiffEngine.FullJob) {
+        building = true
+        snapshotWorker.execute {
+            val built = try {
+                job.build()
+            } catch (e: Exception) {
+                Logging.error(e)
+                null
+            }
+            SwingUtilities.invokeLater {
+                building = false
+                if (built == null) {
+                    engine.forceSnapshot = true // retried on the next change, not in a loop
+                    return@invokeLater
+                }
+                engine.commitFull(job, built)?.let { socket?.enqueue(it) }
+                if (socket != null) {
+                    scheduleEdit()
+                    scheduleViewport()
+                }
+            }
+        }
     }
 
     /**
@@ -322,7 +362,7 @@ object Viewer3dHook {
     }
 
     private fun sendViewport() {
-        if (socket?.connected != true) return
+        if (socket?.connected != true || building) return
         if (engine.cullEnabled) {
             val ds = attachedDs ?: return
             val ways = candidateWayPrimitives(ds, mapViewCenter())

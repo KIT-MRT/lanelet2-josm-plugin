@@ -97,13 +97,28 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
   });
   const sendScene = (msg) => bridge.write(JSON.stringify(msg) + "\n");
 
+  // Killed (Ctrl+C, timeout, kill) before close(): take Chrome and the server
+  // along, or a SwiftShader Chrome keeps burning CPU for hours.
+  const killChildren = () => {
+    try { chrome.kill("SIGKILL"); } catch (_) { /* not started or gone */ }
+    try { server.kill("SIGKILL"); } catch (_) { /* gone */ }
+  };
+  let chrome = null;
+  process.once("exit", killChildren);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.once(sig, () => {
+      killChildren();
+      process.exit(128 + (sig === "SIGINT" ? 2 : sig === "SIGTERM" ? 15 : 1));
+    });
+  }
+
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ll2-viewer-e2e-"));
   // Software GL by default (works anywhere, CPU-bound frame times);
   // LL2_GPU=1 uses the machine's GPU through ANGLE/OpenGL for real frame rates.
   const gl = process.env.LL2_GPU === "1"
     ? ["--enable-gpu", "--use-angle=gl"]
     : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
-  const chrome = spawn(findChrome(), ["--headless=new", `--remote-debugging-port=${cdpPort}`,
+  chrome = spawn(findChrome(), ["--headless=new", `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${profile}`, `--window-size=${width},${height}`, "--no-first-run",
     "--no-default-browser-check", ...gl, "about:blank"], { stdio: "ignore" });
   let targets = [];

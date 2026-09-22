@@ -56,6 +56,45 @@ class Viewer3dDiffTest {
     }
 
     @Test
+    fun aSnapshotBegunBeforeALayerChangeIsDropped() {
+        val engine = Viewer3dDiffEngine()
+        val job = engine.beginFull(listOf(way(1, 8.4 to 49.0, 8.401 to 49.001)), null)
+        val built = job.build()
+        engine.resetForLayerChange()
+        assertNull(engine.commitFull(job, built))
+        assertTrue(engine.sent.isEmpty())
+        assertTrue(engine.forceSnapshot)
+    }
+
+    @Test
+    fun changesDuringABuildSurviveItsCommit() {
+        val engine = Viewer3dDiffEngine()
+        val job = engine.beginFull(listOf(way(1, 8.4 to 49.0, 8.401 to 49.001)), null)
+        assertFalse(engine.forceSnapshot)
+        engine.markWayDirty(1) // an edit while the worker builds
+        engine.forceSnapshot = true // a reconnect while the worker builds
+        val snap = engine.commitFull(job, job.build())!!
+        assertEquals(listOf("way/1"), snap.features.map { it.id })
+        assertTrue("way/1" in engine.sent)
+        assertEquals(setOf(1L), engine.dirtyWays) // goes out as a patch next
+        assertTrue(engine.forceSnapshot) // and another snapshot follows
+    }
+
+    @Test
+    fun theCommitCarriesTheLatestViewport() {
+        val engine = Viewer3dDiffEngine()
+        val job = engine.beginFull(listOf(way(1, 8.4 to 49.0, 8.401 to 49.001)), null)
+        engine.viewportFeature = ViewerFeature(
+            id = Viewer3dConstants.VIEWPORT_ID,
+            kind = "viewport",
+            tags = emptyMap(),
+            pts = doubleArrayOf(0.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        )
+        val snap = engine.commitFull(job, job.build())!!
+        assertEquals(listOf("way/1", Viewer3dConstants.VIEWPORT_ID), snap.features.map { it.id })
+    }
+
+    @Test
     fun maxWaysPerCycleIs999() {
         assertEquals(999, Viewer3dConstants.MAX_WAYS_PER_CYCLE)
         val engine = Viewer3dDiffEngine()
