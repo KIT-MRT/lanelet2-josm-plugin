@@ -13,6 +13,22 @@ or any other python interpreter you might have installed, for example via `uv`.
 
 ## Requirements
 
+The plugin is built with JDK21 so you need to install:
+
+```
+sudo apt install openjdk-21-jre
+```
+
+or insall JDK25 JRE, which is required by the Python3 scripting companion plugin (not a hard dependency):
+
+```
+sudo apt install openjdk-25-jre
+```
+
+as it depends on the more modern Java Runtime.
+
+make sure that JOSM is launched with that (should work directly after installing the JDK21 JRE) 
+
 | You want… | You need |
 |---|---|
 | Core editing, styles, presets, 3D viewer, notes, git helpers | [JOSM](https://josm.openstreetmap.de/) **19555** or newer |
