@@ -405,8 +405,11 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   vantage point the user had just lined up.
 - **The whole-scene aggregate** (`ll2_scene/aggregate.py`) voxel-downsamples
   every frame into one cloud (163 M -> 2.7 M points) and drops **dynamic**
-  points by voxel persistence: a voxel seen in fewer than `min_frames`
-  distinct frames was traffic, not structure. This is needed because
+  points by voxel persistence: a voxel never seen in `min_run` **consecutive**
+  frames was traffic, not structure. Consecutive matters -- counting distinct
+  frames leaks on a long scene, because three different cars crossing one
+  patch of road also make three hits (measured: 44 % of what the count rule
+  kept). This is needed because
   `kitscenes` deskews against the *ego* pose only -- other vehicles are rigid
   bodies moving on their own and smear into a chain of car-shaped blobs.
   Cached as one `.npz` whose name carries the settings.

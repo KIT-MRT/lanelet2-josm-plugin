@@ -183,9 +183,11 @@ class PrewarmTest(unittest.TestCase):
         self.source.frame_count = 8
         self.server = SceneHttpServer(self.source, port=0, log=lambda _m: None)
         self.server.start()
+        self.stopped = False
 
     def tearDown(self):
-        self.server.stop()
+        if not self.stopped:
+            self.server.stop()
 
     def _get(self, path):
         conn = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=30)
@@ -222,7 +224,7 @@ class PrewarmTest(unittest.TestCase):
         time.sleep(0.6)
         self.assertLessEqual(len(self.source.decodes) - seen, 1,
                              "the warmer kept going after stop()")
-        self.server.start()  # so tearDown's stop() has something to stop
+        self.stopped = True  # a closed server must not be started again
 
 
 class AggregateServingTest(unittest.TestCase):

@@ -71,7 +71,7 @@ const data = http.createServer((req, res) => {
     res.writeHead(ready ? 200 : 202, { ...cors, "Content-Type": "application/json" });
     res.end(JSON.stringify(ready
       ? { ready: true,
-          stats: { points: AGG_CHUNKS * AGG_PER_CHUNK, voxel_m: 0.15, min_frames: 3 },
+          stats: { points: AGG_CHUNKS * AGG_PER_CHUNK, voxel_m: 0.15, min_run: 3 },
           chunks: Array.from({ length: AGG_CHUNKS }, (_, i) => (
             { index: i, count: AGG_PER_CHUNK, centre: [i * 40, 0, 100], radius: 20 })) }
       : { ready: false, progress: { state: "scanning", done: aggregateAsked, total: 9 } }));

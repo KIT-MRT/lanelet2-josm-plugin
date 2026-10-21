@@ -82,7 +82,7 @@ class AggregateTest(unittest.TestCase):
         self.source = MovingObjectSource()
 
     def _build(self, **kw):
-        options = dict(voxel=0.3, max_range_m=200.0, min_frames=3,
+        options = dict(voxel=0.3, max_range_m=200.0, min_run=3,
                        ego_box=(0.1, 0.1, 0.1), log=lambda _m: None)
         options.update(kw)
         agg = SceneAggregator(self.source, disk_cache=None, **options)
@@ -97,10 +97,34 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual(12, stats["frames"])
         self.assertLess(stats["static_voxels"], stats["voxels"])
 
+    def test_a_car_crossing_the_same_spot_three_times_is_still_not_static(self):
+        """Counting distinct frames leaks on a long scene; a run does not."""
+        source = MovingObjectSource()
+        wall = source.wall
+
+        def three_passes(index, lidars=None):
+            # The same patch of road is occupied in frames 0, 5 and 10 by
+            # three different cars -- three hits, never consecutive.
+            pts = wall
+            if index in (0, 5, 10):
+                blob = np.random.default_rng(index).uniform(-0.4, 0.4, size=(200, 3))
+                blob[:, 0] += -3.0
+                blob[:, 1] += 20.0
+                blob[:, 2] += 0.8
+                pts = np.vstack([wall, blob])
+            return pts, np.full(len(pts), 0.5, np.float32), np.zeros(len(pts), np.uint8)
+
+        source.frame_points_scene = three_passes
+        agg = SceneAggregator(source, disk_cache=None, voxel=0.3, max_range_m=200.0,
+                              min_run=3, ego_box=(0.1, 0.1, 0.1), log=lambda _m: None)
+        xyz, _i, _stats = agg.build()
+        self.assertEqual(0, (xyz[:, 0] < -1.0).sum(),
+                         "three separate passes were mistaken for a static object")
+
     def test_keeping_everything_keeps_the_car(self):
-        xyz, _intensity, _stats = self._build(min_frames=1)
+        xyz, _intensity, _stats = self._build(min_run=1)
         self.assertGreater((xyz[:, 0] < -1.0).sum(), 100,
-                           "min_frames=1 should keep the traffic in")
+                           "min_run=1 should keep the traffic in")
 
     def test_downsamples_to_one_point_a_voxel(self):
         xyz, _intensity, stats = self._build()
@@ -120,9 +144,9 @@ class AggregateTest(unittest.TestCase):
         self.assertLess(stats["points"], far["points"])
 
     def test_stats_describe_the_settings(self):
-        _xyz, _i, stats = self._build(voxel=0.25, min_frames=4)
+        _xyz, _i, stats = self._build(voxel=0.25, min_run=4)
         self.assertEqual(0.25, stats["voxel_m"])
-        self.assertEqual(4, stats["min_frames"])
+        self.assertEqual(4, stats["min_run"])
 
 
 class ChunkTest(unittest.TestCase):
@@ -177,7 +201,7 @@ class AggregateCacheTest(unittest.TestCase):
         np.testing.assert_allclose(back_xyz, xyz, atol=1e-3)
         np.testing.assert_allclose(back_i, intensity, atol=1e-6)
         self.assertEqual(stats["points"], int(back_stats["points"]))
-        self.assertEqual(stats["min_frames"], int(back_stats["min_frames"]))
+        self.assertEqual(stats["min_run"], int(back_stats["min_run"]))
 
     def test_different_settings_use_different_files(self):
         other = SceneAggregator(MovingObjectSource(), disk_cache=self.disk, voxel=0.5,

@@ -13,15 +13,23 @@ that has to happen anyway:
 * **Voxel downsampling.** Points are binned to `voxel` metres and replaced by
   the centroid of the bin, which takes 163 M points to a few million.
 * **Voxel persistence.** A static surface is hit in frame after frame as the
-  car approaches; a moving vehicle occupies a voxel in one or two frames and
-  is gone. Keeping only voxels seen in at least `min_frames` distinct frames
+  car approaches; a moving vehicle occupies a voxel for an instant and is
+  gone. Keeping only voxels seen in at least `min_run` **consecutive** frames
   removes the traffic without any labels, in every direction, and at the
   resolution the cloud is being binned to anyway.
 
-Measured on 40 frames of the example scene at 0.2 m: 803 k occupied voxels,
-30 % of them seen in a single frame; keeping those seen three times drops 4 %
-of the points, and what it drops is the moving traffic (plus some wind-blown
-foliage, which no persistence test can keep).
+Consecutive, not merely often: counting distinct frames looks right on a short
+clip and leaks badly on a long one, because three *different* cars crossing
+the same patch of road over 22 s also add up to three hits. Measured over the
+example scene's 220 frames, 1.2 M voxels -- 44 % of everything a hit count
+keeps -- were hit three times or more without ever being seen in three
+consecutive frames, and they are the car-shaped blobs strung down the road.
+
+What this also removes is wind-blown foliage: leaves move further than a
+voxel between frames, so a canopy fails the same test. Admitting it back with
+an "or seen in many frames" clause re-admits a comparable amount of traffic
+(measured: 161 k traffic-height voxels against 216 k canopy-height ones), so
+there is no clean escape; `min_run=1` keeps everything.
 
 Points returned are in the scene's metric frame, like the per-frame cache --
 the viewer's ENU anchor is applied later and can change.
@@ -66,12 +74,12 @@ class SceneAggregator:
     """Builds (and caches) the static aggregate of a whole scene."""
 
     def __init__(self, source, disk_cache=None, voxel=0.15, max_range_m=60.0,
-                 min_frames=3, ego_box=(3.6, 1.5, 2.6), step=1, log=print):
+                 min_run=3, ego_box=(3.6, 1.5, 2.6), step=1, log=print):
         self.source = source
         self.disk = disk_cache
         self.voxel = float(voxel)
         self.max_range_m = float(max_range_m)
-        self.min_frames = int(min_frames)
+        self.min_run = int(min_run)
         self.ego_box = ego_box
         self.step = max(1, int(step))
         self.log = log
@@ -106,34 +114,34 @@ class SceneAggregator:
         return range(0, self.source.frame_count, self.step)
 
     # -- the two passes ----------------------------------------------------
-    def _count_frames_per_voxel(self):
-        """How many distinct frames put a point in each voxel."""
+    def _runs_per_voxel(self):
+        """Longest run of consecutive frames that hit each voxel.
+
+        Frame by frame, because a run is a temporal thing: a voxel the
+        current frame misses has its run broken, which is the whole point.
+        Every index operation below is plain fancy indexing -- the old keys
+        are unique, so they map one-to-one into the merged array and no
+        scatter-add is needed.
+        """
         keys = np.zeros(0, np.int64)
-        counts = np.zeros(0, np.int32)
-        batch_keys, batch_counts = [], []
+        current = np.zeros(0, np.int32)
+        longest = np.zeros(0, np.int32)
         for n, index in enumerate(self.frames()):
             xyz, _ = self._frame_points(index)
-            if len(xyz):
-                seen = np.unique(voxel_keys(xyz, self.voxel))
-                batch_keys.append(seen)
-                batch_counts.append(np.ones(len(seen), np.int32))
-            # Merge now and then so the running set stays small.
-            if len(batch_keys) >= 32:
-                keys, counts = self._fold(keys, counts, batch_keys, batch_counts)
-                batch_keys, batch_counts = [], []
+            seen = np.unique(voxel_keys(xyz, self.voxel)) if len(xyz) else np.zeros(0, np.int64)
+            merged, inverse = np.unique(np.concatenate([keys, seen]), return_inverse=True)
+            old = inverse[:len(keys)]
+            new = inverse[len(keys):]
+            run = np.zeros(len(merged), np.int32)
+            run[old] = current
+            best = np.zeros(len(merged), np.int32)
+            best[old] = longest
+            hit = np.zeros(len(merged), bool)
+            hit[new] = True
+            run = np.where(hit, run + 1, 0)
+            keys, current, longest = merged, run, np.maximum(best, run)
             self.progress.update(state="scanning", done=n + 1)
-        keys, counts = self._fold(keys, counts, batch_keys, batch_counts)
-        return keys, counts
-
-    @staticmethod
-    def _fold(keys, counts, batch_keys, batch_counts):
-        if not batch_keys:
-            return keys, counts
-        merged_keys = np.concatenate(batch_keys)
-        merged_counts = np.concatenate(batch_counts)
-        uniq, inverse = np.unique(merged_keys, return_inverse=True)
-        return merge_counts(keys, counts, uniq,
-                            np.bincount(inverse, weights=merged_counts).astype(np.int32))
+        return keys, longest
 
     def _accumulate(self, kept_keys):
         """Centroid and mean intensity of every kept voxel."""
@@ -163,11 +171,10 @@ class SceneAggregator:
         total = len(self.frames())
         self.progress.update(state="scanning", done=0, total=total, points=0)
         t0 = time.perf_counter()
-        keys, counts = self._count_frames_per_voxel()
+        keys, longest = self._runs_per_voxel()
         t_scan = time.perf_counter() - t0
         occupied = len(keys)
-        keep = counts >= self.min_frames
-        kept_keys = keys[keep]
+        kept_keys = keys[longest >= self.min_run]
         self.log("scene: aggregate scanned %d frames, %d voxels, %d static (%.0f%%), %.0f s"
                  % (total, occupied, len(kept_keys),
                     100.0 * len(kept_keys) / max(occupied, 1), t_scan))
@@ -179,7 +186,7 @@ class SceneAggregator:
             "static_voxels": int(len(kept_keys)),
             "points": int(len(xyz)),
             "voxel_m": self.voxel,
-            "min_frames": self.min_frames,
+            "min_run": self.min_run,
             "max_range_m": self.max_range_m,
             "seconds": round(time.perf_counter() - t0, 1),
         }
@@ -194,8 +201,10 @@ class SceneAggregator:
         """Where this exact aggregate lives; the parameters are in the name."""
         if not (self.disk and self.disk.enabled):
             return None
-        name = ("aggregate-v%.3f-f%d-r%.0f-s%d.npz"
-                % (self.voxel, self.min_frames, self.max_range_m, self.step))
+        # The rule is in the name, so a different one builds a new file
+        # instead of serving an aggregate filtered some other way.
+        name = ("aggregate-v%.3f-c%d-r%.0f-s%d.npz"
+                % (self.voxel, self.min_run, self.max_range_m, self.step))
         return self.disk.dir / name
 
     def load_cached(self):
@@ -233,8 +242,8 @@ class SceneAggregator:
 
 
 def describe(stats):
-    return ("%.2f m voxels, seen in >=%d frames, within %.0f m"
-            % (stats["voxel_m"], stats["min_frames"], stats["max_range_m"]))
+    return ("%.2f m voxels, seen in >=%d consecutive frames, within %.0f m"
+            % (stats["voxel_m"], stats["min_run"], stats["max_range_m"]))
 
 
 def chunk_by_tile(xyz, intensity, tile_m=128.0, max_points=400_000):

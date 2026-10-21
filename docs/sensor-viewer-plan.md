@@ -143,10 +143,17 @@ to learn about the viewport rectangle.
       never stuck behind them.
 - [x] **Dynamic removal by voxel persistence.** Deskew fixes the *ego's*
       motion, not other vehicles': stacking frames leaves a chain of
-      car-shaped blobs down the road. A voxel seen in fewer than
-      `--aggregate-min-frames` distinct frames is dropped. On the example
-      scene 5.19 M occupied voxels -> 2.74 M static (47 % dropped), and what
-      goes is the traffic (plus wind-blown foliage, which nothing can keep).
+      car-shaped blobs down the road. A voxel not seen in
+      `--aggregate-min-run` **consecutive** frames is dropped.
+      5.19 M occupied voxels -> 1.54 M static on the example scene.
+- [x] Counting *distinct* frames was the first rule and leaks on a long
+      scene: three different cars crossing one patch of road over 22 s also
+      make three hits. 1.2 M voxels (44 % of what the count rule kept) were
+      hit 3+ times without ever being seen 3 frames in a row. Measured, then
+      replaced by the run rule. Foliage goes with it -- leaves move further
+      than a voxel between frames -- and an "or seen often" escape clause
+      re-admits as much traffic as it saves canopy (161 k vs 216 k voxels),
+      so there is none.
 - [x] Built on demand (`Shift+P`) with progress on the button, or
       `--aggregate-now`; cached as one `.npz`, reloaded in 0.07 s.
 - [ ] Draw-distance LOD: not needed at 2.7 M points / 12 draw calls. The

@@ -84,7 +84,7 @@ stays JOSM's (and editable) while the sensor data comes from here.
 | `--clear-cache` | drop this scene's cached frames before starting |
 | `--prewarm` | decode the whole scene into the cache in the background |
 | `--aggregate-voxel M` | voxel size of the whole-scene cloud (default 0.15 m) |
-| `--aggregate-min-frames N` | a voxel must be seen in N frames to count as static (default 3; `1` keeps the traffic) |
+| `--aggregate-min-run N` | a voxel must be seen in N **consecutive** frames to count as static (default 3; `1` keeps the traffic) |
 | `--aggregate-range M` | only aggregate returns within this range of the car (default 60 m) |
 | `--aggregate-step N` | use every Nth frame |
 | `--aggregate-now` | build it at startup instead of on demand |
@@ -134,16 +134,25 @@ the car's own motion during the ~100 ms sweep is compensated — but another
 vehicle driving past is a rigid body moving on its own, and lands somewhere
 different in every frame. Stacking leaves a chain of car-shaped blobs down the
 road. A static surface is hit frame after frame as the car approaches; a
-moving vehicle occupies a voxel once or twice. Keeping only voxels seen in at
-least `--aggregate-min-frames` distinct frames removes the traffic with no
+moving vehicle occupies a voxel for an instant. Keeping only voxels seen in at
+least `--aggregate-min-run` **consecutive** frames removes the traffic with no
 labels, in every direction, at the resolution the cloud is binned to anyway.
 
-On the example scene that is **5.19 M occupied voxels, 2.74 M static** — 47 %
-dropped as moving. What it removes is the traffic; what it also removes is
-wind-blown foliage, which no persistence test can keep. Pass
-`--aggregate-min-frames 1` to keep everything.
+*Consecutive*, not merely often: counting distinct frames looks right on a
+short clip and leaks on a long one, because three different cars crossing the
+same patch of road over 22 s also add up to three hits. Measured over the
+example scene's 220 frames, **1.2 M voxels — 44 % of everything a hit count
+keeps — were hit three times or more without ever being seen in three
+consecutive frames**, and they are the car blobs strung down the road.
 
-Building costs one decode per frame (~100 s with the frame cache warm, far
+On the example scene: **5.19 M occupied voxels, 1.54 M static**. What it also
+removes is wind-blown foliage, because leaves move further than a voxel
+between frames. Letting those back in with an "or seen in many frames" clause
+re-admits a comparable amount of traffic (161 k traffic-height voxels against
+216 k canopy-height ones), so there is no clean escape.
+`--aggregate-min-run 1` keeps everything.
+
+Building costs one decode per frame (~250 s with the frame cache warm, far
 longer cold — use `--prewarm`), and is cached as a single `.npz` next to the
 frames, so later runs load it in 0.07 s. The settings are in the file name, so
 changing them builds a new one rather than serving a stale aggregate.
