@@ -25,6 +25,7 @@ import { updateHighlight } from "./js/render/highlight.js";
 import { updateHover, hoverItem } from "./js/hover.js";
 import { pointLayer } from "./js/render/points.js";
 import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
+import { rigActive, update as updateRig } from "./js/sensors/camrig.js";
 import { selection } from "./js/selection.js";
 import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
@@ -37,7 +38,9 @@ import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine, i
 
 // edit.js created TransformControls at import, so these listeners come after
 // its pointerdown (see nav.js).
-installNav({ gizmoBusy, pointerLocked: isPointerLocked });
+// The camera lock drives the camera from the recorded pose, so navigation
+// and the hold-to-move keys have nothing to say while it is on.
+installNav({ gizmoBusy: () => gizmoBusy() || rigActive(), pointerLocked: isPointerLocked });
 installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
@@ -88,11 +91,11 @@ function tick() {
   const tNow = now();
   const dt = Math.min(0.05, (tNow - lastTick) / 1000);
   lastTick = tNow;
-  applyHeldCamera(dt);
+  if (!rigActive()) applyHeldCamera(dt);
   maybeSyncJosmView();
   lineLayer.update();
   laneletLayer.update();
-  updateHover(gizmoBusy() || navBusy() || isPointerLocked());
+  updateHover(gizmoBusy() || navBusy() || isPointerLocked() || rigActive());
   updateHighlight();
   iconLayer.update(camera);
   updateScreenSizedMarkers();
@@ -116,6 +119,11 @@ function tick() {
 tick();
 
 window.addEventListener("resize", () => {
+  if (rigActive()) {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    updateRig(); // re-letterboxes and restores the intrinsic projection
+    return;
+  }
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);

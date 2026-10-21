@@ -390,6 +390,16 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   reintroduce one.
 - Heights reuse the plugin's rule: `|ele| > 100 km` is "no height"; these maps
   carry `-FLT_MAX` on unmapped signs and poles.
+- **Camera lock** (`static/js/sensors/camrig.js`): the camera matrix is
+  `T_enu_ego(frame) * T_cam_to_ego * diag(1,-1,-1)` -- the last factor is the
+  OpenCV (x right, y down, z forward) to three.js (y up, -z forward) basis
+  flip. The projection matrix is written by hand from `fx, fy, cx, cy`,
+  because an off-centre principal point is not a `fov`; the renderer is
+  letterboxed (`setViewport`/`setScissor`) to the image aspect so a rendered
+  pixel is an image pixel. `projectToImage` exists so a test can hold the
+  render against the plain pinhole formula (it matches to 0.0000 px).
+  While locked, nav / held keys / hover are off, because picking still assumes
+  the ordinary projection and the full canvas.
 - Tests: `.venv/bin/python -m unittest discover -s tests -t .` (pure),
   `testdata/viewer3d/e2e_scene.mjs` (browser, fakes the scene server),
   `testdata/viewer3d/live_scene.mjs <scene>` (real data; prints how far the

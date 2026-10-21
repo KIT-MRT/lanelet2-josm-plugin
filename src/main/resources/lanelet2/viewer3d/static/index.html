@@ -136,6 +136,14 @@
     }
     #sceneBar input[type=range] { width: 120px; accent-color: #3ff0ff; }
     #sceneBar #sceneFrameLabel { min-width: 86px; color: #9fb0c7; }
+    #sceneBar select:disabled, #sceneBar button:disabled { opacity: 0.45; cursor: default; }
+    /* The recorded camera frame, blended over the render. Sized to the
+       letterboxed viewport by camrig.js so image and render pixels line up. */
+    #sceneImage {
+      position: fixed; z-index: 3; pointer-events: none; object-fit: fill;
+      opacity: 0.45;
+    }
+    #sceneImage[hidden] { display: none; }
     #imageryMenu {
       position: fixed; top: 44px; right: 12px; z-index: 13;
       display: flex; flex-direction: column; gap: 3px; min-width: 180px;
@@ -166,6 +174,7 @@
 </head>
 <body>
   <div id="app"></div>
+  <img id="sceneImage" hidden alt="">
   <div id="leftCol">
   <div id="hud">
     <div id="hudTitle" title="Show / hide the camera and debug rows"><span id="status"></span><b>Lanelet2 3D</b> <span id="conn">connecting...</span> <span id="hudToggle">▸ details</span></div>
@@ -214,6 +223,11 @@
       <option value="sensor">sensor</option>
     </select></label>
     <label title="Point size in pixels">Size <input type="range" id="sceneSize" min="1" max="8" step="1" value="2"></label>
+    <span class="sep"></span>
+    <button type="button" id="sceneLock" title="Lock the view to a ring camera of the car: exact pose and intrinsics, so the render matches the recorded image pixel for pixel (Shift+L)">Camera lock</button>
+    <select id="sceneCamera" title="Which ring camera ([ and ] cycle)"></select>
+    <button type="button" id="sceneOverlay" class="on" title="Blend the recorded camera image over the render (O)">Overlay</button>
+    <label title="How strongly the camera image is blended in">Blend <input type="range" id="sceneOpacity" min="0" max="100" step="5" value="45"></label>
   </div>
   </div>
   <div id="toolbar">

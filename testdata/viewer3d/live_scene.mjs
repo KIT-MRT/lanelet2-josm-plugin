@@ -72,6 +72,31 @@ try {
   await v.key("k");
   await sleep(600);
   await v.shot("live_car.png");
+
+  // Camera lock + overlay: the alignment check this whole thing is for.
+  await v.evaluate("document.getElementById('sceneLock').click()");
+  await sleep(2500); // let the recorded JPEG arrive
+  const rig = await v.evaluate("window.__ll2scene.rig()");
+  console.log(`lock: ${rig.camera}, viewport ${rig.viewport.width}x${rig.viewport.height}, `
+    + `image ${rig.imageSrc ? "loaded" : "none"}`);
+  await v.shot("live_overlay.png");
+  await v.evaluate("(() => { const el = document.getElementById('sceneOpacity');"
+    + " el.value = '100'; el.dispatchEvent(new Event('input')); })()");
+  await sleep(600);
+  await v.shot("live_overlay_full.png");
+  await v.evaluate("(() => { const el = document.getElementById('sceneOpacity');"
+    + " el.value = '55'; el.dispatchEvent(new Event('input')); })()");
+  // Map over the photo with the cloud out of the way: this is the view that
+  // says whether the *map* is right, rather than whether the poses are.
+  await v.key("p");
+  await sleep(500);
+  await v.shot("live_overlay_map.png");
+  await v.key("p");
+  await v.key("o");
+  await sleep(400);
+  await v.shot("live_overlay_off.png");
+  await v.key("L", { modifiers: ["shift"] });
+  await sleep(300);
   await v.key("b");
   await sleep(600);
   await v.shot("live_bev.png");

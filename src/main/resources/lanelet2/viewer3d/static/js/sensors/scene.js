@@ -11,6 +11,8 @@ import { camera, setCameraView, clampPitch } from "../camera.js";
 import { pointLayer } from "../render/points.js";
 import { toast } from "../hud.js";
 import { store } from "../store.js";
+import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handleRigKey,
+         projectToImage } from "./camrig.js";
 
 export const sceneState = {
   info: null,      // the scene message's payload
@@ -53,6 +55,7 @@ export function installScene() {
   els.mode.addEventListener("change", () => pointLayer.setMode(els.mode.value));
   els.size.addEventListener("input", () => pointLayer.setSize(Number(els.size.value)));
   pointLayer.setSize(Number(els.size.value));
+  installCamRig({ urlFor: imageUrl, currentFrame: () => sceneState.frame });
 }
 
 /** A `scene` message from the server. */
@@ -61,6 +64,7 @@ export function onSceneMessage(msg) {
   if (!info || !info.base) return;
   sceneState.info = info;
   cache.clear();
+  setSceneInfo(info);
   if (els.bar) {
     els.bar.hidden = false;
     els.name.textContent = `${shortId(info.id)} · ${info.frames} frames`;
@@ -76,6 +80,11 @@ export function frameUrl(index) {
   return `${sceneState.info.base}/frame/${index}/points.bin`;
 }
 
+/** Where a recorded camera frame lives; the camera lock blends it over the render. */
+export function imageUrl(cameraName, index) {
+  return `${sceneState.info.base}/frame/${index}/camera/${cameraName}.jpg`;
+}
+
 /** Load and show one frame; returns a promise for the tests. */
 export function showFrame(index) {
   const info = sceneState.info;
@@ -83,6 +92,8 @@ export function showFrame(index) {
   index = Math.max(0, Math.min(info.frames - 1, Math.round(index)));
   sceneState.frame = index;
   updateLabels();
+  // The locked view rides along with the frame, image and all.
+  if (rig.on) updateRig(index);
   const cached = cache.get(index);
   if (cached) {
     apply(index, cached);
@@ -221,7 +232,7 @@ export function handleSceneKey(event) {
     goToCar();
     return true;
   }
-  return false;
+  return handleRigKey(event);
 }
 
 /**
@@ -268,6 +279,8 @@ if (TEST_HOOKS) {
                     loading: sceneState.loading, playing: sceneState.playing, error: sceneState.error,
                     base: sceneState.info ? sceneState.info.base : null }),
     points: () => pointLayer.stats(),
+    rig: () => rigState(),
+    project: (world) => projectToImage(world),
     show: (i) => showFrame(i),
     ego: (i) => (sceneState.info && sceneState.info.ego ? sceneState.info.ego.pos[i] : null),
   };

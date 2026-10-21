@@ -88,12 +88,26 @@ which matches that chain to well under a millimetre over a scene.
 **0.5 cm** from the map's `ele` there, through the whole chain and in the
 browser (`testdata/viewer3d/live_scene.mjs`).
 
-### M2 — camera lock + image overlay
-- [ ] Camera rig mode: three.js camera matrix from ego pose x camera extrinsic
-      (OpenCV -> three.js axis flip), real intrinsics (f, cu, cv -> fov +
-      principal-point offset), image aspect letterboxed so pixels correspond.
-- [ ] Toggle through the 6 ring cameras, default front.
-- [ ] Full-screen camera image with an opacity slider.
+### M2 — camera lock + image overlay  [x]
+- [x] Camera rig mode: the three.js camera matrix comes from the ego pose
+      times the camera extrinsic (OpenCV -> three.js basis flip), and the
+      projection matrix is built from the real intrinsics, principal point
+      included -- no `fov` can express an off-centre principal point.
+- [x] The render is letterboxed to the image aspect, so a rendered pixel *is*
+      an image pixel. Verified: the render reproduces the recorded camera's
+      pinhole projection to **0.0000 px** over a spread of test points.
+- [x] Shift+L locks, `[` / `]` walk the ring (default front), `O` toggles the
+      image, a slider sets the blend.
+- [x] Navigation, the hold-to-move keys and hover are off while locked; the
+      previous view is restored on release.
+- [x] KITScenes ring images are already rectified (the calibration carries no
+      distortion coefficients), so a pinhole is exact here. A fisheye dataset
+      would need undistortion before this is meaningful.
+
+**Known limit:** picking (hover, click-select) assumes the ordinary
+projection and the full canvas, so it is wrong under the lock; that is why
+hover is disabled there. Selecting while locked would need `screenProjector`
+to learn about the viewport rectangle.
 
 ### M3 — aggregated scene cloud
 - [ ] Voxel downsample + chunking + draw-distance LOD.

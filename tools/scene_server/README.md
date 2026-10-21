@@ -55,6 +55,9 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 | `◀` `▶|` / `,` `.` | step frames |
 | `▶` | play |
 | Colour | intensity, height or sensor |
+| `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
+| `[` `]` | walk the six ring cameras |
+| `Overlay` / `O`, `Blend` | blend the recorded image over the render |
 
 With JOSM also connected, the scene server notices that a map is already
 being streamed, adopts its ENU anchor and leaves the map alone — so the map

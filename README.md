@@ -155,7 +155,15 @@ into the same viewer: the scene's Lanelet2 map, the LiDAR point clouds of a
 frame and the ring camera images. It connects to the viewer server like the
 JOSM bridge does, so **viewing needs no JOSM** — and when JOSM *is* connected,
 the map stays JOSM's (editable) while the sensor data comes from the scene
-server. See `tools/scene_server/README.md`; the plan is in
+server.
+
+**Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
+ring cameras was, with that camera's own intrinsics, and blends the recorded
+image over the render (`O`, with a blend slider) — so the map, the point cloud
+and the photograph can be compared pixel for pixel. `[` / `]` walk the ring,
+`,` / `.` step frames, `K` jumps behind the car.
+
+See `tools/scene_server/README.md`; the plan is in
 `docs/sensor-viewer-plan.md`.
 
 New nodes created in JOSM without `ele` get a height (on by default; settings:

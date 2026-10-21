@@ -86,7 +86,18 @@ const sceneInfo = () => ({
   times: Array.from({ length: FRAMES }, (_, i) => i * 0.1),
   lidars: ["lidar_top", "lidar_front"],
   ego,
-  cameras: { camera_ring_front: { fx: 1841, fy: 1841, cx: 1752, cy: 1136, width: 3504, height: 2272 } },
+  cameras: {
+    camera_ring_front: {
+      fx: 1841, fy: 1841, cx: 1700, cy: 1100, width: 3504, height: 2272,
+      // camera x = ego -y (right), camera y = ego -z (down), camera z = ego x
+      // (forward), mounted 1.5 m up and 0.2 m ahead of the ego origin.
+      T_cam_to_ego: [[0, 0, 1, 0.2], [-1, 0, 0, 0], [0, -1, 0, 1.5], [0, 0, 0, 1]],
+    },
+    camera_ring_rear: {
+      fx: 1845, fy: 1845, cx: 1760, cy: 1140, width: 3504, height: 2272,
+      T_cam_to_ego: [[0, 0, -1, -0.2], [1, 0, 0, 0], [0, -1, 0, 1.5], [0, 0, 0, 1]],
+    },
+  },
   anchor: { lat: 49.0, lon: 8.4 },
 });
 
@@ -182,6 +193,80 @@ try {
   t.check("a frame out of range clamps instead of erroring",
     (await sceneState()).frame === FRAMES - 1 && !(await sceneState()).error,
     JSON.stringify(await sceneState()));
+
+  // ---- camera lock ---------------------------------------------------------------
+  await v.evaluate("window.__ll2scene.show(2)");
+  await waitLoaded(2);
+  const rigOf = () => v.evaluate("window.__ll2scene.rig()");
+  await v.evaluate("document.getElementById('sceneLock').click()");
+  await sleep(200);
+  let rigNow = await rigOf();
+  t.check("the lock turns on with the front camera", rigNow.on && rigNow.camera === "camera_ring_front",
+    JSON.stringify(rigNow));
+  const lockCam = await v.camera();
+  const mount = [ego.pos[2][0] + 0.2, ego.pos[2][1], ego.pos[2][2] + 1.5];
+  t.check("the camera sits at the mount of that sensor", dist3(lockCam.pos, mount) < 1e-6,
+    `${JSON.stringify(lockCam.pos.map((n) => +n.toFixed(3)))} vs ${JSON.stringify(mount)}`);
+  t.check("the view is letterboxed to the image aspect",
+    Math.abs(rigNow.viewport.width / rigNow.viewport.height - 3504 / 2272) < 0.01,
+    JSON.stringify(rigNow.viewport));
+
+  // The whole point of the lock: the render must reproduce the recorded
+  // camera's pinhole projection, principal point and all.
+  const K = sceneInfo().cameras.camera_ring_front;
+  const worst = await v.evaluate(`(() => {
+    const K = ${JSON.stringify(K)};
+    const ego = ${JSON.stringify(ego.pos[2])};
+    let worst = 0, sample = null;
+    for (const [dx, dy, dz] of [[20,0,0],[35,6,2],[12,-4,-1],[60,15,5],[25,-9,3]]) {
+      // camera frame: z forward (ego +x), x right (ego -y), y down (ego -z)
+      const Xc = -dy, Yc = -(dz - 1.5), Zc = dx - 0.2;
+      const want = { u: K.fx * Xc / Zc + K.cx, v: K.fy * Yc / Zc + K.cy };
+      const got = window.__ll2scene.project([ego[0]+dx, ego[1]+dy, ego[2]+dz]);
+      const d = Math.hypot(got.u - want.u, got.v - want.v);
+      if (d > worst) { worst = d; sample = { want, got }; }
+    }
+    return { worst, sample };
+  })()`);
+  t.check("the render matches the recorded camera's pinhole projection",
+    worst.worst < 0.01, `worst ${worst.worst.toFixed(4)} px — ${JSON.stringify(worst.sample)}`);
+
+  t.check("the recorded image is blended over the render",
+    rigNow.overlay && rigNow.imageSrc.endsWith("/frame/2/camera/camera_ring_front.jpg"), JSON.stringify(rigNow));
+  await v.key("o");
+  t.check("O takes the image away but keeps the lock",
+    !(await rigOf()).overlay && (await rigOf()).on);
+  await v.key("o");
+
+  await v.key("]");
+  await sleep(150);
+  rigNow = await rigOf();
+  t.check("] walks to the next ring camera", rigNow.camera === "camera_ring_rear", rigNow.camera);
+  // view.yaw is the unlocked camera's state; while locked the orientation
+  // lives in the camera matrix, so compare where it actually looks.
+  const dirs = await v.evaluate(`(() => {
+    const r = window.__ll2scene.rig();
+    const p = window.__ll2scene.project;
+    const ego = ${JSON.stringify(ego.pos[2])};
+    // A point 20 m ahead of the car is behind a rear-facing camera.
+    return { ahead: p([ego[0] + 20, ego[1], ego[2]]), rear: r.camera };
+  })()`);
+  t.check("and the rear camera looks the other way",
+    dirs.ahead && dirs.ahead.behind === true, JSON.stringify(dirs));
+  await v.key("[");
+
+  await v.evaluate("window.__ll2scene.show(4)");
+  await waitLoaded(4);
+  t.check("stepping a frame moves the locked view and its image",
+    (await rigOf()).imageSrc.endsWith("/frame/4/camera/camera_ring_front.jpg")
+    && dist3((await v.camera()).pos, mount) > 1,
+    (await rigOf()).imageSrc);
+
+  await v.key("L", { modifiers: ["shift"] });
+  await sleep(200);
+  t.check("Shift+L releases the lock", !(await rigOf()).on);
+  t.check("and the ordinary view is back", Math.abs((await v.camera()).fov - 55) < 1e-6,
+    String((await v.camera()).fov));
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {
