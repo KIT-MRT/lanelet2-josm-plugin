@@ -192,12 +192,14 @@ function addFacedSignIcon(group, p1, p2, p3, p4, tex) {
  * bottom-left to its bottom-right corner as the approaching vehicle sees it,
  * and a `height` tag for its vertical size (not its position -- that is the
  * nodes' ele). See autoware_lanelet2_extension's lanelet2_format_extension.md.
+ * Traffic signs drawn the same way are read the same way.
  * Returns the quad [bottom-left, top-left, top-right, bottom-right] for such a
  * way, else null so the ordinary path draws it.
  */
 export function autowareLightQuad(feature) {
   const tags = feature.tags || {};
-  if (!tags.type || tags.type.indexOf("traffic_light") !== 0) return null;
+  const type = tags.type || "";
+  if (type.indexOf("traffic_light") !== 0 && type !== "traffic_sign") return null;
   const m = /^\s*(\d+(?:\.\d+)?|\.\d+)\s*(?:m)?\s*$/.exec(String(tags.height ?? ""));
   const height = m ? Number(m[1]) : NaN;
   if (!(height > 0 && height < 20)) return null;

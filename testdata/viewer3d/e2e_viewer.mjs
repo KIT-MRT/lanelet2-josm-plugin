@@ -42,6 +42,11 @@ features.push(light(8, { height: "0.5" }, [AW_LEFT, AW_RIGHT]));
 features.push(light(9, {}, [[3, 30, 5], [3.4, 30, 5]]));
 features.push(light(10, { height: "0.5" }, [[6, 30, 5], [6.2, 30, 5], [6.4, 30, 5]]));
 features.push(light(11, { height: "high" }, [[9, 30, 5], [9.4, 30, 5]]));
+// Signs drawn the same way are read the same way.
+features.push({ id: "way/12", kind: "line", tags: { type: "traffic_sign", subtype: "de274-30", height: "0.6" },
+  pts: [-6, 30, 2, -5.4, 30, 2], nodes: [1201, 1202] });
+features.push({ id: "way/13", kind: "line", tags: { type: "traffic_sign", subtype: "de274-30" },
+  pts: [-9, 30, 2, -8.4, 30, 2], nodes: [1301, 1302] });
 const N1 = [5, 20, 0];
 const N2 = [5.3, 20, 0];
 
@@ -56,7 +61,7 @@ async function waitFor(pred, ms = 4000) {
 }
 try {
   v.sendScene({ type: "snapshot", anchor: { lat: 49, lon: 8.4 }, features });
-  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(11));
+  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(13));
 
   // ---- camera ---------------------------------------------------------------
   await v.key("b");
@@ -243,9 +248,19 @@ try {
   const oldBad = await meshOf("way/11");
   t.check("and one whose height is not a number",
     Math.max(...oldBad.map((p) => p[2])) - Math.min(...oldBad.map((p) => p[2])) < 1e-6);
+  t.check("the signs' icons are built", await waitFor(async () => (await meshOf("way/12")) && (await meshOf("way/13"))));
+  const sign = await meshOf("way/12");
+  t.check("an Autoware sign stands on its line, as tall as its height tag",
+    Math.abs(Math.min(...sign.map((p) => p[2])) - 2) < 1e-6 && Math.abs(Math.max(...sign.map((p) => p[2])) - 2.6) < 1e-6
+    && sign.every((p) => p[1] < 30 && p[1] > 29.9) && Math.abs(Math.min(...sign.map((p) => p[0])) + 6) < 1e-6
+    && Math.abs(Math.max(...sign.map((p) => p[0])) + 5.4) < 1e-6,
+    JSON.stringify(sign.map((p) => p.map((n) => +n.toFixed(3)))));
+  const signNoHeight = await meshOf("way/13");
+  t.check("a 2-point sign without a height tag keeps the old icon",
+    Math.max(...signNoHeight.map((p) => p[2])) - Math.min(...signNoHeight.map((p) => p[2])) < 1e-6);
   await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"
     + " el.value = '100'; el.dispatchEvent(new Event('input')); })()");
-  await v.evaluate("window.__ll2city.lookAt([0, 30, 5.2], 9)");
+  await v.evaluate("window.__ll2city.lookAt([-3, 30, 4], 12)");
   await v.shot("autoware_lights.png");
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));

@@ -488,14 +488,17 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   gate. `Auto` never starts a build (a cold one is minutes); only `Load` does.
   Scenes switch via `resetScene()` -- before the city there was only ever one
   scene per page, so switching had never had to drop anything.
-- **Autoware traffic lights** (`autowareLightQuad` in `render/icons.js`): a
-  `traffic_light*` way with exactly two distinct points and a numeric
+- **Autoware traffic lights and signs** (`autowareLightQuad` in
+  `render/icons.js`): a `traffic_light*` or `traffic_sign` way with exactly
+  two distinct points and a numeric
   `height` tag is the light's bottom edge, left to right as the approaching
   vehicle sees it, and `height` is its vertical *size* (the nodes' ele is
   its position). Only the icon follows that; the line renders as before, and
   anything else -- no height, three points, a height that is not a number --
-  takes the old icon path. The Autoware Karlsruhe map has 659 two-point
-  lights and none with a height tag, so they all stay as they were.
+  takes the old icon path. Autoware documents this for lights only; signs
+  follow it on request. The Autoware Karlsruhe map has 659 two-point lights
+  and 3059 two-point signs, none with a height tag, so they all stay as they
+  were.
 - **Orthographic is a mode of the one camera, not a second camera.** Every
   module imports the same `camera`, and the camera lock already writes its
   own projection into it. In ortho the frustum is sized to show what the

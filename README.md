@@ -144,9 +144,9 @@ culling.
   default, with an α slider to fade them when they sit in front of a point
   cloud. The viewer finds the shipped `style_images` by itself now, so they
   also appear when the server is started by hand without JOSM. A traffic
-  light drawn the Autoware way — a 2-point line along its bottom edge plus a
-  `height` tag — gets its icon as an upright box that tall, facing the
-  approaching vehicle; every other light keeps the usual icon.
+  light or sign drawn the Autoware way — a 2-point line along its bottom
+  edge plus a `height` tag — gets its icon as an upright box that tall,
+  facing the approaching vehicle; every other one keeps the usual icon.
 - **Lanelets (L)** show as surfaces with a direction arrow at 35 % of the
   lanelet2 centerline, double-headed where a car may drive both ways
   (lanelet2's rules, including `one_way:<participant>` overrides), violet
