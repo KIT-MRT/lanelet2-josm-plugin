@@ -232,6 +232,11 @@ try {
     === "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     && await v.evaluate("document.getElementById('tileUrl').disabled")
     && await v.evaluate("document.getElementById('tileWms').hidden"));
+  await v.evaluate("(() => { const el = document.getElementById('tilePreset'); el.value = 'hessen_dop20';"
+    + " el.dispatchEvent(new Event('change')); })()");
+  t.check("the Hessen preset is a WMS with its layer filled in",
+    !(await v.evaluate("document.getElementById('tileWms').hidden"))
+    && (await v.evaluate("document.getElementById('tileLayers').value")) === "he_dop20_rgb");
   await clickElement("tilesMenuBtn");
 
   // A server without CORS: WebGL refuses its images...

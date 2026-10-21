@@ -3,7 +3,7 @@
 // this one needs the dataset on disk and the tools/scene_server venv.
 //
 //   node testdata/viewer3d/live_scene.mjs <scene dir> [--frame N] [--shots DIR]
-//        [--aggregate] [--tiles [xyz url]]
+//        [--aggregate] [--tiles [xyz url]] [--wms <url> <layer>]
 //
 // It is the end-to-end answer to "do the map and the LiDAR line up?", so it
 // prints the height of the cloud under the car next to the map's own `ele`.
@@ -181,12 +181,19 @@ try {
   // --tiles [url]: the orthographic map view over web tiles (OSM by default),
   // to see the map and the cloud against the background imagery.
   const ti = process.argv.indexOf("--tiles");
-  if (ti > 0) {
-    const url = process.argv[ti + 1] && !process.argv[ti + 1].startsWith("--") ? process.argv[ti + 1] : null;
+  const wi = process.argv.indexOf("--wms");
+  if (ti > 0 || wi > 0) {
+    const url = ti > 0 && process.argv[ti + 1] && !process.argv[ti + 1].startsWith("--") ? process.argv[ti + 1] : null;
     await v.key("b");
     await sleep(500);
     await v.evaluate("window.__ll2map.setOrtho(true)");
     if (url) await v.evaluate(`window.__ll2map.setSource(${JSON.stringify({ type: "xyz", url, maxZoom: 19 })})`);
+    if (wi > 0) {
+      const problems = await v.evaluate(`window.__ll2map.setSource(${JSON.stringify({
+        type: "wms", url: process.argv[wi + 1], layers: process.argv[wi + 2], format: "image/jpeg",
+        version: "1.3.0", maxZoom: 21 })})`);
+      if (problems.length) throw new Error(`WMS source: ${problems.join("; ")}`);
+    }
     await v.evaluate("window.__ll2map.setTiles(true)");
     for (let i = 0; i < 60; i++) {
       const st = await v.evaluate("window.__ll2map.tiles()");

@@ -64,6 +64,19 @@ export const TILE_PRESETS = {
     attribution: "© OpenStreetMap contributors",
     attributionUrl: "https://www.openstreetmap.org/copyright",
   },
+  // 20 cm aerial images of Hesse (where the Frankfurt scenes are). Serves
+  // EPSG:3857 and allows cross-origin use, so it needs no proxy.
+  hessen_dop20: {
+    label: "Hessen DOP20 (aerial)",
+    type: "wms",
+    url: "https://www.gds-srv.hessen.de/cgi-bin/lika-services/ogc-free-images.ows",
+    layers: "he_dop20_rgb",
+    format: "image/jpeg",
+    version: "1.3.0",
+    maxZoom: 20,
+    attribution: "© HVBG, dl-de/by-2-0",
+    attributionUrl: "https://www.govdata.de/dl-de/by-2-0",
+  },
 };
 
 const rad = (d) => (d * Math.PI) / 180;
