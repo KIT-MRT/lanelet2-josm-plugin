@@ -293,6 +293,12 @@ Open:
       takes care of Mercator being non-linear in y.
 - [x] `/tileproxy` on the viewer server for tile servers without CORS, for
       named hosts only.
+- [x] WMS in UTM (EPSG:25832 etc.), as the German state DOP20 servers serve
+      it; Hessen and Baden-Wuerttemberg presets. Hessen in 25832 and in 3857
+      render identically (0 px shift, correlation 0.99 close up).
+- [ ] Baden-Wuerttemberg's server (owsproxy.lgl-bw.de) did not accept a TCP
+      connection from the machine this was built on (www.lgl-bw.de neither),
+      so its preset, and whether it allows cross-origin use, are unverified.
 - [x] Checked over real OSM tiles in Frankfurt: lanelet lines lie on the OSM
       roads. That run caught translucent tiles drawing over the whole map
       (three's transparent pass), which the synthetic test had missed; the

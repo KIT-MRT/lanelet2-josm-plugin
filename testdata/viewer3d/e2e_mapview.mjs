@@ -222,6 +222,75 @@ try {
   t.check("one tile's bounds each", Math.abs(bbox[2] - bbox[0] - size) < 0.01
     && Math.abs(bbox[3] - bbox[1] - size) < 0.01, `${(bbox[2] - bbox[0]).toFixed(3)} vs ${size.toFixed(3)}`);
 
+  // UTM (EPSG:25832, what German state servers serve), against pyproj.
+  const UTM_REF = [
+    [32, 50.1005, 8.6746, 476728.2057, 5549855.5473],   // Frankfurt
+    [32, 49.0094, 8.4044, 456444.6194, 5428671.6160],   // Karlsruhe
+    [32, 48.7133, 9.0028, 500205.9719, 5395585.5028],   // Sindelfingen
+    [32, 47.6, 6.1, 282014.4585, 5275918.8891],         // 2.9 degrees west of the meridian
+    [32, 54.5, 13.3, 778389.4512, 6047665.5509],        // 4.3 east, beyond the zone
+    [33, 50.1005, 8.6746, 47786.2700, 5568990.6262],    // 6.3 degrees out
+  ];
+  let worstUtm = 0;
+  for (const [zone, lat, lon, e, n] of UTM_REF) {
+    const got = await map(`utm(${lat}, ${lon}, ${zone})`);
+    worstUtm = Math.max(worstUtm, Math.hypot(got[0] - e, got[1] - n));
+  }
+  t.check("UTM agrees with pyproj to the millimetre, even outside the zone", worstUtm < 0.001,
+    `${(worstUtm * 1000).toFixed(3)} mm`);
+
+  seen.cors.length = 0;
+  await map(`setSource(${JSON.stringify({
+    type: "wms", url: `${corsBase}/lgl/ows?`, layers: "IMAGES_DOP_20_RGB", format: "image/png",
+    version: "1.1.1", crs: "EPSG:25832", maxZoom: 20,
+  })})`);
+  t.check("a UTM WMS answers as tiles", await waitFor(async () => (await map("tiles()")).shown > 0));
+  st = await map("tiles()");
+  const utmReq = seen.cors.find((u) => u.startsWith("/lgl/ows?"));
+  const uq = Object.fromEntries(new URL(corsBase + utmReq).searchParams.entries());
+  t.check("asked in EPSG:25832 (SRS, as WMS 1.1.1 spells it)", uq.SRS === "EPSG:25832" && !uq.CRS
+    && uq.VERSION === "1.1.1" && !utmReq.includes("?&"), utmReq.slice(0, 120));
+  // Which tile was that? Find it among the ready ones by its box.
+  const ub = uq.BBOX.split(",").map(Number);
+  let matched = null;
+  for (const k of await map("readyKeys()")) {
+    const [kz, kx, ky] = k.split("/").map(Number);
+    const box = await map(`wmsBox(${kz}, ${kx}, ${ky})`);
+    if (Math.abs(box.minx - ub[0]) < 0.002 && Math.abs(box.maxy - ub[3]) < 0.002) matched = { k, kz, kx, ky, box };
+  }
+  t.check("each request is one tile's box", !!matched, uq.BBOX);
+  if (matched) {
+    // The box encloses the tile's corners in UTM, and only just.
+    const s3857 = (2 * MERC) / 2 ** matched.kz;
+    const cornerLL = [];
+    for (const [ix, iy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const mx = -MERC + (matched.kx + ix) * s3857;
+      const my = MERC - (matched.ky + iy) * s3857;
+      cornerLL.push([deg(2 * Math.atan(Math.exp(my / R)) - Math.PI / 2), deg(mx / R)]);
+    }
+    const cornersUtm = [];
+    for (const [lat, lon] of cornerLL) cornersUtm.push(await map(`utm(${lat}, ${lon}, 32)`));
+    const es = cornersUtm.map((c) => c[0]);
+    const ns = cornersUtm.map((c) => c[1]);
+    t.check("the box encloses the tile in UTM, and only just",
+      Math.abs(Math.min(...es) - ub[0]) < 0.01 && Math.abs(Math.max(...es) - ub[2]) < 0.01
+      && Math.abs(Math.min(...ns) - ub[1]) < 0.01 && Math.abs(Math.max(...ns) - ub[3]) < 0.01,
+      `${es.map((v) => v.toFixed(2))} / ${uq.BBOX}`);
+    t.check("which is wider than the tile: the grids are turned against each other",
+      ub[2] - ub[0] > Math.abs(es[1] - es[0]) + 0.1);
+    // Every vertex samples the image where its own lat/lon lies.
+    const uvs = await map(`tileUvs(${JSON.stringify(matched.k)})`);
+    const sw = cornersUtm[2];  // (0, 1): west, south
+    const wantU = (sw[0] - ub[0]) / (ub[2] - ub[0]);
+    const wantV = (sw[1] - ub[1]) / (ub[3] - ub[1]);
+    t.check("the south-west vertex samples its own spot in the image",
+      Math.abs(uvs[0] - wantU) < 1e-6 && Math.abs(uvs[1] - wantV) < 1e-6,
+      `${uvs[0].toFixed(5)},${uvs[1].toFixed(5)} vs ${wantU.toFixed(5)},${wantV.toFixed(5)}`);
+    t.check("and none samples outside it", uvs.every((u) => u > -1e-9 && u < 1 + 1e-9));
+  }
+  t.check("an unknown CRS is refused", (await map(`setSource(${JSON.stringify({
+    type: "wms", url: corsBase, layers: "x", crs: "EPSG:31467" })})`)).length > 0);
+
   // The form: presets fill it, custom types open their fields.
   await clickElement("tilesMenuBtn");
   t.check("▾ opens the source panel", !(await v.evaluate("document.getElementById('tilePanel').hidden")));
@@ -237,6 +306,11 @@ try {
   t.check("the Hessen preset is a WMS with its layer filled in",
     !(await v.evaluate("document.getElementById('tileWms').hidden"))
     && (await v.evaluate("document.getElementById('tileLayers').value")) === "he_dop20_rgb");
+  await v.evaluate("(() => { const el = document.getElementById('tilePreset'); el.value = 'bw_dop20';"
+    + " el.dispatchEvent(new Event('change')); })()");
+  t.check("the Baden-Württemberg preset asks in EPSG:25832",
+    (await v.evaluate("document.getElementById('tileCrs').value")) === "EPSG:25832"
+    && (await v.evaluate("document.getElementById('tileLayers').value")) === "IMAGES_DOP_20_RGB");
   await clickElement("tilesMenuBtn");
 
   // A server without CORS: WebGL refuses its images...

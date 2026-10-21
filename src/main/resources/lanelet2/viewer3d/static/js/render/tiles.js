@@ -77,6 +77,22 @@ export const TILE_PRESETS = {
     attribution: "© HVBG, dl-de/by-2-0",
     attributionUrl: "https://www.govdata.de/dl-de/by-2-0",
   },
+  // 20 cm aerial images of Baden-Wuerttemberg (Karlsruhe, Sindelfingen), in
+  // EPSG:25832 as the LGL serves them. Not reachable from where this was
+  // written, so whether it allows cross-origin use is unknown: if tiles do
+  // not appear, start the viewer with --tile-proxy-host owsproxy.lgl-bw.de.
+  bw_dop20: {
+    label: "Baden-Württemberg DOP20 (aerial)",
+    type: "wms",
+    url: "https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C",
+    layers: "IMAGES_DOP_20_RGB",
+    format: "image/png",
+    version: "1.1.1",
+    crs: "EPSG:25832",
+    maxZoom: 20,
+    attribution: "© LGL-BW, www.lgl-bw.de",
+    attributionUrl: "https://www.lgl-bw.de",
+  },
 };
 
 const rad = (d) => (d * Math.PI) / 180;
@@ -93,6 +109,47 @@ export function enuToLatLon(x, y, anchor) {
   return [anchor.lat + deg(y / EARTH_R), anchor.lon + deg(x / (EARTH_R * cos0))];
 }
 
+/**
+ * UTM zone of an EPSG code: ETRS89 / UTM (258NN, what German state servers
+ * serve, e.g. 25832) or WGS 84 / UTM north (326NN). null for anything else.
+ * ETRS89 is taken as WGS 84 -- the same null transformation pyproj applies.
+ */
+export function utmZoneOf(crs) {
+  const m = /^EPSG:(258(2[89]|3[0-8])|326(0[1-9]|[1-5][0-9]|60))$/.exec(String(crs || "").toUpperCase());
+  return m ? Number(m[1].slice(3)) : null;
+}
+
+// Transverse Mercator by Krueger's series to n^4 (GRS80; WGS 84 differs by
+// 0.1 mm here): sub-millimetre over a whole zone and well beyond it.
+const UTM_A = 6378137.0;
+const UTM_F = 1 / 298.257222101;
+const UTM_N = UTM_F / (2 - UTM_F);
+const UTM_AA = (UTM_A / (1 + UTM_N)) * (1 + UTM_N ** 2 / 4 + UTM_N ** 4 / 64);
+const UTM_ALPHA = [
+  UTM_N / 2 - (2 * UTM_N ** 2) / 3 + (5 * UTM_N ** 3) / 16 + (41 * UTM_N ** 4) / 180,
+  (13 * UTM_N ** 2) / 48 - (3 * UTM_N ** 3) / 5 + (557 * UTM_N ** 4) / 1440,
+  (61 * UTM_N ** 3) / 240 - (103 * UTM_N ** 4) / 140,
+  (49561 * UTM_N ** 4) / 161280,
+];
+const UTM_E2N = (2 * Math.sqrt(UTM_N)) / (1 + UTM_N);
+
+/** [easting, northing] of a lat/lon in UTM zone `zone` (north). */
+export function toUtm(lat, lon, zone) {
+  const phi = rad(lat);
+  const dl = rad(lon - (zone * 6 - 183));
+  const sinPhi = Math.sin(phi);
+  const t = Math.sinh(Math.atanh(sinPhi) - UTM_E2N * Math.atanh(UTM_E2N * sinPhi));
+  const xi = Math.atan2(t, Math.cos(dl));
+  const eta = Math.atanh(Math.sin(dl) / Math.sqrt(1 + t * t));
+  let e = eta;
+  let n = xi;
+  for (let j = 1; j <= 4; j++) {
+    e += UTM_ALPHA[j - 1] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+    n += UTM_ALPHA[j - 1] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
+  }
+  return [500000 + 0.9996 * UTM_AA * e, 0.9996 * UTM_AA * n];
+}
+
 const mercX = (lon) => rad(lon) * EARTH_R;
 const mercY = (lat) => EARTH_R * Math.log(Math.tan(Math.PI / 4 + rad(Math.max(-85.0511, Math.min(85.0511, lat))) / 2));
 const lonOfMercX = (x) => deg(x / EARTH_R);
@@ -106,10 +163,49 @@ export function tileBounds(z, x, y) {
            maxy: MERC_MAX - y * s, miny: MERC_MAX - (y + 1) * s };
 }
 
+/** A tile's sample points: its corners and edge midpoints, as lat/lon. */
+function tileOutline(z, x, y) {
+  const b = tileBounds(z, x, y);
+  const out = [];
+  for (const u of [0, 0.5, 1]) {
+    for (const v of [0, 0.5, 1]) {
+      out.push([latOfMercY(b.miny + v * (b.maxy - b.miny)), lonOfMercX(b.minx + u * (b.maxx - b.minx))]);
+    }
+  }
+  return out;
+}
+
+/**
+ * What a WMS is asked for, for tile (z, x, y): the CRS and the box in it. In
+ * EPSG:3857 that is the tile itself. In UTM the tile is turned by the grid
+ * convergence (~0.3 degrees in Frankfurt), so the box encloses it, and each
+ * vertex of the tile mesh then finds its own place in the image.
+ */
+export function wmsBox(source, z, x, y) {
+  const zone = utmZoneOf(source.crs);
+  if (!zone) {
+    const b = tileBounds(z, x, y);
+    return { crs: "EPSG:3857", zone: null, ...b };
+  }
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const [lat, lon] of tileOutline(z, x, y)) {
+    const [e, n] = toUtm(lat, lon, zone);
+    minx = Math.min(minx, e); maxx = Math.max(maxx, e);
+    miny = Math.min(miny, n); maxy = Math.max(maxy, n);
+  }
+  // Rounded outward to the millimetre the URL carries, so the image the
+  // server draws and the texture coordinates describe exactly the same box,
+  // and it still encloses the tile.
+  const down = (v) => Math.floor(v * 1000) / 1000;
+  const up = (v) => Math.ceil(v * 1000) / 1000;
+  return { crs: String(source.crs).toUpperCase(), zone,
+           minx: down(minx), miny: down(miny), maxx: up(maxx), maxy: up(maxy) };
+}
+
 /** The URL of one tile for a source, or null when the source cannot serve it. */
 export function tileUrl(source, z, x, y) {
   if (source.type === "wms") {
-    const b = tileBounds(z, x, y);
+    const b = wmsBox(source, z, x, y);
     const v = source.version || "1.3.0";
     const params = [
       "SERVICE=WMS", "REQUEST=GetMap", `VERSION=${encodeURIComponent(v)}`,
@@ -117,9 +213,10 @@ export function tileUrl(source, z, x, y) {
       `STYLES=${encodeURIComponent(source.styles || "")}`,
       `FORMAT=${encodeURIComponent(source.format || "image/png")}`,
       `TRANSPARENT=${source.transparent ? "TRUE" : "FALSE"}`,
-      `${v === "1.3.0" ? "CRS" : "SRS"}=EPSG:3857`,
+      `${v === "1.3.0" ? "CRS" : "SRS"}=${b.crs}`,
       "WIDTH=256", "HEIGHT=256",
-      // EPSG:3857 is easting/northing in both versions; only 4326 swaps.
+      // EPSG:3857 and the UTM codes are easting/northing in both versions;
+      // only geographic CRSs like 4326 swap the axes in 1.3.0.
       `BBOX=${b.minx.toFixed(3)},${b.miny.toFixed(3)},${b.maxx.toFixed(3)},${b.maxy.toFixed(3)}`,
     ];
     const base = source.url || "";
@@ -142,6 +239,9 @@ export function checkSource(source) {
   if (!/^https?:\/\//i.test(source.url || "")) problems.push("the URL must start with http:// or https://");
   if (source.type === "wms") {
     if (!source.layers) problems.push("a WMS needs at least one layer name");
+    if (source.crs && source.crs !== "EPSG:3857" && !utmZoneOf(source.crs)) {
+      problems.push("the CRS must be EPSG:3857 or a UTM zone (EPSG:258NN / 326NN)");
+    }
   } else if (!/\{z\}/.test(source.url || "") || !/\{x\}/.test(source.url || "")
              || !/\{-?y\}/.test(source.url || "")) {
     problems.push("an XYZ/TMS URL needs {z}, {x} and {y} (or {-y})");
@@ -378,20 +478,31 @@ class TileLayer {
     }
   }
 
-  /** A GRID x GRID patch with each vertex put through Mercator -> lat/lon -> ENU. */
+  /**
+   * A GRID x GRID patch with each vertex put through Mercator -> lat/lon ->
+   * ENU. Its texture coordinate is where that lat/lon falls in the image:
+   * the tile itself for Mercator sources, the requested UTM box otherwise.
+   */
   _build(t, image) {
     const anchor = this.anchor();
     const b = tileBounds(t.z, t.x, t.y);
+    const box = this.source.type === "wms" ? wmsBox(this.source, t.z, t.x, t.y) : null;
     const positions = [];
     const uvs = [];
     for (let j = 0; j <= GRID; j++) {
       for (let i = 0; i <= GRID; i++) {
         const u = i / GRID;
         const v = j / GRID;  // 0 at the bottom (south), as the texture is flipped
-        const [x, y] = latLonToEnu(latOfMercY(b.miny + v * (b.maxy - b.miny)),
-                                   lonOfMercX(b.minx + u * (b.maxx - b.minx)), anchor);
+        const lat = latOfMercY(b.miny + v * (b.maxy - b.miny));
+        const lon = lonOfMercX(b.minx + u * (b.maxx - b.minx));
+        const [x, y] = latLonToEnu(lat, lon, anchor);
         positions.push(x, y, 0);
-        uvs.push(u, v);
+        if (box && box.zone) {
+          const [e, n] = toUtm(lat, lon, box.zone);
+          uvs.push((e - box.minx) / (box.maxx - box.minx), (n - box.miny) / (box.maxy - box.miny));
+        } else {
+          uvs.push(u, v);
+        }
       }
     }
     const index = [];

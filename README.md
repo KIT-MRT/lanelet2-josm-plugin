@@ -157,7 +157,9 @@ culling.
   switches it off (the recorded camera has a perspective).
 - **Tiles** lays a web map under everything: OpenStreetMap by default, or
   your own XYZ / TMS template or WMS endpoint (GeoServer and the like) from
-  the ▾ panel, with an opacity slider. Tiles are drawn in the scene, each
+  the ▾ panel, with an opacity slider. A WMS can be asked in EPSG:3857 or in
+  UTM (EPSG:25832 and friends, what German state servers serve); the
+  Hessen and Baden-Württemberg 20 cm aerial images are presets. Tiles are drawn in the scene, each
   corner placed through the same lat/lon → ENU as the map, so they line up
   in ortho and in perspective. They are off on every start, since turning
   them on sends the viewed area to the tile server. WebGL can only use tiles

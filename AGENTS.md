@@ -507,6 +507,13 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   background in the tile shader. `e2e_mapview.mjs` now reads real screen
   pixels (`harness.pixel`) to check the map draws over the tiles. Tile
   corners go Mercator -> lat/lon -> the viewer's ENU, never a Mercator plane.
+  A UTM WMS (EPSG:258NN / 326NN) keeps the same tile grid: each tile asks for
+  the UTM box enclosing it (rounded *outward* to the millimetre the URL
+  carries, and the same rounded box feeds the texture coordinates), and each
+  vertex samples the image at its own UTM position, so the ~0.3 degree grid
+  convergence is handled per vertex. `toUtm` is Krueger's series to n^4,
+  0.05 mm from pyproj; ETRS89 is taken as WGS 84, as pyproj does. Hessen
+  served in 25832 and in 3857 render with a 0 px shift.
   The viewer server's `/tileproxy` fetches only from hosts named on its
   command line or in `LL2_TILE_PROXY_HOSTS`, follows no redirects and passes
   on images only.

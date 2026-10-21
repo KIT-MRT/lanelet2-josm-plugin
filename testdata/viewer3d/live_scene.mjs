@@ -3,7 +3,7 @@
 // this one needs the dataset on disk and the tools/scene_server venv.
 //
 //   node testdata/viewer3d/live_scene.mjs <scene dir> [--frame N] [--shots DIR]
-//        [--aggregate] [--tiles [xyz url]] [--wms <url> <layer>]
+//        [--aggregate] [--tiles [xyz url]] [--wms <url> <layer> [crs]]
 //
 // It is the end-to-end answer to "do the map and the LiDAR line up?", so it
 // prints the height of the cloud under the car next to the map's own `ele`.
@@ -191,7 +191,8 @@ try {
     if (wi > 0) {
       const problems = await v.evaluate(`window.__ll2map.setSource(${JSON.stringify({
         type: "wms", url: process.argv[wi + 1], layers: process.argv[wi + 2], format: "image/jpeg",
-        version: "1.3.0", maxZoom: 21 })})`);
+        version: "1.3.0", maxZoom: 21,
+        crs: process.argv[wi + 3] && !process.argv[wi + 3].startsWith("--") ? process.argv[wi + 3] : "EPSG:3857" })})`);
       if (problems.length) throw new Error(`WMS source: ${problems.join("; ")}`);
     }
     await v.evaluate("window.__ll2map.setTiles(true)");

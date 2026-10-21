@@ -268,6 +268,7 @@
     <select id="tilePreset">
       <option value="osm">OpenStreetMap</option>
       <option value="hessen_dop20">Hessen DOP20 (aerial)</option>
+      <option value="bw_dop20">Baden-Württemberg DOP20 (aerial)</option>
       <option value="xyz">Custom XYZ</option>
       <option value="tms">Custom TMS</option>
       <option value="wms">Custom WMS</option>
@@ -284,9 +285,17 @@
       <select id="tileFormat"><option>image/png</option><option>image/jpeg</option><option>image/webp</option></select>
       <label for="tileVersion">Version</label>
       <select id="tileVersion"><option>1.3.0</option><option>1.1.1</option></select>
+      <label for="tileCrs">CRS</label>
+      <select id="tileCrs" title="What the server is asked for. UTM: each tile asks for the box enclosing it and is mapped onto the map vertex by vertex">
+        <option value="EPSG:3857">EPSG:3857 (Web Mercator)</option>
+        <option value="EPSG:25832">EPSG:25832 (ETRS89 / UTM 32N)</option>
+        <option value="EPSG:25833">EPSG:25833 (ETRS89 / UTM 33N)</option>
+        <option value="EPSG:32632">EPSG:32632 (WGS 84 / UTM 32N)</option>
+        <option value="EPSG:32633">EPSG:32633 (WGS 84 / UTM 33N)</option>
+      </select>
       <label for="tileTransparent">Transparent</label>
       <input type="checkbox" id="tileTransparent">
-      <div class="hint full">Requested in EPSG:3857, 256 px tiles.</div>
+      <div class="hint full">256 px tiles. German state servers (DOP20 etc.) usually serve EPSG:25832.</div>
     </div>
     <label for="tileMaxZoom">Max zoom</label>
     <input type="number" id="tileMaxZoom" min="0" max="22" step="1" value="19">

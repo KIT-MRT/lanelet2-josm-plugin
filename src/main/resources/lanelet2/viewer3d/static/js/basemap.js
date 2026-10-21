@@ -8,7 +8,7 @@ import { TEST_HOOKS } from "./util.js";
 import { ortho, setOrtho } from "./camera.js";
 import { grid } from "./scene.js";
 import { toast } from "./hud.js";
-import { tileLayer, TILE_PRESETS, checkSource, tileUrl } from "./render/tiles.js";
+import { tileLayer, TILE_PRESETS, checkSource, tileUrl, toUtm, wmsBox } from "./render/tiles.js";
 
 const STORE_KEY = "ll2.viewer3d.tiles";
 let els = {};
@@ -44,6 +44,7 @@ export function installBasemap() {
     styles: document.getElementById("tileStyles"),
     format: document.getElementById("tileFormat"),
     version: document.getElementById("tileVersion"),
+    crs: document.getElementById("tileCrs"),
     transparent: document.getElementById("tileTransparent"),
     maxZoom: document.getElementById("tileMaxZoom"),
     attribution: document.getElementById("tileAttributionText"),
@@ -106,14 +107,15 @@ function fillForm(source) {
   els.styles.value = source.styles || "";
   els.format.value = source.format || "image/png";
   els.version.value = source.version || "1.3.0";
+  els.crs.value = source.crs || "EPSG:3857";
   els.transparent.checked = !!source.transparent;
   els.maxZoom.value = String(source.maxZoom || 19);
   els.attribution.value = source.attribution || "";
   els.opacity.value = String(Math.round(tileLayer.opacity * 100));
   const preset2 = TILE_PRESETS[els.preset.value];
   els.wms.hidden = (preset2 ? preset2.type : els.preset.value) !== "wms";
-  for (const el of [els.url, els.layers, els.styles, els.format, els.version, els.transparent,
-                    els.maxZoom, els.attribution]) el.disabled = !!preset2;
+  for (const el of [els.url, els.layers, els.styles, els.format, els.version, els.crs,
+                    els.transparent, els.maxZoom, els.attribution]) el.disabled = !!preset2;
 }
 
 function readForm() {
@@ -126,6 +128,7 @@ function readForm() {
     styles: els.styles.value.trim(),
     format: els.format.value,
     version: els.version.value,
+    crs: els.crs.value,
     transparent: els.transparent.checked,
     maxZoom: Number(els.maxZoom.value) || 19,
     attribution: els.attribution.value.trim(),
@@ -215,6 +218,13 @@ if (TEST_HOOKS) {
       return problems;
     },
     tileUrl: (z, x, y) => tileUrl(tileLayer.source, z, x, y),
+    utm: (lat, lon, zone) => toUtm(lat, lon, zone),
+    wmsBox: (z, x, y) => wmsBox(tileLayer.source, z, x, y),
+    // A built tile's texture coordinates, vertex by vertex.
+    tileUvs: (key) => {
+      const t = tileLayer.tiles.get(key);
+      return t && t.mesh ? Array.from(t.mesh.geometry.getAttribute("uv").array) : null;
+    },
     gridVisible: () => grid.visible,
     readyKeys: () => [...tileLayer.tiles.values()].filter((t) => t.state === "ready").map((t) => t.key),
     // ENU of a built tile's south-west corner (its first vertex).
