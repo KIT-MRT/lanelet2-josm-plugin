@@ -5,6 +5,11 @@ native Kotlin plugin (`lanelet2.jar`).
 
 ![JOSM-LL2-Plugin.png](./docs/res/JOSM-LL2-Plugin.png)
 
+The plugin ships a live 3D viewer for the map, which can also show recorded
+LiDAR point clouds and camera images from
+[KITScenes](https://kitscenes.com/multimodal/) — see
+[Recorded sensor data](#recorded-sensor-data-kitscenes-no-josm-needed).
+
 Most tools are self-contained. Four actions (positive IDs, merge, split, debug
 routing graph) also need a local Python `lanelet2` install; they warn at the
 point of use if that sidecar is missing. Everything else works without it.
@@ -171,43 +176,6 @@ culling.
   `LL2_TILE_PROXY_HOSTS`) to fetch through the viewer server, for that host
   only.
 
-### Recorded sensor data (point clouds, no JOSM needed)
-
-`tools/scene_server/` streams a recorded driving scene (KITScenes Multimodal)
-into the same viewer: the scene's Lanelet2 map, the LiDAR point clouds of a
-frame and the ring camera images. It connects to the viewer server like the
-JOSM bridge does, so **viewing needs no JOSM** — and when JOSM *is* connected,
-the map stays JOSM's (editable) while the sensor data comes from the scene
-server.
-
-**Whole scene (Shift+P)** stacks every frame into one point cloud with the
-moving traffic filtered out (163 M points become 2.7 M), so the map can be
-checked against everything the car saw rather than one frame at a time. It
-replaces the single frame on screen; `P` puts that back on top of it in a
-distinct colour (`U` toggles the tint) so the two can be told apart.
-Points colour by intensity, height, sensor, **Mapillary Vistas class** (from
-the scene's seamseg masks: cars blue, people crimson, bicycles dark red),
-**camera rgb** or, for one frame, **instance** (each detected object its own
-colour). **Filter** hides classes — or, switched to *Only*, shows nothing but
-the ticked ones (Only + Vehicles: just the cars) — and points above a height
-over the ground or below an intensity, and fades the cloud so the map shows
-through.
-
-**A whole city:** `--city $KITSCENES_ROOT` serves every scene of a city on the
-city-wide map, as clickable trajectories; picking one makes it the scene, and
-the static clouds of the scenes around the camera load on demand.
-
-**Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
-ring cameras was, with that camera's own intrinsics, and blends the recorded
-image over the render (`O`, with a blend slider) — so the map, the point cloud
-and the photograph can be compared pixel for pixel. Releasing the lock leaves
-the camera where it is, so you keep that vantage point and only lose the
-image. `[` / `]` walk the ring,
-`,` / `.` step frames, `K` jumps behind the car.
-
-See `tools/scene_server/README.md`; the plan is in
-`docs/sensor-viewer-plan.md`.
-
 New nodes created in JOSM without `ele` get a height (on by default; settings:
 *Heights*): a node inserted into a way, or joining ways, is interpolated
 between the known heights on both sides, a free end or a lone node takes the
@@ -217,6 +185,62 @@ a node at the height interpolated along its way. A height jump above 2 m between
 neighbouring nodes after that, an interpolation or a 3D move raises a
 warning, which also gives the distance and grade (a 3 m kerb-like step over
 1 m reads differently from 3 m over a 100 m ramp).
+
+### Recorded sensor data: KITScenes (no JOSM needed)
+
+The 3D viewer can show a recorded drive next to the map: the LiDAR point
+clouds, the ring camera images and the ego trajectory of
+[KITScenes Multimodal](https://kitscenes.com/multimodal/)
+([dataset](https://huggingface.co/datasets/KIT-MRT/KITScenes-Multimodal),
+[Python API](https://github.com/KIT-MRT/kitscenes),
+[paper](https://arxiv.org/abs/2606.02956)) — one scene, or every scene of a
+city. A separate process, `tools/scene_server/`, feeds the same viewer the
+JOSM plugin uses, so **viewing needs no JOSM**; with JOSM connected, the map
+stays JOSM's and editable while the sensor data comes from the scene server.
+
+![A picked trajectory with its pose arrows over that frame's LiDAR points](./docs/res/viewer3d-city-scene.jpg)
+*City mode: a scene picked by clicking its trajectory, at frame 110 — the pose
+arrows, that frame's LiDAR points (by intensity) and the Lanelet2 map.*
+
+![The whole scene as one static point cloud, coloured by class](./docs/res/viewer3d-whole-scene-classes.jpg)
+*Whole scene: every frame stacked into one static cloud, moving traffic
+filtered out, coloured by Mapillary Vistas class (parked cars blue).*
+
+![Orthographic map view over aerial images](./docs/res/viewer3d-ortho-aerial.jpg)
+*Orthographic map view over Hessen's 20 cm aerial images (WMS), the point
+cloud faded so the lanes show.*
+
+<sub>Screenshots: KITScenes Multimodal data (CC BY-NC 4.0); aerial images
+© HVBG, dl-de/by-2-0.</sub>
+
+**Start it** (setup once: `tools/scene_server/setup.sh`, which needs `uv` and a
+`kitscenes` checkout next to this repository):
+
+```bash
+python3 src/main/resources/lanelet2/viewer3d/server.py      # or JOSM's 3D viewer
+cd tools/scene_server
+.venv/bin/python -m ll2_scene --scene $KITSCENES_ROOT/data/val/<scene-id>
+.venv/bin/python -m ll2_scene --city $KITSCENES_ROOT --map /path/to/city/lanelet2_map.osm
+```
+
+**What you do most:**
+
+| | |
+|---|---|
+| `,` `.` / ▶ | step / play frames; `K` puts the camera behind the car |
+| `Shift+P` *Whole scene* | the static cloud of the whole scene (built once, then cached) |
+| *Colour* | intensity, height, sensor, Vistas class, camera rgb, instance |
+| *Filter* | hide classes — or *Only* the ticked ones — points above the ground or below an intensity, and fade the points |
+| `Shift+L` *Camera lock* | the view exactly as a ring camera saw it, its image blended over (`O`) |
+| click a trajectory | city mode: that scene at that frame; *Load* / *Auto* bring the clouds around the camera |
+| `V` *Ortho*, *Tiles* | top-down map view; OSM, aerial images or your own WMS/TMS underneath |
+
+Everything else — options, cache, how the static cloud is built, routes,
+coordinates, performance — is in
+[`tools/scene_server/README.md`](tools/scene_server/README.md); the design
+log is [`docs/sensor-viewer-plan.md`](docs/sensor-viewer-plan.md). For the
+browser side, start at `src/main/resources/lanelet2/viewer3d/static/js/sensors/`
+(scenes, city, camera lock) and `js/render/` (points, trajectories, tiles).
 
 ### Needs the `lanelet2` sidecar
 
