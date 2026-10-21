@@ -73,6 +73,29 @@ stays JOSM's (and editable) while the sensor data comes from here.
 | `--no-map` | never send the map, even if nothing else is streaming one |
 | `--map-only` | send the map and serve no sensor data |
 | `--kitscenes PATH` | a kitscenes checkout (else `KITSCENES_API_PATH`, else `../../../kitscenes`) |
+| `--cache-dir PATH` | where decoded frames are cached (default below) |
+| `--no-cache` | decode every frame afresh |
+| `--cache-limit-gb N` | trim the cache to N GB, least recently used first (default 10) |
+| `--clear-cache` | drop this scene's cached frames before starting |
+
+## Cache
+
+Decoding a frame costs ~1.3 s (7 parquet files, sentinel filter, per-point
+deskew, pose interpolation), so frames are cached on disk: **0.15 s** on a
+hit, about 10x faster.
+
+**The dataset is never written to.** The cache lives in
+`$XDG_CACHE_HOME/josm-lanelet2/scene-server/<scene-id>-v<n>/`, i.e.
+`~/.cache/josm-lanelet2/scene-server/...` by default; it is safe to delete at
+any time, and it is trimmed to `--cache-limit-gb` (10 GB) by dropping the
+least recently used frames. A full 220-frame scene is about 2.3 GB.
+
+Frames are cached **in the scene's own metric frame**, not in the viewer's
+ENU, so the cache stays valid when the ENU anchor changes — which happens as
+soon as JOSM connects and its anchor is adopted. Only the cheap 0.12 s
+re-projection is redone. Positions are stored as float32 relative to a local
+origin, which costs at most 0.034 mm against source data quantised to 5 mm;
+intensity and sensor id come back exact.
 
 ## Routes
 

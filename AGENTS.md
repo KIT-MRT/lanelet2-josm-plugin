@@ -400,6 +400,11 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   render against the plain pinhole formula (it matches to 0.0000 px).
   While locked, nav / held keys / hover are off, because picking still assumes
   the ordinary projection and the full canvas.
+- **The dataset is read-only.** Decoded frames cache under
+  `$XDG_CACHE_HOME/josm-lanelet2/scene-server/`, never beside the data, and
+  they hold the frame in the *scene's* metric frame so adopting JOSM's anchor
+  later does not throw the cache away (only the 0.12 s re-projection is
+  redone). 1.3 s -> 0.15 s per frame; LRU-trimmed to `--cache-limit-gb`.
 - Tests: `.venv/bin/python -m unittest discover -s tests -t .` (pure),
   `testdata/viewer3d/e2e_scene.mjs` (browser, fakes the scene server),
   `testdata/viewer3d/live_scene.mjs <scene>` (real data; prints how far the

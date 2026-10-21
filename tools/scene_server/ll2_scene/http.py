@@ -20,7 +20,9 @@ import time
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .points import encode_points
+import numpy as np
+
+from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 
 FRAME_POINTS_RE = re.compile(r"^/frame/(\d+)/points\.bin$")
 FRAME_IMAGE_RE = re.compile(r"^/frame/(\d+)/camera/([A-Za-z0-9_]+)\.jpg$")
@@ -49,8 +51,10 @@ class FrameCache:
 
 
 class SceneHttpServer:
-    def __init__(self, source, host="127.0.0.1", port=8767, allow_origin="*", log=print):
+    def __init__(self, source, host="127.0.0.1", port=8767, allow_origin="*", log=print,
+                 disk_cache=None):
         self.source = source
+        self.disk = disk_cache
         self.host = host
         self.allow_origin = allow_origin
         self.log = log
@@ -71,18 +75,41 @@ class SceneHttpServer:
         self.log("scene: serving data on %s" % self.base_url)
 
     def stop(self):
-        self._httpd.shutdown()
+        # shutdown() waits for serve_forever() to return and blocks forever if
+        # it was never entered, so only call it when the server really started.
+        if self._thread is not None:
+            self._httpd.shutdown()
+            self._thread.join(timeout=5)
+            self._thread = None
         self._httpd.server_close()
 
     def points_blob(self, index):
+        """Frame `index` in viewer ENU, from RAM, from disk, or decoded.
+
+        The disk cache holds the frame in the *scene's* metric frame, so it
+        stays valid across a change of ENU anchor; only the cheap
+        re-projection is redone.
+        """
         def build():
             t0 = time.perf_counter()
-            xyz, intensity, sensor = self.source.frame_points(index)
-            blob = encode_points(xyz, intensity, sensor)
-            self.log("scene: frame %d -> %d points, %.1f MB in %.2fs"
-                     % (index, len(xyz), len(blob) / 1e6, time.perf_counter() - t0))
+            cached = self.disk.get(index) if self.disk else None
+            if cached is not None:
+                xyz, intensity, sensor, _ = decode_points(cached)
+                where = "cache"
+            else:
+                xyz, intensity, sensor = self.source.frame_points_scene(index)
+                if self.disk:
+                    self.disk.put(index, encode_points(xyz, intensity, sensor))
+                where = "dataset"
+            # Intensity came back quantised to a byte; feed it through as the
+            # 0..2 reflectivity the encoder expects.
+            if cached is not None and intensity is not None:
+                intensity = intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
+            blob = encode_points(self.source.to_enu(xyz), intensity, sensor)
+            self.log("scene: frame %d -> %d points, %.1f MB in %.2fs (%s)"
+                     % (index, len(xyz), len(blob) / 1e6, time.perf_counter() - t0, where))
             return blob
-        return self.cache.get(("points", index), build)
+        return self.cache.get(("points", index, self.source.anchor), build)
 
 
 def _make_handler(server):

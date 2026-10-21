@@ -186,12 +186,25 @@ class SceneSource:
 
     # -- point clouds ------------------------------------------------------
     def frame_points(self, index, lidars=None):
-        """All LiDARs of one frame, in viewer ENU.
+        """All LiDARs of one frame, in viewer ENU."""
+        xyz, intensity, sensor = self.frame_points_scene(index, lidars)
+        return self.to_enu(xyz), intensity, sensor
+
+    def to_enu(self, xyz):
+        """(N,3) scene metres -> viewer ENU. ~0.12 s for a 750 k-point frame."""
+        if not len(xyz):
+            return xyz
+        xy = self.frame.apply_array(xyz[:, :2])
+        return np.column_stack([xy[:, 0], xy[:, 1], xyz[:, 2]])
+
+    def frame_points_scene(self, index, lidars=None):
+        """All LiDARs of one frame, in the scene's own metric frame.
 
         Returns (xyz float64 (N,3), intensity float32 (N,), sensor uint8 (N,)).
         `kitscenes` deskews each sweep into the base frame with that sensor's
-        extrinsic; the ego pose at the sweep time puts it in the scene frame,
-        and `SceneFrame` puts that in the viewer's.
+        extrinsic; the ego pose at the sweep time puts it in the scene frame.
+        This is the expensive part and the part worth caching: it does not
+        depend on the viewer's ENU anchor, which can change under us.
         """
         xyz_parts, refl_parts, sid_parts = [], [], []
         for name in (lidars or self.lidars):
@@ -216,10 +229,8 @@ class SceneSource:
             sid_parts.append(np.asarray(sid, dtype=np.uint8))
         if not xyz_parts:
             return np.zeros((0, 3)), np.zeros(0, np.float32), np.zeros(0, np.uint8)
-        xyz = np.concatenate(xyz_parts)
-        xy = self.frame.apply_array(xyz[:, :2])
-        return (np.column_stack([xy[:, 0], xy[:, 1], xyz[:, 2]]),
-                np.concatenate(refl_parts), np.concatenate(sid_parts))
+        return (np.concatenate(xyz_parts), np.concatenate(refl_parts),
+                np.concatenate(sid_parts))
 
     def ego_track(self):
         """Every frame's ego pose in viewer ENU: positions and xyzw quaternions.

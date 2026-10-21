@@ -15,6 +15,7 @@ import time
 import urllib.request
 
 from .bridge import ViewerBridge
+from .cache import DEFAULT_LIMIT_GB, FrameDiskCache, default_cache_dir
 from .http import SceneHttpServer
 from .scene import SceneSource
 
@@ -54,6 +55,14 @@ def main(argv=None):
     parser.add_argument("--kitscenes", default=None, help="path to a kitscenes checkout")
     parser.add_argument("--no-map", action="store_true", help="never send the map (JOSM owns it)")
     parser.add_argument("--map-only", action="store_true", help="send the map, serve no sensor data")
+    parser.add_argument("--cache-dir", default=None,
+                        help="where decoded frames are cached (default: %s). "
+                             "Never the dataset, which stays read-only." % default_cache_dir())
+    parser.add_argument("--no-cache", action="store_true", help="decode every frame afresh")
+    parser.add_argument("--cache-limit-gb", type=float, default=DEFAULT_LIMIT_GB,
+                        help="trim the cache to this size, least recently used first")
+    parser.add_argument("--clear-cache", action="store_true",
+                        help="drop this scene's cached frames before starting")
     args = parser.parse_args(argv)
 
     log = lambda msg: print(msg, flush=True)  # noqa: E731
@@ -75,9 +84,14 @@ def main(argv=None):
 
     http = None
     if not args.map_only:
+        directory = None if args.no_cache else (args.cache_dir or default_cache_dir())
+        disk = FrameDiskCache(source.scene_id, directory, args.cache_limit_gb, log=log)
+        if args.clear_cache:
+            disk.clear()
+        log("scene: %s" % disk.describe())
         origin = "http://%s:%d" % (args.viewer_host, args.viewer_port)
         http = SceneHttpServer(source, host=args.viewer_host, port=args.http_port,
-                               allow_origin=origin, log=log)
+                               allow_origin=origin, log=log, disk_cache=disk)
         http.start()
 
     def on_connect():

@@ -118,6 +118,11 @@ to learn about the viewport rectangle.
 - [x] Icons got a toggle (`N`, on by default) and an α slider, so they can be
       faded instead of hiding the cloud behind them.
 
+- [x] Decoded frames are cached to disk (~1.3 s -> 0.15 s). Never in the
+      dataset: `~/.cache/josm-lanelet2/scene-server/`, LRU-trimmed to 10 GB
+      (a 220-frame scene is 2.3 GB). Cached in the *scene's* frame, so a
+      change of ENU anchor does not invalidate it.
+
 ### M3 — aggregated scene cloud
 - [ ] Voxel downsample + chunking + draw-distance LOD.
       220 frames x 740 k = 163 M points raw, so this is a downsampling problem,
