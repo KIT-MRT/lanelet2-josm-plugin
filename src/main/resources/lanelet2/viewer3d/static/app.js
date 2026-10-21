@@ -193,6 +193,7 @@ if (TEST_HOOKS) {
       points: pointLayer.stats(),
     }),
     icons: () => iconLayer.stats(),
+    iconMesh: (id) => iconLayer.meshOf(id),
     lanelets: () => ({
       count: laneletLayer.lanelets.size,
       surfaceTiles: laneletLayer.chunks.size,

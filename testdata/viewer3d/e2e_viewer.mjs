@@ -29,6 +29,19 @@ features.push({ id: "way/6", kind: "line", tags: { type: "traffic_sign", subtype
   pts: [3, 40, 2, 3, 40, 2.6, 3.6, 40, 2.6, 3.6, 40, 2], nodes: [601, 602, 603, 604] });
 features.push({ id: "way/7", kind: "line", tags: { type: "arrow", subtype: "straight" },
   pts: [-1, 60, 0, -1, 63, 0, 1, 63, 0, 1, 60, 0], nodes: [701, 702, 703, 704] });
+// Traffic lights the Autoware way: the line is the light's bottom edge, left
+// to right as the approaching car sees it, `height` its vertical size. Car
+// drives +y, so the light at y = 30 faces -y. The rest must stay on the old
+// path: no height, three points, a height that is not a number.
+const AW_LEFT = [-3, 30, 5];
+const AW_RIGHT = [-2.6, 30, 5];
+const light = (id, tags, pts) => ({ id: `way/${id}`, kind: "line",
+  tags: { type: "traffic_light", subtype: "red_yellow_green", ...tags },
+  pts: pts.flat(), nodes: pts.map((_, i) => id * 100 + i) });
+features.push(light(8, { height: "0.5" }, [AW_LEFT, AW_RIGHT]));
+features.push(light(9, {}, [[3, 30, 5], [3.4, 30, 5]]));
+features.push(light(10, { height: "0.5" }, [[6, 30, 5], [6.2, 30, 5], [6.4, 30, 5]]));
+features.push(light(11, { height: "high" }, [[9, 30, 5], [9.4, 30, 5]]));
 const N1 = [5, 20, 0];
 const N2 = [5.3, 20, 0];
 
@@ -43,7 +56,7 @@ async function waitFor(pred, ms = 4000) {
 }
 try {
   v.sendScene({ type: "snapshot", anchor: { lat: 49, lon: 8.4 }, features });
-  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(7));
+  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(11));
 
   // ---- camera ---------------------------------------------------------------
   await v.key("b");
@@ -203,6 +216,37 @@ try {
   t.check("the alpha slider fades them so the cloud shows through",
     Math.abs((await icons()).opacity - 0.4) < 1e-9, JSON.stringify(await icons()));
   await v.shot("icons_faded.png");
+
+  // Autoware traffic lights: an upright box on the line, `height` tall.
+  const meshOf = (id) => v.evaluate(`window.__ll2test.iconMesh(${JSON.stringify(id)})`);
+  t.check("the lights' icons are built", await waitFor(async () =>
+    (await meshOf("way/8")) && (await meshOf("way/9")) && (await meshOf("way/10")) && (await meshOf("way/11"))));
+  const aw = await meshOf("way/8");
+  const zs = aw.map((p) => p[2]);
+  const xs = aw.map((p) => p[0]);
+  const ys2 = aw.map((p) => p[1]);
+  t.check("an Autoware light stands on its line, as tall as its height tag",
+    Math.abs(Math.min(...zs) - 5) < 1e-6 && Math.abs(Math.max(...zs) - 5.5) < 1e-6
+    && Math.abs(Math.min(...xs) - AW_LEFT[0]) < 1e-6 && Math.abs(Math.max(...xs) - AW_RIGHT[0]) < 1e-6,
+    JSON.stringify(aw.map((p) => p.map((n) => +n.toFixed(3)))));
+  // Its icon face is lifted toward the approaching car (-y), not away.
+  t.check("facing the car that sees start on the left and end on the right",
+    ys2.every((y) => y < 30 && y > 29.9), JSON.stringify(ys2));
+  const flatNoHeight = await meshOf("way/9");
+  // The old path lays a horizontal 2-point light flat; that is what stays.
+  t.check("without a height tag a 2-point light keeps the old icon",
+    Math.max(...flatNoHeight.map((p) => p[2])) - Math.min(...flatNoHeight.map((p) => p[2])) < 1e-6,
+    JSON.stringify(flatNoHeight.map((p) => p.map((n) => +n.toFixed(3)))));
+  const old3 = await meshOf("way/10");
+  t.check("so does a 3-point light with a height tag",
+    Math.max(...old3.map((p) => p[2])) - Math.min(...old3.map((p) => p[2])) < 1e-6);
+  const oldBad = await meshOf("way/11");
+  t.check("and one whose height is not a number",
+    Math.max(...oldBad.map((p) => p[2])) - Math.min(...oldBad.map((p) => p[2])) < 1e-6);
+  await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"
+    + " el.value = '100'; el.dispatchEvent(new Event('input')); })()");
+  await v.evaluate("window.__ll2city.lookAt([0, 30, 5.2], 9)");
+  await v.shot("autoware_lights.png");
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {

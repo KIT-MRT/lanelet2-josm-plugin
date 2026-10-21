@@ -187,12 +187,38 @@ function addFacedSignIcon(group, p1, p2, p3, p4, tex) {
   group.add(backMesh);
 }
 
+/**
+ * Autoware's traffic light: a line along the light's bottom edge, from its
+ * bottom-left to its bottom-right corner as the approaching vehicle sees it,
+ * and a `height` tag for its vertical size (not its position -- that is the
+ * nodes' ele). See autoware_lanelet2_extension's lanelet2_format_extension.md.
+ * Returns the quad [bottom-left, top-left, top-right, bottom-right] for such a
+ * way, else null so the ordinary path draws it.
+ */
+export function autowareLightQuad(feature) {
+  const tags = feature.tags || {};
+  if (!tags.type || tags.type.indexOf("traffic_light") !== 0) return null;
+  const m = /^\s*(\d+(?:\.\d+)?|\.\d+)\s*(?:m)?\s*$/.exec(String(tags.height ?? ""));
+  const height = m ? Number(m[1]) : NaN;
+  if (!(height > 0 && height < 20)) return null;
+  const verts = uniquePolyPoints(feature.pos || []);
+  if (verts.length !== 2) return null;
+  const [left, right] = verts;
+  const up = new THREE.Vector3(0, 0, height);
+  return [left, left.clone().add(up), right.clone().add(up), right];
+}
+
 function buildIcon(group, feature, spec) {
   loadIconTexture(spec.file, (tex) => {
     if (group.userData.disposed) return;
     const pos = feature.pos;
     if (pos.length < 3) return;
     const tags = feature.tags || {};
+    const autoware = autowareLightQuad(feature);
+    if (autoware) {
+      addFacedSignIcon(group, autoware[0], autoware[1], autoware[2], autoware[3], tex);
+      return;
+    }
     if (isFacedIconType(tags.type)) {
       const verts = uniquePolyPoints(pos);
       if (verts.length >= 4) {
@@ -278,6 +304,19 @@ class IconLayer {
         if (child.material) child.material.opacity = iconOpacity;
       });
     }
+  }
+
+  /** World positions of the vertices of a feature's (front) icon mesh, for tests. */
+  meshOf(id) {
+    const g = this.groups.get(id);
+    const mesh = g && g.children[0];
+    if (!mesh) return null;
+    mesh.updateMatrixWorld();
+    const p = mesh.geometry.getAttribute("position");
+    const out = [];
+    const v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) out.push(v.fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld).toArray());
+    return out;
   }
 
   stats() {
