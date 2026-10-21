@@ -1,10 +1,9 @@
-// Keyboard and on-screen controls, plus FPS (captured-mouse) look.
+// Keyboard and the view buttons, plus FPS (captured-mouse) look.
 //
 // Gaming conventions in every mode: WASD / arrows walk, Space / C up / down,
 // Shift fast, alt+left/right turn, alt+up/down up / down. In edit mode with
-// "keys: selection" (T) the same keys and the pads move and turn the selection
-// instead of the camera. FPS mode only adds the captured mouse and turns edit
-// mode off.
+// "keys: selection" (T) the same keys move and turn the selection instead of
+// the camera. FPS mode only adds the captured mouse and turns edit mode off.
 //
 // Hold-to-move keys are only recorded here; applyHeldCamera() acts in the
 // render loop, so mouse look under pointer lock cannot starve WASD of
@@ -19,6 +18,7 @@ import { setLookHud } from "./hud.js";
 import { laneletLayer } from "./render/lanelets.js";
 import { iconLayer } from "./render/icons.js";
 import { handleSceneKey } from "./sensors/scene.js";
+import { handleUiKey } from "./ui/shell.js";
 
 const CAM_PAN_STEP_M = 1;    // metres per pan / height tick (walk)
 const CAM_FAST_STEP_M = 10;  // metres per tick with Shift (WASD / arrows / pad)
@@ -30,8 +30,14 @@ let altHeld = false;
 let ctrlHeld = false;
 let shiftHeld = false;
 let fpsLookEnabled = false;
+let walkFactor = 1;          // Settings: walk speed
 
-const moveStepM = () => (shiftHeld ? CAM_FAST_STEP_M : CAM_PAN_STEP_M);
+const moveStepM = () => (shiftHeld ? CAM_FAST_STEP_M : CAM_PAN_STEP_M) * walkFactor;
+
+/** Scale how far the movement keys go per tick (Settings). */
+export function setWalkFactor(f) {
+  walkFactor = Number.isFinite(f) && f > 0 ? f : 1;
+}
 
 export const isPointerLocked = () => document.pointerLockElement === canvas;
 
@@ -109,30 +115,6 @@ function requestFpsLock() {
   canvas.requestPointerLock();
 }
 
-function bindHoldButton(btn, fn) {
-  let timer = null;
-  const stop = () => {
-    if (timer !== null) {
-      clearInterval(timer);
-      timer = null;
-    }
-  };
-  btn.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    btn.setPointerCapture(e.pointerId);
-    fn();
-    timer = setInterval(fn, CAM_HOLD_MS);
-  });
-  btn.addEventListener("pointerup", stop);
-  btn.addEventListener("pointercancel", stop);
-  btn.addEventListener("lostpointercapture", stop);
-}
-
-function parseVecAttr(el, name) {
-  const parts = (el.getAttribute(name) || "0,0").split(",");
-  return [Number(parts[0]) || 0, Number(parts[1]) || 0];
-}
-
 function isTypingTarget(el) {
   if (!el || el === document.body || el === document.documentElement) return false;
   const tag = el.tagName;
@@ -140,24 +122,6 @@ function isTypingTarget(el) {
 }
 
 export function installKeys() {
-  // The pads act on whatever the keys move: one tick is one CAM_HOLD_MS frame.
-  const tick = CAM_HOLD_MS / 1000;
-  document.querySelectorAll("#camPan [data-pan]").forEach((btn) => {
-    const [dx, dy] = parseVecAttr(btn, "data-pan");
-    bindHoldButton(btn, () => applyIntents({ right: dx, forward: dy, up: 0, turn: 0 }, tick));
-  });
-  document.querySelectorAll("#camRot [data-rot]").forEach((btn) => {
-    const [dYaw, dPitch] = parseVecAttr(btn, "data-rot");
-    bindHoldButton(btn, () => {
-      if (keysMoveSelection()) applyIntents({ right: 0, forward: 0, up: 0, turn: -dYaw }, tick);
-      else look(dYaw * CAM_ROT_STEP, dPitch * CAM_ROT_STEP);
-    });
-  });
-  document.querySelectorAll("#camElev [data-elev]").forEach((btn) => {
-    const dz = Number(btn.getAttribute("data-elev")) || 0;
-    bindHoldButton(btn, () => applyIntents({ right: 0, forward: 0, up: dz, turn: 0 }, tick));
-  });
-
   editEvents.on("mode", (on) => { if (on && fpsLookEnabled) setFpsLook(false); });
 
   document.addEventListener("pointerlockchange", () => {
@@ -183,6 +147,9 @@ export function installKeys() {
   });
   on("recenterJosmBtn", () => requestJosmRecenter("button", true));
   on("bevBtn", () => bevNorth());
+  on("topViewBtn", () => bevNorth());
+  on("frameBtn", () => frameAll());
+  on("frameAllBtn", () => frameAll());
   on("defaultBevBtn", () => defaultBevView());
   const lanesBtn = document.getElementById("lanesBtn");
   const toggleLanes = () => {
@@ -219,6 +186,9 @@ export function installKeys() {
 
   document.addEventListener("keydown", (e) => {
     trackModifiers(e);
+    // Menus, dialogs and the window shortcuts first; an open dialog keeps
+    // every key from the map.
+    if (handleUiKey(e)) return;
     if (isTypingTarget(e.target)) return;
     if (handleEditKey(e)) return;
     if (!e.repeat && handleSceneKey(e)) return;

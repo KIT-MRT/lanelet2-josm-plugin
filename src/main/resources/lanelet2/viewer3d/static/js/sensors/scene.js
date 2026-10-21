@@ -8,8 +8,10 @@
 import * as THREE from "three";
 import { TEST_HOOKS } from "../util.js";
 import { camera, view, setCameraView, lookAtPoint } from "../camera.js";
-import { pointLayer, setClassPalette, setHiddenClasses } from "../render/points.js";
+import { pointLayer, setClassPalette, setHiddenClasses, SENSOR_COLORS } from "../render/points.js";
 import { toast } from "../hud.js";
+import { setIcon } from "../ui/icons.js";
+import { setCrumbs, setJob, setTabAvailable } from "../ui/shell.js";
 import { store } from "../store.js";
 import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handleRigKey,
          projectToImage } from "./camrig.js";
@@ -25,8 +27,15 @@ export const sceneState = {
   frame: 0,
   loading: false,
   playing: false,
+  follow: false,   // the camera rides along with the car
   error: null,
 };
+
+// Follow: the camera keeps its place relative to the car, so it is moved
+// and turned with the car from the pose it was last placed against.
+const FOLLOW_NEAR_M = 120;  // turning Follow on further away than this goes to the car first
+let followFrom = null;      // frame whose car pose the camera currently sits against
+const _zAxis = new THREE.Vector3(0, 0, 1);
 
 const PLAY_MIN_MS = 60;       // never queue faster than the fetches come back
 const PREFETCH_IDLE_MS = 400; // only look ahead once the user has settled
@@ -71,6 +80,12 @@ export function installScene() {
     presetCars: document.getElementById("classPresetCars"),
     showAll: document.getElementById("classShowAll"),
     classMode: document.getElementById("classMode"),
+    classSect: document.getElementById("classSect"),
+    filterReset: document.getElementById("filterReset"),
+    follow: document.getElementById("sceneFollow"),
+    meta: document.getElementById("sceneMeta"),
+    legend: document.getElementById("pointLegend"),
+    timeline: document.getElementById("timeline"),
   };
   if (!els.bar) return;
   installFilters();
@@ -79,13 +94,18 @@ export function installScene() {
   els.points.classList.add("on");
   els.points.addEventListener("click", () => togglePoints());
   els.car.addEventListener("click", () => goToCar());
+  if (els.follow) els.follow.addEventListener("click", () => setFollow(!sceneState.follow));
   els.prev.addEventListener("click", () => step(-1));
   els.next.addEventListener("click", () => step(1));
   els.play.addEventListener("click", () => setPlaying(!sceneState.playing));
   els.frame.addEventListener("input", () => showFrame(Number(els.frame.value)));
-  els.mode.addEventListener("change", () => pointLayer.setMode(els.mode.value));
+  els.mode.addEventListener("change", () => {
+    pointLayer.setMode(els.mode.value);
+    refreshLegend();
+  });
   els.size.addEventListener("input", () => pointLayer.setSize(Number(els.size.value)));
   pointLayer.setSize(Number(els.size.value));
+  refreshLegend();
   installCamRig({ urlFor: imageUrl, currentFrame: () => sceneState.frame });
 }
 
@@ -103,8 +123,11 @@ function installFilters() {
   if (!els.filters) return;
   els.filterBtn.addEventListener("click", () => {
     els.filters.hidden = !els.filters.hidden;
-    els.filterBtn.classList.toggle("on", !els.filters.hidden);
+    els.filterBtn.parentElement.classList.toggle("closed", els.filters.hidden);
+    refreshFilterButton();
   });
+  els.filterBtn.parentElement.classList.toggle("closed", els.filters.hidden);
+  if (els.filterReset) els.filterReset.addEventListener("click", () => resetFilters());
   els.alpha.addEventListener("input", () => {
     filterState.alpha = Number(els.alpha.value) / 100;
     pointLayer.setAlpha(filterState.alpha);
@@ -168,6 +191,29 @@ export function setClassMode(only) {
   applyClassFilter();
 }
 
+/** Every filter back to letting everything through. */
+export function resetFilters() {
+  filterState.alpha = 1;
+  filterState.aboveGround = 0;
+  filterState.intensityMin = 0;
+  els.alpha.value = "100";
+  els.aboveGround.value = "0";
+  els.intensityMin.value = "0";
+  for (const input of [els.alpha, els.aboveGround, els.intensityMin]) {
+    input.dispatchEvent(new Event("input"));
+  }
+  filterState.only = false;
+  hideClasses([]);
+}
+
+/** CSS colour of a class, from the palette the scene server sent. */
+function classColour(id) {
+  const rows = (sceneState.info && sceneState.info.classes && sceneState.info.classes.palette)
+    || (classTable && classTable.palette);
+  const c = rows && rows[id];
+  return c ? `rgb(${c[0]}, ${c[1]}, ${c[2]})` : "#5b6576";
+}
+
 /** A chip per class actually present, commonest first. */
 function refreshClassChips() {
   if (!els.chips) return;
@@ -193,20 +239,69 @@ function refreshClassChips() {
       applyClassFilter();
     });
     label.appendChild(box);
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.style.background = classColour(Number(id));
+    label.appendChild(swatch);
     label.appendChild(document.createTextNode(className(Number(id))));
     label.classList.toggle("hidden", box.checked && !filterState.only);
     label.classList.toggle("only", box.checked && filterState.only);
     els.chips.appendChild(label);
   }
+  if (els.classSect) els.classSect.hidden = els.chips.children.length === 0;
 }
 
 function refreshFilterButton() {
   if (!els.filterBtn) return;
   const active = filterState.ticked.size + (filterState.aboveGround ? 1 : 0)
     + (filterState.intensityMin > 0 ? 1 : 0) + (filterState.alpha < 1 ? 1 : 0);
-  els.filterBtn.textContent = active
+  const label = els.filterBtn.querySelector(".lbl") || els.filterBtn;
+  label.textContent = active
     ? `Filter · ${filterState.only && filterState.ticked.size ? "only " : ""}${active}` : "Filter";
-  els.filterBtn.classList.toggle("on", active > 0 || !els.filters.hidden);
+  els.filterBtn.classList.toggle("on", active > 0);
+  if (els.filterReset) els.filterReset.disabled = active === 0;
+}
+
+// Viridis, as the point shader computes it, for the legend's ramp.
+const VIRIDIS_CSS = "linear-gradient(90deg, #440154, #482878, #3e4989, #31688e, #26828e, "
+  + "#1f9e89, #35b779, #6ece58, #b5de2b, #fde725)";
+// The dataset's sensor_id order (render/points.js).
+const SENSOR_NAMES = ["top", "corner left", "corner right", "left", "right", "front", "rear"];
+
+/** What the point colours mean, for the current colour mode. */
+function refreshLegend() {
+  const el = els.legend;
+  if (!el) return;
+  el.textContent = "";
+  const mode = pointLayer.mode;
+  const add = (cls, text) => {
+    const d = document.createElement("div");
+    d.className = cls;
+    if (text) d.textContent = text;
+    el.appendChild(d);
+    return d;
+  };
+  if (mode === "height" || mode === "intensity") {
+    add("ramp").style.background = VIRIDIS_CSS;
+    const ends = add("ends");
+    const [lo, hi] = mode === "height" ? ["low", "high"] : ["dim", "bright"];
+    ends.innerHTML = `<span>${lo}</span><span>${hi}</span>`;
+  } else if (mode === "sensor") {
+    SENSOR_NAMES.forEach((name, i) => {
+      const key = add("key");
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = `#${SENSOR_COLORS[i].toString(16).padStart(6, "0")}`;
+      key.appendChild(sw);
+      key.appendChild(document.createTextNode(name));
+    });
+  } else if (mode === "class") {
+    add("", "Colours as in the class list below.");
+  } else if (mode === "rgb") {
+    add("", "Colour sampled from the ring camera images.");
+  } else if (mode === "instance") {
+    add("", "One colour per detected object, within this frame only; the whole-scene cloud keeps intensity.");
+  }
 }
 
 /**
@@ -237,10 +332,18 @@ export function onSceneMessage(msg, startFrame) {
   if (info.classes && info.classes.palette) setClassTable(info.classes);
   if (els.bar) {
     refreshBar();
-    els.name.textContent = `${shortId(info.id)} · ${info.frames} frames`;
-    els.name.title = `${info.id}\n${info.base}\n${info.lidars.length} LiDARs, ${Object.keys(info.cameras || {}).length} cameras`;
+    els.name.textContent = info.id;
+    els.name.title = `${info.id}\n${info.base}`;
+    const nCams = Object.keys(info.cameras || {}).length;
+    const duration = info.times && info.times.length ? info.times[info.times.length - 1] - info.times[0] : null;
+    if (els.meta) {
+      els.meta.textContent = `${info.frames} frames${duration ? ` · ${duration.toFixed(1)} s` : ""}`
+        + ` · ${(info.lidars || []).length} LiDARs · ${nCams} cameras`;
+    }
     els.frame.max = String(Math.max(0, info.frames - 1));
   }
+  setTabAvailable("scene", true, { focus: true });
+  refreshLegend();
   showFrame(Math.min(sceneState.frame, info.frames - 1));
   announce();
 }
@@ -255,6 +358,7 @@ function announce() {
 /** Drop everything the current scene has loaded, ready for another or none. */
 function resetScene() {
   setPlaying(false);
+  setFollow(false);
   if (pending) {
     pending.controller.abort();
     pending = null;
@@ -310,7 +414,20 @@ function refreshBar() {
   if (!els.bar) return;
   els.bar.hidden = !(sceneState.info || cityActive);
   els.bar.classList.toggle("noScene", !sceneState.info);
+  for (const el of els.bar.querySelectorAll("[data-scene-only]")) el.hidden = !sceneState.info;
+  if (els.timeline) els.timeline.hidden = !sceneState.info;
+  document.body.classList.toggle("hasTimeline", !!sceneState.info);
   if (!sceneState.info) els.name.textContent = "no scene · click a trajectory";
+  setTabAvailable("scene", !!(sceneState.info || cityActive));
+  sceneCrumb();
+}
+
+/** The scene part of the breadcrumb; the city part is city.js's. */
+function sceneCrumb() {
+  const info = sceneState.info;
+  window.dispatchEvent(new CustomEvent("ll2:crumbs", {
+    detail: { scene: info ? shortId(info.id) : null, sceneTitle: info ? info.id : "" },
+  }));
 }
 
 // The Vistas table: from the scene, or from the city before any scene is open.
@@ -474,13 +591,22 @@ function refreshAggregateButton() {
   els.aggregate.classList.toggle("on", aggregateState.on);
   const s = aggregateState;
   let label = "Whole scene";
+  let job = null;
   if (s.error) label = "Whole scene ✕";
-  else if (s.building && s.chunks) label = `Whole scene ${s.loaded}/${s.chunks}`;
-  else if (s.building) {
+  else if (s.building && s.chunks) {
+    label = `Whole scene ${s.loaded}/${s.chunks}`;
+    job = `Loading the whole scene ${s.loaded}/${s.chunks}`;
+  } else if (s.building) {
     const p = s.stats || {};
     label = p.total ? `Building ${p.done || 0}/${p.total}` : "Building…";
-  } else if (s.points) label = `Whole scene ${countLabel(s.points)}`;
-  els.aggregate.textContent = label;
+    job = p.total ? `Building the whole scene ${p.done || 0}/${p.total}` : "Building the whole scene…";
+  } else if (s.points) label = `Whole scene · ${countLabel(s.points)} points`;
+  const lbl = els.aggregate.querySelector(".lbl") || els.aggregate;
+  lbl.textContent = label;
+  els.aggregate.classList.toggle("busy", !!s.building);
+  els.aggregate.classList.toggle("bad", !!s.error);
+  if (s.error) els.aggregate.title = `Whole scene: ${s.error}`;
+  setJob("aggregate", job);
 }
 
 /** Where a recorded camera frame lives; the camera lock blends it over the render. */
@@ -495,6 +621,7 @@ export function showFrame(index) {
   index = Math.max(0, Math.min(info.frames - 1, Math.round(index)));
   sceneState.frame = index;
   wanted = index;
+  followTo(index);
   updateLabels();
   // The locked view rides along with the frame, image and all.
   if (rig.on) updateRig(index);
@@ -616,8 +743,9 @@ export function step(delta) {
 export function setPlaying(on) {
   sceneState.playing = !!on && !!sceneState.info;
   if (els.play) {
-    els.play.textContent = sceneState.playing ? "❚❚" : "▶";
+    setIcon(els.play.querySelector("[data-icon]"), sceneState.playing ? "pause" : "play");
     els.play.classList.toggle("on", sceneState.playing);
+    els.play.dataset.tip = sceneState.playing ? "Pause" : "Play the scene";
   }
   clearTimeout(playTimer);
   if (sceneState.playing) queueNext();
@@ -667,6 +795,43 @@ export function goToCar() {
   return true;
 }
 
+/** The car at frame `i`: position and heading (radians from east, counter-clockwise). */
+function carPose(i) {
+  const info = sceneState.info;
+  if (!info || !info.ego || !info.ego.pos[i] || !info.ego.quat[i]) return null;
+  const p = info.ego.pos[i];
+  const q = info.ego.quat[i];
+  const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(new THREE.Quaternion(q[0], q[1], q[2], q[3]));
+  return { pos: new THREE.Vector3(p[0], p[1], p[2]), heading: Math.atan2(forward.y, forward.x) };
+}
+
+/** Follow the car: turning it on far from the car goes there first. */
+export function setFollow(on) {
+  sceneState.follow = !!on && !!sceneState.info;
+  if (els.follow) els.follow.classList.toggle("on", sceneState.follow);
+  followFrom = sceneState.info ? sceneState.frame : null;
+  if (!sceneState.follow) return false;
+  const car = carPose(sceneState.frame);
+  if (car && camera.position.distanceTo(car.pos) > FOLLOW_NEAR_M) goToCar();
+  return true;
+}
+
+/** Move and turn the camera with the car from `followFrom` to frame `index`. */
+function followTo(index) {
+  const from = followFrom;
+  followFrom = index;
+  // Under the camera lock the recorded camera drives the view.
+  if (!sceneState.follow || rig.on || from === null || from === index) return;
+  const a = carPose(from);
+  const b = carPose(index);
+  if (!a || !b) return;
+  let turn = b.heading - a.heading;
+  if (turn > Math.PI) turn -= 2 * Math.PI;
+  if (turn < -Math.PI) turn += 2 * Math.PI;
+  const offset = camera.position.clone().sub(a.pos).applyAxisAngle(_zAxis, turn);
+  setCameraView(b.pos.clone().add(offset), view.yaw + turn, view.pitch);
+}
+
 function updateLabels() {
   const info = sceneState.info;
   if (!els.label || !info) return;
@@ -695,6 +860,10 @@ export function handleSceneKey(event) {
   }
   if (event.key === "p" || event.key === "P") {
     togglePoints();
+    return true;
+  }
+  if ((event.key === "k" || event.key === "K") && event.shiftKey) {
+    setFollow(!sceneState.follow);
     return true;
   }
   if (event.key === "k" || event.key === "K") {
@@ -750,6 +919,7 @@ if (TEST_HOOKS) {
   window.__ll2scene = {
     state: () => ({ frame: sceneState.frame, frames: sceneState.info ? sceneState.info.frames : 0,
                     loading: sceneState.loading, playing: sceneState.playing, error: sceneState.error,
+                    follow: sceneState.follow,
                     base: sceneState.info ? sceneState.info.base : null }),
     points: () => pointLayer.stats(),
     rig: () => rigState(),

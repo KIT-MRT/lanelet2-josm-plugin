@@ -14,11 +14,14 @@ Not part of `./gradlew build`: they need Chrome and a display-less GL
 ```bash
 node testdata/viewer3d/e2e_viewer.mjs                 # camera + picking; Node 22+, no npm install
 node testdata/viewer3d/e2e_edit.mjs                   # selection, moves, JOSM sync, refusals
-node testdata/viewer3d/e2e_controls.mjs               # keys / pads for camera and selection
+node testdata/viewer3d/e2e_controls.mjs               # keys for camera and selection
 node testdata/viewer3d/e2e_lanelets.mjs               # lanelet surfaces, arrows, surface picking
 node testdata/viewer3d/e2e_heights.mjs                # typed heights, snapping
+node testdata/viewer3d/e2e_ui.mjs                     # side panel, palette, help, settings, compass, narrow window
 node testdata/viewer3d/e2e_viewer.mjs --shots /tmp/v3d  # also save screenshots
 CHROME=/path/to/chrome node testdata/viewer3d/e2e_viewer.mjs
+# As root (containers), Chrome needs --no-sandbox: point CHROME at a wrapper
+#   printf '#!/bin/sh\nexec /path/to/chrome --no-sandbox "$@"\n' > chrome.sh
 ```
 
 Exit code 0 means every check passed.
@@ -36,14 +39,21 @@ LL2_VIEWER_DIR=/path/to/other/viewer3d node testdata/viewer3d/perf_viewer.mjs ma
 The page is opened with `?test=1`, which makes `app.js` expose
 `window.__ll2test`: the renderer's own projection of a world point to a page
 pixel, the exact camera state, the last orbit pivot and the selection. Use it
-instead of parsing the HUD, whose one-decimal readout is ~10 px off at close
+instead of parsing the Debug panel, whose one-decimal readout is ~10 px off at close
 range.
 
 The fake bridge answers every command that carries an `id` with an accepting
 `command_result`; set `session.reply = (cmd) => ({ ok: false, message })` to
 simulate JOSM refusing.
 
-`session.reveal(point)` pans a world point out from under the HUD / toolbars
+`window.__ll2ui` reports the interface itself (panel, tab, open dialog,
+status hints, running jobs) and `window.__ll2commands` the command list.
+
+The 3D view is the box between the bars and the side panel, not the window:
+take sizes from the canvas (`getBoundingClientRect`), never from
+`innerWidth` / `innerHeight`.
+
+`session.reveal(point)` pans a world point out from under the panels
 before a click; clicking where a panel sits hits the panel, not the map.
 
 Ports are picked free per run, so a viewer already running on 8765/8766 does

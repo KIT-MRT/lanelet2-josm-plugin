@@ -53,6 +53,7 @@ export function installBasemap() {
     apply: document.getElementById("tileApply"),
     status: document.getElementById("tileStatus"),
     credit: document.getElementById("tileAttribution"),
+    sourceName: document.getElementById("tileSourceName"),
   };
   tileLayer.attach();
   tileLayer.onProblem = onTileProblem;
@@ -188,11 +189,26 @@ export function refresh() {
       els.credit.textContent = s.attribution;
     }
   }
+  if (els.sourceName) els.sourceName.textContent = sourceLabel(s);
   const st = tileLayer.stats();
   if (!els.status.classList.contains("bad")) {
     els.status.textContent = tileLayer.on
       ? `zoom ${st.zoom ?? "–"} · ${st.shown}/${st.wanted} tiles${st.failed ? ` · ${st.failed} failed` : ""}`
       : "off";
+  }
+}
+
+/** A short name for the source: the preset's, else the server's host. */
+function sourceLabel(source) {
+  const key = Object.keys(TILE_PRESETS).find((k) => TILE_PRESETS[k].url === source.url);
+  if (key && els.preset) {
+    const option = els.preset.querySelector(`option[value="${key}"]`);
+    if (option) return option.textContent;
+  }
+  try {
+    return `${(source.type || "xyz").toUpperCase()} · ${new URL(source.url.replace(/\{[^}]*\}/g, "0")).host}`;
+  } catch (_) {
+    return source.url || "custom";
   }
 }
 

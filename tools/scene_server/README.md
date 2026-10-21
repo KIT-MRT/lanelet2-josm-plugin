@@ -46,21 +46,29 @@ python3 ../../src/main/resources/lanelet2/viewer3d/server.py
 .venv/bin/python -m ll2_scene --scene /path/to/<scene-uuid>
 ```
 
-Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
+Then open <http://127.0.0.1:8765/>. The scene's controls appear by
+themselves: a timeline under the view, a camera bar over it, and the side
+panel turns to its *Sensor data* tab.
 
 | | |
 |---|---|
-| `Points` / `P` | show or hide the single frame's cloud |
-| `Go to car` / `K` | camera behind the car at this frame |
-| `◀` `▶|` / `,` `.` | step frames |
-| `▶` | play |
-| Colour | intensity, height, sensor, class, rgb, instance |
-| `Filter` | class chips, a height ceiling, an intensity floor and point opacity |
-| `Whole scene` / `Shift+P` | the whole scene as one static cloud (hides the single frame) |
-| `Tint frame` / `U` | paint the single frame one bright colour against the aggregate |
-| `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
+| timeline `◀` `▶|` / `,` `.` | step frames; the slider scrubs |
+| timeline `▶` | play |
+| timeline *Car* / `K` | camera behind the car at this frame |
+| timeline *Follow* / `Shift+K` | keep the camera where it is relative to the car while the frames change (it turns with the car) |
+| *This frame* / `P` | show or hide the single frame's cloud |
+| Colour | intensity, height, sensor, class, rgb, instance, with a legend |
+| *Classes* | one chip per class present: hide it, or show *Only* the ticked ones |
+| *Filter* | a height ceiling and an intensity floor; the header counts what is active |
+| *Whole scene* / `Shift+P` | the whole scene as one static cloud (hides the single frame) |
+| *Tint this frame over it* / `U` | paint the single frame one bright colour against the aggregate |
+| camera bar: a ring button, *Camera view* / `Shift+L` | put the view exactly where that ring camera was; the lit button or `Esc` lets go |
 | `[` `]` | walk the six ring cameras |
-| `Overlay` / `O`, `Blend` | blend the recorded image over the render |
+| camera bar: image button / `O`, slider | blend the recorded image over the render |
+
+A map the scene server sends itself is marked `"source": "scene_server"` in
+its snapshot, so the viewer greys out *Edit* (and says why) instead of
+letting edits be refused one by one.
 
 Releasing the lock leaves the camera **where it is**, so you keep the vantage
 point you locked on to and just lose the image; only the roll is dropped,
@@ -150,7 +158,7 @@ instance number, since there is nothing to carry over.
 
 ### Filters and opacity
 
-`Filter` opens a small panel over the scene bar. Everything in it is a shader
+*Classes* and *Filter* sit in the *Sensor data* tab. Everything in them is a shader
 uniform: a filtered point is pushed outside the clip volume, so dragging a
 slider re-renders but uploads nothing and refetches nothing.
 
@@ -314,15 +322,16 @@ In the viewer:
 | tracks | every scene's ego trajectory: a line, a dot per frame, an arrow per frame for the 6D pose once close enough to read one. One colour per scene |
 | hover a track | scene id, split and frame under the pointer |
 | click a dot, arrow or line | that scene becomes *the* scene, at that frame; everything above (frames, camera lock, overlay, whole scene, colours) then works as for a single scene. The camera stays put; `K` goes to the car |
-| `Deselect` | back to the city alone |
+| the city in the breadcrumb | back to the city alone |
+| the scene list | every scene, nearest the camera first, filtered by id or split; a click opens it and goes to its car |
 | `Load 300 m` | the static clouds of every scene within the radius of the camera; scenes whose cloud is not built yet are built now (one at a time, minutes each) |
 | `Auto` | keep loading around the camera as it moves — but only clouds that are **already built**: flying across a city should never start a build |
 | Radius | how far around the camera; clouds beyond 1.3× of it are dropped again |
-| `Unload`, `Tracks` | drop every city cloud; hide the trajectories |
+| `Unload`, *Trajectories* | drop every city cloud; hide the trajectories |
 
 Clicking works in view mode; in edit mode a click belongs to the map. With
-no scene picked, the scene bar shrinks to colour, size and the filter
-panel, which act on the city's clouds. Clouds from overlapping scenes simply
+no scene picked, the *Sensor data* tab keeps colour, size, classes and
+filters, which act on the city's clouds. Clouds from overlapping scenes simply
 add up, which is the point: one street driven by five scenes is five
 scenes' worth of static points. While the picked scene shows its own
 whole-scene cloud, its city copy is hidden so nothing is drawn twice.

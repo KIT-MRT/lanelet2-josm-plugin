@@ -1,4 +1,5 @@
-// HUD panels: connection, counts, camera readout, frame debug, profiling.
+// Readouts: connection, counts, camera rows and frame debug (Debug panel),
+// profiling, and the toast.
 import { PROFILE } from "./util.js";
 import { camera, view, headingDeg, ortho, metresPerPixel } from "./camera.js";
 
@@ -22,37 +23,12 @@ export const hud = {
   render: el("render"),
 };
 
+// With ?profile=1 the Debug panel also shows the apply and render timings.
 if (PROFILE) {
-  for (const id of ["perfRow", "renderRow"]) {
+  for (const id of ["perfRow", "perf", "renderRow", "render"]) {
     const row = el(id);
-    if (row) row.style.display = "";
+    if (row) row.hidden = false;
   }
-}
-
-// The camera and debug rows (and the frame-debug panel) are hidden until the
-// title is clicked, so the panel does not cover the view; the choice is kept
-// per browser.
-const DETAILS_KEY = "ll2viewer.hudDetails";
-
-function setDetails(on) {
-  const panel = el("hud");
-  if (panel) panel.classList.toggle("compact", !on);
-  document.body.classList.toggle("compactHud", !on);
-  const t = el("hudToggle");
-  if (t) t.textContent = on ? "▾ details" : "▸ details";
-  try {
-    localStorage.setItem(DETAILS_KEY, on ? "1" : "0");
-  } catch (_) { /* storage blocked: keep it for this page only */ }
-}
-
-export function installHudToggle() {
-  let on = false;
-  try {
-    on = localStorage.getItem(DETAILS_KEY) === "1";
-  } catch (_) { /* default: compact */ }
-  setDetails(on);
-  const title = el("hudTitle");
-  if (title) title.addEventListener("click", () => setDetails(el("hud").classList.contains("compact")));
 }
 
 const fmt1 = (v) => Number(v).toFixed(1);
@@ -96,6 +72,12 @@ export function setEditHud(text) {
   if (hud.edit) hud.edit.textContent = text;
 }
 
+/** The selection card over the view in Edit mode: what is selected, which tool. */
+export function setSelectionCard(text) {
+  const what = el("selWhat");
+  if (what) what.textContent = text;
+}
+
 export function setLookHud(text) {
   if (hud.look) hud.look.textContent = text;
 }
@@ -129,7 +111,7 @@ export function reportFrameDebug(label, box, params) {
 
 let toastTimer = null;
 
-/** Short message at the top of the view; kind is "info", "warn" or "error". */
+/** Short message over the bottom of the view; kind is "info", "warn" or "error". */
 export function toast(text, kind = "info", ms = 4000) {
   const el = document.getElementById("toast");
   if (!el) return;

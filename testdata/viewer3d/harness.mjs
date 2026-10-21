@@ -243,8 +243,9 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       const onCanvas = await evaluate(
         `(() => { const e = document.elementFromPoint(${sp[0]}, ${sp[1]}); return !!e && e.tagName === "CANVAS"; })()`);
       if (onCanvas) return sp;
-      const [w, h] = await evaluate("[innerWidth, innerHeight]");
-      const cx = w / 2, cy = h / 2;
+      // The middle of the 3D view, which is not the middle of the window.
+      const [cx, cy] = await evaluate("(() => { const r = document.querySelector('canvas').getBoundingClientRect();"
+        + " return [r.left + r.width / 2, r.top + r.height / 2]; })()");
       await s.drag("middle", cx, cy, cx - sp[0], cy - sp[1]);
       return s.project(p);
     },

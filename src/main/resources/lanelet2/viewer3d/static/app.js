@@ -7,13 +7,18 @@
 //   picking.js    screen-space picking over the store
 //   nav.js        mouse navigation;  keys.js  keyboard, FPS look
 //   edit.js       selection and the move gizmo;  net.js  SSE in, commands out
-//   josmview.js   JOSM view follow / drive;  hud.js  HUD panels
+//   josmview.js   JOSM view follow / drive;  hud.js  readouts and toasts
 //   imagery.js    "Street view" button (Mapillary / Google / Apple)
+//   ui/*          the frame: side panel, menus, dialogs, command palette,
+//                 compass, status bar (shell.js holds the layout state)
 //
 // Coordinates arrive as local ENU metres relative to an anchor lat/lon, so the
 // scene is centred near the origin. Z is up.
 import * as THREE from "three";
 import { PROFILE, TEST_HOOKS, now, plog } from "./js/util.js";
+// The shell goes first: it fills in the icons and restores the panel, so the
+// viewport has its final size before the renderer is sized to it.
+import { installShell, observeViewport, setHints, setCrumbs, setTabAvailable, showTab } from "./js/ui/shell.js";
 import { renderer, scene, mapRoot } from "./js/scene.js";
 import { camera, view, syncProjection } from "./js/camera.js";
 import { store, nodeToken } from "./js/store.js";
@@ -25,18 +30,24 @@ import { updateHighlight } from "./js/render/highlight.js";
 import { updateHover, hoverItem } from "./js/hover.js";
 import { pointLayer } from "./js/render/points.js";
 import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
-import { installCity, onCityMessage, update as updateCity } from "./js/sensors/city.js";
+import { installCity, onCityMessage, update as updateCity, cityState } from "./js/sensors/city.js";
 import { installBasemap, update as updateBasemap } from "./js/basemap.js";
-import { rigActive, update as updateRig } from "./js/sensors/camrig.js";
+import { rigActive, rig, update as updateRig } from "./js/sensors/camrig.js";
 import { selection } from "./js/selection.js";
-import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
+import { edit, gizmoBusy, transform, clickTarget, editBlockedReason } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
 import { connect, onCommandResult } from "./js/net.js";
 import { installImagery } from "./js/imagery.js";
 import { frameAll } from "./js/framing.js";
-import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine, installHudToggle } from "./js/hud.js";
+import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } from "./js/hud.js";
+import { installCommands, setConnectionInfo } from "./js/ui/commands.js";
+import { installSettings } from "./js/ui/settings.js";
+import { installNavGizmo, updateNavGizmo } from "./js/ui/navgizmo.js";
+import { ortho } from "./js/camera.js";
+
+installShell();
 
 // edit.js created TransformControls at import, so these listeners come after
 // its pointerdown (see nav.js).
@@ -46,11 +57,60 @@ installNav({ gizmoBusy: () => gizmoBusy() || rigActive(), pointerLocked: isPoint
 installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
-installHudToggle();
 installScene();
 installCity();
 installBasemap();
+installCommands();
+installSettings();
+installNavGizmo();
+if (PROFILE) setTabAvailable("debug", true);
 pointLayer.attach(mapRoot);
+
+// The breadcrumb: city.js names the city, scene.js the scene.
+const crumbs = { city: null, scene: null, sceneTitle: "" };
+window.addEventListener("ll2:crumbs", (e) => {
+  Object.assign(crumbs, e.detail);
+  setCrumbs({ ...crumbs, city: cityState.scenes.length || cityState.info ? crumbs.city : null });
+});
+document.getElementById("crumbScene")?.addEventListener("click", () => showTab("scene"));
+
+// The connection popover: what the viewer is connected to and where the map
+// comes from.
+let connLive = false;
+let connText = "connecting...";
+setConnectionInfo(() => {
+  const rows = [["Viewer server", connLive ? "connected" : connText, connLive ? "good" : "warnText"]];
+  const n = store.featureCount();
+  const src = store.mapSource;
+  rows.push(["Map", !n ? "none yet"
+    : src === "scene_server" ? `${n} features from the scene server (view only)`
+    : `${n} features from JOSM`, src === "scene_server" ? "warnText" : ""]);
+  if (store.anchor) rows.push(["Anchor", `${store.anchor.lat.toFixed(6)}, ${store.anchor.lon.toFixed(6)}`]);
+  if (n) rows.push(["Editing", editBlockedReason() ? "not possible: read-only map" : "possible (Edit, or E)"]);
+  if (cityState.info) rows.push(["City", `${cityState.name || "city"} · ${cityState.scenes.length} scenes · ${cityState.info.base}`]);
+  if (sceneState.info) rows.push(["Scene", `${sceneState.info.id} · ${sceneState.info.base}`]);
+  const jv = document.getElementById("josmView");
+  if (jv && jv.textContent && jv.textContent !== "idle") rows.push(["JOSM view", jv.textContent]);
+  return rows;
+});
+
+// Status-bar hints follow what the mouse and keys do right now.
+function currentHints() {
+  if (rig.on) {
+    return [["[ ]", "switch camera"], ["O", "image"], ["Esc", "release"], [", .", "frames"]];
+  }
+  if (edit.on) {
+    return [["Click", "select"], ["Shift", "add"], ["Ctrl+drag", "box"], ["G R H", "tools"],
+            ["Z", "type height"], ["Del", "delete"], ["Esc", "deselect"]];
+  }
+  const base = ortho.on
+    ? [["Left-drag", "pan"], ["Right-drag", "turn"], ["Wheel", "zoom"], ["B", "north up"], ["V", "3D"]]
+    : [["Left-drag", "orbit"], ["Right-drag", "look"], ["Middle", "pan"], ["Wheel", "zoom"], ["WASD", "walk"]];
+  if (cityState.scenes.length && !sceneState.info) base.push(["Click a track", "open that scene"]);
+  else if (sceneState.info) base.push([", .", "frames"], ["K", "car"]);
+  base.push(["Ctrl K", "commands"], ["?", "all keys"]);
+  return base;
+}
 
 // A clicked button must not keep keyboard focus, or Enter clicks it again
 // instead of reaching the map. (Space is prevented as a move key anyway.)
@@ -89,7 +149,11 @@ connect((msg, meta) => {
     plog(line);
     setPerfLine(line);
   }
-}, setConn);
+}, (live, text) => {
+  connLive = !!live;
+  connText = text;
+  setConn(live, text);
+});
 
 // --- render loop -----------------------------------------------------------
 let fpsFrames = 0, fpsT0 = now(), renderMsEma = 0;
@@ -113,6 +177,8 @@ function tick() {
   syncProjection();
   updateBasemap();
   refreshCameraHud(nav);
+  updateNavGizmo();
+  setHints(currentHints());
   const tr = PROFILE ? now() : 0;
   renderer.render(scene, camera);
   if (PROFILE) {
@@ -131,15 +197,16 @@ function tick() {
 }
 tick();
 
-window.addEventListener("resize", () => {
+// The 3D view is the box between the bars and the side panel, so it resizes
+// when the panel opens or closes as well as with the window.
+observeViewport((w, h) => {
+  renderer.setSize(w, h);
   if (rigActive()) {
-    renderer.setSize(window.innerWidth, window.innerHeight);
     updateRig(); // re-letterboxes and restores the intrinsic projection
     return;
   }
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 if (TEST_HOOKS) {

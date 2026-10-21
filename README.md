@@ -126,11 +126,28 @@ r160 (MIT, Copyright 2010–2023 Three.js Authors) under
 offline. A whole city (Karlsruhe: 144k ways, 48k lanelets) renders without
 culling.
 
+- **Layout:** a top bar (connection, the scene breadcrumb, the *View | Edit*
+  switch, the *Camera* and *Street view* menus, command search, keys,
+  settings), the 3D view, a side panel on the right and a status bar. The
+  panel has tabs — *Layers* (lanelets, icons, map tiles and their source),
+  *Sensor data* (only with a recorded scene or city) and *Debug* (camera
+  readouts; turn it on in Settings). Fold it away with `\` or by clicking the
+  active tab; drag its edge to resize it. Everything is remembered per
+  browser. In a narrow window the panel floats over the view.
+- **Finding things:** `Ctrl+K` searches every command by name, `?` lists
+  every key and mouse gesture, and the status bar shows the ones that apply
+  right now (they change in Edit mode, in the 2D view and under the camera
+  lock). Buttons explain themselves on hover, with their shortcut.
+- **Compass** (bottom right): turns with the view; click it to face north.
+  Next to it: *2D* (the map view, V), frame the map (F), top view (B).
 - **Navigate:** left-drag orbits the point under the cursor (over sky it turns
   in place), right-drag looks, middle / shift-drag pans, the wheel zooms toward
   the cursor. WASD / arrows walk, Space / C up and down, alt+←/→ turn, Shift
-  is fast. *FPS look* captures the mouse.
-- **Edit (E):** click selects a node, else a way (cyan marks what a click
+  is fast. *Camera → FPS mouse look* captures the mouse. The walk speed is
+  in Settings.
+- **Edit (E, or *Edit* in the top bar):** the tools sit in a rail on the left
+  of the view and the selection with its height (Z) in a card at the bottom.
+  Click selects a node, else a way (cyan marks what a click
   would select); shift+click adds; ctrl+drag box-selects; middle-click cycles
   through overlapping items. The gizmo moves
   the whole selection (G), rotates it (R) or only changes heights (H). T makes
@@ -143,11 +160,11 @@ culling.
   (hidden layer, deleted node) puts it back and says why.
 - **Selection** is shared both ways: select in JOSM, adjust in 3D.
 - **JOSM follows** the point the camera looks at (once it moved 30 m, or at
-  once with *Recenter JOSM*), so turning the view at street level pans JOSM
+  once with *Camera → Centre JOSM on this view*), so turning the view at street level pans JOSM
   and its cull box too.
 - **Icons (N)** are the oriented traffic sign / light / marking images, on by
-  default, with an α slider to fade them when they sit in front of a point
-  cloud. The viewer finds the shipped `style_images` by itself now, so they
+  default, with an opacity slider (Layers) to fade them when they sit in front
+  of a point cloud. The viewer finds the shipped `style_images` by itself now, so they
   also appear when the server is started by hand without JOSM. A traffic
   light or sign drawn the Autoware way — a 2-point line along its bottom
   edge plus a `height` tag — gets its icon as an upright box that tall,
@@ -157,15 +174,15 @@ culling.
   (lanelet2's rules, including `one_way:<participant>` overrides), violet
   where such an override gives some participant the other direction rule
   (e.g. `one_way:bicycle=no` on a one-way road).
-- **Street view:** the viewer's button and the *SV* toolbar button open the
+- **Street view:** the viewer's *Street view* menu and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
-- **Ortho (V)** is an orthographic map view: straight down, no perspective,
+- **2D (V)** is an orthographic map view: straight down, no perspective,
   north up to start. Left-drag pans like any map, right-drag turns it, `B`
   puts north up again, the wheel zooms about the cursor. The camera lock
   switches it off (the recorded camera has a perspective).
 - **Tiles** lays a web map under everything: OpenStreetMap by default, or
   your own XYZ / TMS template or WMS endpoint (GeoServer and the like) from
-  the ▾ panel, with an opacity slider. A WMS can be asked in EPSG:3857 or in
+  *Layers → Base map → Tile source*, with an opacity slider. A WMS can be asked in EPSG:3857 or in
   UTM (EPSG:25832 and friends, what German state servers serve); the
   Hessen and Baden-Württemberg 20 cm aerial images are presets. Tiles are drawn in the scene, each
   corner placed through the same lat/lon → ENU as the map, so they line up
@@ -223,17 +240,26 @@ cd tools/scene_server
 .venv/bin/python -m ll2_scene --city $KITSCENES_ROOT --map /path/to/city/lanelet2_map.osm
 ```
 
+**Where things are:** a scene brings a **timeline** under the view (step,
+play, scrub; *Car* and *Follow*), a **camera bar** over it with one button per
+ring camera, laid out like the car, and the side panel's **Sensor data** tab
+(point clouds, colours with a legend, classes, filters; in city mode the
+city's scenes as a searchable list). The breadcrumb in the top bar reads
+*city › scene*; click the city to close the scene. Long builds show their
+progress in the status bar.
+
 **What you do most:**
 
 | | |
 |---|---|
 | `,` `.` / ▶ | step / play frames; `K` puts the camera behind the car |
+| *Follow* / `Shift+K` | the camera rides along with the car, keeping its place relative to it |
 | `Shift+P` *Whole scene* | the static cloud of the whole scene (built once, then cached) |
 | *Colour* | intensity, height, sensor, Vistas class, camera rgb, instance |
-| *Filter* | hide classes — or *Only* the ticked ones — points above the ground or below an intensity, and fade the points |
-| `Shift+L` *Camera lock* | the view exactly as a ring camera saw it, its image blended over (`O`) |
-| click a trajectory | city mode: that scene at that frame; *Load* / *Auto* bring the clouds around the camera |
-| `V` *Ortho*, *Tiles* | top-down map view; OSM, aerial images or your own WMS/TMS underneath |
+| *Classes*, *Filter* | hide classes — or *Only* the ticked ones — points above the ground or below an intensity, and fade the points |
+| a ring camera button / `Shift+L` | the view exactly as that camera saw it, its image blended over (`O`); `Esc` lets go |
+| click a trajectory, or a scene in the list | city mode: that scene (at that frame); *Load* / *Auto* bring the clouds around the camera |
+| `V` *2D*, *Map tiles* | top-down map view; OSM, aerial images or your own WMS/TMS underneath |
 
 Everything else — options, cache, how the static cloud is built, routes,
 coordinates, performance — is in

@@ -31,7 +31,7 @@ import { selection } from "./selection.js";
 import { pickItem, nodesUnderCursor, featuresUnderCursor, screenProjector, projectToPage } from "./picking.js";
 import { sendCommand } from "./net.js";
 import { snapHeight, snapToNode, showSnap, hideSnap } from "./snap.js";
-import { setEditHud, toast } from "./hud.js";
+import { setEditHud, setSelectionCard, toast } from "./hud.js";
 
 const GIZMO_CLICK_NODE_PX = 4; // a click on a gizmo handle selects only a node dot this close
 const CLICK_SLOP_PX = 5;
@@ -73,7 +73,22 @@ let drag = null;                 // { start, orig: Map<id, [x, y, z]>, moved }
 
 // --- mode, tool, gizmo ----------------------------------------------------------------
 
+/** Why editing is not possible right now, or null when it is. */
+export function editBlockedReason() {
+  if (store.mapSource === "scene_server") {
+    return "This map comes from the scene server and is read-only. Open it in JOSM to edit it.";
+  }
+  return null;
+}
+
 export function setEditMode(on) {
+  if (on && !edit.on) {
+    const why = editBlockedReason();
+    if (why) {
+      toast(why, "warn", 5000);
+      return;
+    }
+  }
   edit.on = !!on;
   if (edit.on) {
     store.ensureNodeIndex();
@@ -86,8 +101,12 @@ export function setEditMode(on) {
   setHighlightVisible(edit.on);
   const bar = document.getElementById("editBar");
   if (bar) bar.hidden = !edit.on;
+  const card = document.getElementById("selCard");
+  if (card) card.hidden = !edit.on;
   const btn = document.getElementById("editBtn");
   if (btn) btn.classList.toggle("on", edit.on);
+  const viewBtn = document.getElementById("viewModeBtn");
+  if (viewBtn) viewBtn.classList.toggle("on", !edit.on);
   refreshGizmo();
   editEvents.emit("mode", edit.on);
 }
@@ -138,7 +157,10 @@ function refreshGizmo() {
   for (const b of document.querySelectorAll("#editBar [data-edit]")) {
     const k = b.getAttribute("data-edit");
     if (k === "keys") {
-      b.textContent = `Keys: ${edit.keysMove}`;
+      const label = b.querySelector(".lbl");
+      if (label) label.textContent = edit.keysMove === "selection" ? "sel" : "cam";
+      b.dataset.tip = `Keys move the ${edit.keysMove}. WASD, Space / C and Alt+arrows move the camera `
+        + "or the selection (one key hold = one undo step)";
       b.classList.toggle("on", edit.keysMove === "selection");
       continue;
     }
@@ -165,6 +187,7 @@ function refreshEditHud() {
   const keys = edit.keysMove === "selection" ? " · keys move selection" : "";
   const snap = edit.snap ? " · snap" : "";
   setEditHud(`ON · ${what || "nothing selected"} · ${tool}${keys}${snap}`);
+  setSelectionCard(`${what || "nothing selected"} · ${tool}${snap}`);
   refreshZField();
 }
 
@@ -743,3 +766,16 @@ for (const b of document.querySelectorAll("#editBar [data-edit]")) {
 }
 const editBtn = document.getElementById("editBtn");
 if (editBtn) editBtn.addEventListener("click", () => setEditMode(!edit.on));
+const viewModeBtn = document.getElementById("viewModeBtn");
+if (viewModeBtn) viewModeBtn.addEventListener("click", () => setEditMode(false));
+
+// A read-only map arriving (the scene server's copy) ends editing, and the
+// switch says why it is off.
+store.on("snapshot", () => {
+  const why = editBlockedReason();
+  if (why && edit.on) setEditMode(false);
+  if (editBtn) {
+    editBtn.classList.toggle("blocked", !!why);
+    editBtn.dataset.tip = why || "Select and move nodes and ways";
+  }
+});

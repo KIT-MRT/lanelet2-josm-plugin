@@ -1,4 +1,4 @@
-// End-to-end checks of the keyboard / pad controls: Space / C everywhere,
+// End-to-end checks of the keyboard controls: Space / C everywhere,
 // "keys move the selection" (T), height-only walking, zoom target marker.
 // Held keys move per rendered frame, and software GL on a busy machine
 // renders few, so these checks test the direction of a move, not its size.
@@ -120,13 +120,6 @@ try {
   const turned = angle(after[2]) - angle0(before[2]);
   t.check("alt+left turns the selection counter-clockwise about its centre",
     turned > 0.0005 && dist2(after[1], before[1]) < 1e-6, `${(turned * 180 / Math.PI).toFixed(2)} deg`);
-
-  // Pads follow the same target.
-  before = await nodes(ids);
-  const up = await v.evaluate(`(() => { const r = document.querySelector('#camElev [data-elev="1"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
-  await v.click(up[0], up[1]);
-  after = await nodes(ids);
-  t.check("the height pad lifts the selection too", after.every((q, i) => q[2] > before[i][2]));
 
   // ---- height only: walking moves the camera, Space the selection -------------------------
   await v.key("h");

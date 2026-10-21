@@ -271,6 +271,41 @@ try {
   t.check("its frame cloud is gone", (await v.evaluate("window.__ll2scene.points()")).count === 0);
   t.check("the per-scene controls step aside again", !(await shown("scenePoints")));
 
+  // ---- the scene list and the breadcrumb ----------------------------------------------
+  const crumbShown = (part) => v.evaluate(`!document.querySelector('#crumbs [data-crumb="${part}"]').hidden`
+    + " && !document.getElementById('crumbs').hidden");
+  t.check("the breadcrumb names the city alone once the scene is closed",
+    (await crumbShown("city")) && !(await crumbShown("scene"))
+    && (await v.hud("crumbCity")) === "testcity", await v.hud("crumbCity"));
+  const listed = () => v.evaluate("[...document.querySelectorAll('#sceneList [data-scene]')].map((e) => e.dataset.scene)");
+  let ids = await listed();
+  t.check("the scene list has every scene of the city", ids.length === 4, JSON.stringify(ids));
+  t.check("nearest the camera first, the far one last", ids[3] === "far-3", JSON.stringify(ids));
+  await v.evaluate("(() => { const e = document.getElementById('sceneSearch'); e.value = 'val';"
+    + " e.dispatchEvent(new Event('input')); })()");
+  ids = await listed();
+  t.check("the filter narrows it by split or id", ids.length === 2 && ids.includes("north-2") && ids.includes("overlap-4")
+    && (await v.hud("sceneListCount")) === "(2 of 4)", `${JSON.stringify(ids)} ${await v.hud("sceneListCount")}`);
+  const item = await v.evaluate("(() => { const r = document.querySelector('#sceneList [data-scene=\"north-2\"]').getBoundingClientRect();"
+    + " return [r.left + r.width / 2, r.top + r.height / 2]; })()");
+  await v.click(item[0], item[1]);
+  t.check("a click in the list opens that scene", await waitFor(async () => (await scene()).base === `${base}/scene/north-2`));
+  await waitFor(async () => !(await scene()).loading);
+  const camList = await v.camera();
+  const car0 = byId["north-2"].at(0);
+  t.check("and goes to its car, wherever the camera was",
+    Math.hypot(camList.pos[0] - car0[0], camList.pos[1] - car0[1]) < 40, JSON.stringify(camList.pos));
+  t.check("the breadcrumb now names the scene too", (await crumbShown("scene"))
+    && (await v.hud("crumbSceneName")) === "north-2", await v.hud("crumbSceneName"));
+  t.check("and the list marks it as open",
+    await v.evaluate("document.querySelector('#sceneList [data-scene=\"north-2\"]').classList.contains('current')"));
+  await v.evaluate("(() => { const e = document.getElementById('sceneSearch'); e.value = '';"
+    + " e.dispatchEvent(new Event('input')); })()");
+  await clickElement("cityDeselect");
+  t.check("the city crumb closes the scene again", await waitFor(async () => (await scene()).base === null));
+  await v.key("b");  // back to the overview the checks below expect
+  await sleep(300);
+
   // In edit mode a click belongs to the map.
   await v.key("e");
   px = await nodePx("east-1", 3);

@@ -143,6 +143,9 @@ class FeatureStore extends Emitter {
     this.nodes = new Map();
     this.nodeIndexOn = false;
     this.anchor = null;
+    // Who sent the map: "josm", "scene_server" (a read-only copy) or null
+    // before the first snapshot.
+    this.mapSource = null;
     this.lastSeq = -1;
     this._bounds = null;
   }
@@ -171,6 +174,7 @@ class FeatureStore extends Emitter {
       const wasEmpty = this.featureCount() === 0;
       this.clear();
       if (msg.anchor) this.anchor = msg.anchor;
+      this.mapSource = typeof msg.source === "string" ? msg.source : "josm";
       const feats = msg.features || [];
       nOps = feats.length;
       for (const raw of feats) this.upsert(raw);

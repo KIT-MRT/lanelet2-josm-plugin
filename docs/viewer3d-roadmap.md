@@ -154,7 +154,15 @@ Most impactful for editing heights, in my estimate:
   the view axis meets the local map height (at most 150 m ahead). Turning in
   place now pans JOSM too (e2e_controls).
 - [x] **Compact HUD**: the camera / debug rows and the frame-debug panel are
-  behind the title ("▸ details", remembered per browser).
+  behind the title ("▸ details", remembered per browser). Superseded by the
+  interface overhaul below.
+- [x] **Interface overhaul**: top bar (View | Edit, Camera and Street view
+  menus, command search, keys, settings), a tabbed side panel (Layers,
+  Sensor data, Debug) that folds away and resizes, a status bar with
+  hints for the current mode, an edit tool rail and selection card, a
+  compass, and for scenes a timeline (with Follow car), a ring-camera bar
+  and a searchable scene list. The camera pad and the help text are gone;
+  `Ctrl+K` and `?` replace them (e2e_ui).
 
 - [x] Height-jump warnings compare absolute height differences between
   neighbouring nodes (as asked) and now also say over what distance and at

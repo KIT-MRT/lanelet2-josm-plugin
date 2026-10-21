@@ -151,7 +151,10 @@ try {
   const c0 = await centroid(moved);
   a = await handleSpot(c0, [1, 0, 0], 0.5); // on the Z ring (radius 0.5)
   v.commands.length = 0;
-  await v.drag("left", a[0], a[1], 0, -70, { steps: 10 });
+  // TransformControls turns a Z rotation from the drag along Z x eye, which
+  // is screen-horizontal here: a straight-up drag barely turns at all, and
+  // how little depended on the exact framing.
+  await v.drag("left", a[0], a[1], 70, 0, { steps: 10 });
   const afterRot = await Promise.all(moved.map(node));
   const c1 = await centroid(moved);
   const pairsKept = afterRot.every((q, i) => afterRot.every((r, j) =>
@@ -167,7 +170,7 @@ try {
   // tilt about the view axis must never reach the selection.
   {
     const cam = await v.camera();
-    const pxPerUnit = 0.2226 * (await v.evaluate("window.innerHeight")) / (2 * Math.tan((cam.fov * Math.PI) / 360));
+    const pxPerUnit = 0.2226 * (await v.evaluate("document.querySelector('canvas').clientHeight")) / (2 * Math.tan((cam.fov * Math.PI) / 360));
     const s1 = await v.project(c1);
     const gizmoAt = (await v.evaluate("window.__ll2test.gizmo()")).at;
     v.commands.length = 0;
@@ -209,7 +212,7 @@ try {
   t.check("box select did not orbit the camera", Math.abs((await v.camera()).pitch + Math.PI / 2) < 1e-9);
 
   // ---- middle-click cycles through coincident items ------------------------------------
-  p = await v.project([40, 5, Z]);
+  p = await v.reveal([40, 5, Z]);
   const seen = [];
   for (let i = 0; i < 4; i++) {
     await v.click(p[0], p[1], { button: "middle" });

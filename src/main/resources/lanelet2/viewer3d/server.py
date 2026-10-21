@@ -124,6 +124,9 @@ def _sse_encode(msg):
 #     {"type":"snapshot",
 #      "anchor":{"lat":48.13,"lon":11.57},
 #      "features":[<feature>, ...]}
+#     An optional "source":"scene_server" says the map is the scene server's
+#     read-only copy, so the browser offers no editing; it is kept and sent
+#     with the bootstrap snapshot until the next snapshot replaces it.
 #
 #   patch    : incremental change
 #     {"type":"patch","ops":[
@@ -178,6 +181,7 @@ class SceneHub:
     def __init__(self):
         self._lock = threading.Lock()
         self._anchor = None                 # {"lat":..,"lon":..} or None
+        self._source = None                 # the snapshot's "source", if any
         self._features = {}                 # id -> feature dict
         self._selection = None              # last JOSM selection message
         self._scene = None                  # last sensor-scene announcement
@@ -252,6 +256,10 @@ class SceneHub:
         mtype = msg.get("type")
         if mtype == "snapshot":
             self._anchor = msg.get("anchor")
+            # Who sent the map: "scene_server" marks a map nobody can edit.
+            # JOSM sends no source, which clears an earlier one.
+            source = msg.get("source")
+            self._source = source if isinstance(source, str) else None
             self._features = {
                 f["id"]: f for f in msg.get("features", []) if "id" in f
             }
@@ -286,6 +294,8 @@ class SceneHub:
             "anchor": self._anchor,
             "features": list(self._features.values()),
         }
+        if self._source is not None:
+            msg["source"] = self._source
         if self._selection is not None:
             msg["selection"] = self._selection
         if self._scene is not None:
@@ -532,6 +542,8 @@ class HttpHandler(BaseHTTPRequestHandler):
             self._serve_static("index.html", "text/html; charset=utf-8")
         elif path == "/app.js":
             self._serve_static("app.js", "application/javascript; charset=utf-8")
+        elif path == "/app.css":
+            self._serve_static("app.css", "text/css; charset=utf-8")
         elif path.startswith("/vendor/"):
             self._serve_vendor(unquote(path[len("/vendor/"):]))
         elif path.startswith("/js/"):

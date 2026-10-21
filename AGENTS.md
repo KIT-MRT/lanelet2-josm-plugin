@@ -301,7 +301,7 @@ Offline self-containment is verified by fetching `/`, `/app.js` and all three
 
 Browser code has its own checks in `testdata/viewer3d/` (headless Chrome over
 CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
-`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`,
+`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`, `e2e_ui.mjs`,
 `e2e_scene.mjs`, and
 `perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
 for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
@@ -669,11 +669,44 @@ loss. Keep them, and keep this note.
   `unicode()`, `Thread.isAlive()`. `round()` is Python 2
   round-half-away-from-zero and is applied to ENU millimetres.
 - `ele` is formatted with `%g`, which can emit `1e-05`.
-- **`#leftCol` is `pointer-events: none`** so the map stays grabbable around
-  the HUD; every interactive panel inside it (`#hudTitle`, `#editBar`,
-  `#sceneBar`) has to set `pointer-events: auto` itself. A panel that forgets
-  looks perfectly normal and responds only to Tab+Enter. `e2e_scene` clicks
-  the scene bar with a real mouse press to catch that.
+- **The page is a CSS grid, not a full-window canvas** (`index.html`,
+  `app.css`, `js/ui/`): top bar, the 3D view (`#viewport` > `#app`), the side
+  panel, the status bar. The canvas is sized from `#app` by a
+  `ResizeObserver` (`observeViewport`), so it changes when the panel opens,
+  closes or is dragged, not only with the window. Anything that sizes or
+  positions against the view (the camera lock's letterbox, picking, test
+  helpers) must use the canvas box, never `innerWidth`/`innerHeight`;
+  `#sceneImage` is absolutely positioned inside `#viewport` for the same
+  reason. `/app.css` has its own route in `server.py`.
+- **Overlays inside `#viewport` opt into pointer events one by one** (edit
+  rail, selection card, camera bar, compass, timeline); there is no
+  full-cover container any more, which is what made the old `#leftCol`
+  (`pointer-events: none`) panels respond only to Tab+Enter.
+- **Controls kept their ids and their `on` class** when they moved into the
+  panel, menus and timeline, because the feature modules and the e2e checks
+  find them by id. Buttons whose label changes write a child `.lbl`, not
+  `textContent` of the button (that would wipe its icon and switch);
+  `textContent` of the button still starts with the label.
+- **Hidden tabs and closed sections are `hidden` / `display: none`**, so a
+  real mouse click on a control there misses. The *Sensor data* tab takes
+  focus when a scene or city arrives; e2e helpers that click must first
+  make sure the control's tab is showing (`window.__ll2ui.showTab`).
+- **`shell.handleUiKey` runs before every map key** (`keys.js`): while a
+  dialog is open the map gets no keys at all, and Esc closes menus and
+  dialogs first. The camera lock's Esc is in `handleRigKey`, after edit's
+  Esc (deselect).
+- **Commands are the help sheet.** `js/ui/commands.js` lists every action
+  with its keys; the palette (`Ctrl+K`) runs them by clicking the same
+  buttons, and the `?` sheet is generated from the same list. A new
+  shortcut belongs there too, or it is undiscoverable.
+- **The camera pad is gone** (on request); the keys do everything it did.
+- **A read-only map is marked in the snapshot**: the scene server sends
+  `"source": "scene_server"`, the hub keeps it for the bootstrap snapshot,
+  and `store.mapSource` disables Edit with a reason. JOSM sends no source,
+  which clears it.
+- **Follow car** (`scene.js`) moves and turns the camera by the car's pose
+  change from the frame it last sat against; under the camera lock it only
+  moves that reference along, so releasing the lock never jumps.
 - **`resolve_icons_dir` searches `<viewer parent>/style_images` first**, which
   is where the plugin's own resources live in both the source tree and the jar
   extract. Before that, a viewer started by hand (no JOSM, no `--icons-dir`)

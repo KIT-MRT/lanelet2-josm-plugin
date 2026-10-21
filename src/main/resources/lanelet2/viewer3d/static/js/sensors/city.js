@@ -18,13 +18,14 @@ import * as THREE from "three";
 import { camera, frameBox, setCameraView, lookAtPoint, view } from "../camera.js";
 import { store } from "../store.js";
 import { toast } from "../hud.js";
+import { setJob, setTabAvailable, currentTab, panelOpen } from "../ui/shell.js";
 import { edit } from "../edit.js";
 import { rigActive } from "./camrig.js";
 import { trajectoryLayer } from "../render/trajectories.js";
 import { pointLayer } from "../render/points.js";
 import { tileLayer } from "../render/tiles.js";
 import { onSceneMessage, clearScene, sceneState, showFrame, setCityActive, setClassTable,
-         refreshPointUi } from "./scene.js";
+         refreshPointUi, goToCar } from "./scene.js";
 
 export const cityState = {
   info: null,       // the `city` message's payload
@@ -77,8 +78,13 @@ export function installCity() {
     deselect: document.getElementById("cityDeselect"),
     status: document.getElementById("cityStatus"),
     hover: document.getElementById("cityHover"),
+    list: document.getElementById("sceneList"),
+    listCount: document.getElementById("sceneListCount"),
+    search: document.getElementById("sceneSearch"),
   };
   if (!els.bar) return;
+  if (els.search) els.search.addEventListener("input", () => renderSceneList(true));
+  if (els.list) installSceneList();
   trajectoryLayer.attach(mapRoot);
   els.load.addEventListener("click", () => loadHere(true));
   els.auto.addEventListener("click", () => setAuto(!cityState.auto));
@@ -104,6 +110,7 @@ export function onCityMessage(msg) {
   const gen = ++cityGen;
   els.bar.hidden = false;
   setCityActive(true);
+  setTabAvailable("scene", true, { focus: true });
   refreshBar();
   return fetch(`${info.base}/city.json`)
     .then((r) => {
@@ -137,6 +144,7 @@ export function onCityMessage(msg) {
 
 function resetCity() {
   cityGen++;
+  setJob("city", null);
   cityState.opening = null;
   unloadAll();
   clearScene();
@@ -512,6 +520,94 @@ function refreshBar() {
   if (by.error) parts.push(`${by.error} failed`);
   if (cityState.opening) parts.push(`opening ${shortId(cityState.opening)}…`);
   els.status.textContent = parts.join(" · ");
+  // Builds and fetches can take minutes: say so in the status bar too.
+  const busyParts = parts.filter((p) => /^(building|\d+ queued|\d+ chunks|opening)/.test(p));
+  setJob("city", busyParts.length ? `City: ${busyParts.join(" · ")}` : null);
+  window.dispatchEvent(new CustomEvent("ll2:crumbs", { detail: { city: cityState.name || "city" } }));
+  renderSceneList(false);
+}
+
+// ---- the scene list ------------------------------------------------------------
+// Every scene of the city, nearest the camera first. Opening one from the
+// list (rather than from its trajectory) also goes to the car: the camera
+// may be anywhere.
+const LIST_MAX = 150;
+const LIST_REFRESH_MS = 1000;
+let listKey = "";
+
+function installSceneList() {
+  els.list.addEventListener("click", (e) => {
+    const item = e.target.closest("[data-scene]");
+    if (!item) return;
+    const id = item.dataset.scene;
+    if (sceneState.info && sceneState.info.id === id) {
+      goToCar();
+      return;
+    }
+    openScene(id, 0).then((ok) => { if (ok) goToCar(); });
+  });
+  els.list.addEventListener("pointerover", (e) => {
+    const item = e.target.closest("[data-scene]");
+    trajectoryLayer.setHovered(item ? trajectoryLayer.indexOf(item.dataset.scene) : -1);
+  });
+  els.list.addEventListener("pointerleave", () => trajectoryLayer.setHovered(-1));
+  // Distances change as the camera moves; only worth redoing while visible.
+  setInterval(() => {
+    if (panelOpen() && currentTab() === "scene" && cityState.scenes.length) renderSceneList(false);
+  }, LIST_REFRESH_MS);
+}
+
+const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
+
+function renderSceneList(force) {
+  if (!els.list) return;
+  const q = els.search ? els.search.value.trim().toLowerCase() : "";
+  const [fx, fy] = focus();
+  const rows = cityState.scenes.map((s, index) => ({
+    s, index, dist: trajectoryLayer.distanceTo(index, fx, fy),
+  })).filter((r) => !q || r.s.id.toLowerCase().includes(q) || String(r.s.split || "").toLowerCase().includes(q));
+  rows.sort((a, b) => a.dist - b.dist);
+  const shown = rows.slice(0, LIST_MAX);
+  const current = sceneState.info ? sceneState.info.id : null;
+  // Rebuild only when something visible changed (distances to 10 m).
+  const key = `${q}|${current}|${shown.map((r) => `${r.s.id}:${Math.round(r.dist / 10)}:${(sceneLoad.get(r.s.id) || {}).state}`).join()}`;
+  if (!force && key === listKey) return;
+  listKey = key;
+  els.list.textContent = "";
+  for (const r of shown) {
+    const st = sceneLoad.get(r.s.id);
+    const built = status[r.s.id] ? status[r.s.id].aggregate : r.s.aggregate;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "sceneItem" + (r.s.id === current ? " current" : "");
+    item.dataset.scene = r.s.id;
+    item.setAttribute("role", "listitem");
+    item.title = `${r.s.id}\nClick: open it and go to the car`;
+    const sid = document.createElement("span");
+    sid.className = "sid";
+    sid.textContent = r.s.id;
+    const dist = document.createElement("span");
+    dist.className = "dist";
+    dist.textContent = Number.isFinite(r.dist) ? fmtDist(r.dist) : "";
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    const bits = [r.s.split, r.s.frames ? `${r.s.frames} frames` : null].filter(Boolean);
+    meta.textContent = bits.join(" · ");
+    const state = r.s.id === current ? "open" : st && st.state === "ready" ? "cloud loaded"
+      : st && (st.state === "building" || st.state === "queued") ? st.state : built ? "cloud built" : null;
+    if (state) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = ` · ${state}`;
+      meta.appendChild(tag);
+    }
+    item.append(sid, dist, meta);
+    els.list.appendChild(item);
+  }
+  if (els.listCount) {
+    els.listCount.textContent = rows.length === cityState.scenes.length
+      ? `(${rows.length})` : `(${rows.length} of ${cityState.scenes.length})`;
+  }
 }
 
 if (TEST_HOOKS) {

@@ -152,7 +152,7 @@ def main(argv=None):
         if send_map:
             t0 = time.perf_counter()
             features = source.map_features()
-            bridge.send({"type": "snapshot",
+            bridge.send({"type": "snapshot", "source": "scene_server",
                          "anchor": {"lat": source.anchor[0], "lon": source.anchor[1]},
                          "features": features})
             log("scene: sent %d map features in %.2fs" % (len(features), time.perf_counter() - t0))
@@ -233,7 +233,8 @@ def run_city(args, log):
         if send_map:
             t1 = time.perf_counter()
             features = map_file.features(anchor)
-            bridge.send({"type": "snapshot", "anchor": {"lat": anchor[0], "lon": anchor[1]},
+            bridge.send({"type": "snapshot", "source": "scene_server",
+                         "anchor": {"lat": anchor[0], "lon": anchor[1]},
                          "features": features})
             log("city: sent %d map features in %.2fs" % (len(features), time.perf_counter() - t1))
         bridge.send({"type": "city", "city": {"name": index.city, "base": http.base_url,

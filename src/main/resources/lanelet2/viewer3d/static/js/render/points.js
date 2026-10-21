@@ -26,7 +26,7 @@ const FLAG_INSTANCE = 16;
 
 // lidar_top, corner left/right, left, right, front, rear — the dataset's own
 // sensor_id order.
-const SENSOR_COLORS = [
+export const SENSOR_COLORS = [
   0xffffff, 0xff6b6b, 0x4fc3f7, 0x9bd24f, 0xffd23f, 0xc792ea, 0xff9f43,
 ];
 

@@ -223,6 +223,16 @@ try {
   v.sendScene({ type: "scene", scene: sceneInfo() });
   t.check("the scene announcement shows the scene bar", await waitFor(async () => !(await barHidden())));
   t.check("and loads frame 0 by itself", await waitLoaded(0));
+  const uiState = () => v.evaluate("window.__ll2ui.state()");
+  t.check("the side panel turns to the sensor data", (await uiState()).tab === "scene", JSON.stringify(await uiState()));
+  t.check("the timeline shows under the view", !(await v.evaluate("document.getElementById('timeline').hidden"))
+    && (await v.evaluate("document.body.classList.contains('hasTimeline')")));
+  t.check("and the breadcrumb names the scene",
+    (await v.evaluate("document.getElementById('crumbSceneName').textContent")).startsWith("e2e-scen")
+    && !(await v.evaluate("document.getElementById('crumbs').hidden")));
+  t.check("the camera bar offers one button per ring camera",
+    (await v.evaluate("[...document.querySelectorAll('#camButtons [data-camera]')].map((b) => b.textContent).join()")) === "F,R",
+    await v.evaluate("[...document.querySelectorAll('#camButtons [data-camera]')].map((b) => b.textContent).join()"));
   let p = await points();
   t.check("the point cloud is on screen", p.count === POINTS_PER_FRAME && p.visible, JSON.stringify(p));
   t.check("placed where the scene server put it",
@@ -267,6 +277,14 @@ try {
   await v.evaluate("(() => { const el = document.getElementById('sceneSize');"
     + " el.value = '5'; el.dispatchEvent(new Event('input')); })()");
   t.check("the point size follows the slider", (await points()).size === 5);
+  t.check("the legend shows the height ramp",
+    await v.evaluate("!!document.querySelector('#pointLegend .ramp')"));
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'sensor'; el.dispatchEvent(new Event('change')); })()");
+  t.check("and one swatch per LiDAR for the sensor colours",
+    (await v.evaluate("document.querySelectorAll('#pointLegend .key').length")) === 7);
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'height'; el.dispatchEvent(new Event('change')); })()");
   await v.shot("scene_height.png");
 
   // ---- jump to the car -------------------------------------------------------------
@@ -660,6 +678,94 @@ try {
   t.check("V during the camera lock releases the lock for the map view",
     !(await rigOf()).on && (await v.evaluate("window.__ll2map.ortho()")).on);
   await v.key("v");
+
+  // ---- the camera bar ---------------------------------------------------------------
+  const camButton = (label) => v.evaluate(`(() => { const b = [...document.querySelectorAll('#camButtons [data-camera]')]`
+    + `.find((e) => e.textContent === ${JSON.stringify(label)}); const r = b.getBoundingClientRect();`
+    + " return [r.left + r.width / 2, r.top + r.height / 2]; })()");
+  let at = await camButton("R");
+  await v.click(at[0], at[1]);
+  await sleep(200);
+  rigNow = await rigOf();
+  t.check("a ring button looks through that camera", rigNow.on && rigNow.camera === "camera_ring_rear", JSON.stringify(rigNow));
+  t.check("the bar says it is locked", await v.evaluate("document.getElementById('camBar').classList.contains('locked')"));
+  t.check("and the status bar says how to get out", (await uiState()).hints.includes("release"), (await uiState()).hints);
+  await v.shot("scene_locked.png");
+  at = await camButton("F");
+  await v.click(at[0], at[1]);
+  await sleep(150);
+  t.check("another ring button switches camera, still locked",
+    (await rigOf()).on && (await rigOf()).camera === "camera_ring_front");
+  at = await camButton("F");
+  await v.click(at[0], at[1]);
+  await sleep(150);
+  t.check("the lit button lets go again", !(await rigOf()).on);
+  await clickElement("sceneLock");
+  await v.key("Escape");
+  await sleep(150);
+  t.check("Esc releases the lock", !(await rigOf()).on);
+
+  // ---- following the car ---------------------------------------------------------------
+  await v.evaluate("window.__ll2scene.show(2)");
+  await waitLoaded(2);
+  await v.key("k");
+  await sleep(100);
+  await clickElement("sceneFollow");
+  t.check("Follow turns on", (await sceneState()).follow
+    && (await v.evaluate("document.getElementById('sceneFollow').classList.contains('on')")));
+  let c2 = await v.camera();
+  await v.evaluate("window.__ll2scene.show(6)");
+  await waitLoaded(6);
+  let c6 = await v.camera();
+  const rel = (c, i) => [c.pos[0] - ego.pos[i][0], c.pos[1] - ego.pos[i][1], c.pos[2] - ego.pos[i][2]];
+  t.check("the camera keeps its place relative to the car while the frames change",
+    dist3(rel(c2, 2), rel(c6, 6)) < 1e-6 && Math.abs(c6.yaw - c2.yaw) < 1e-9,
+    `${JSON.stringify(rel(c2, 2))} -> ${JSON.stringify(rel(c6, 6))}`);
+  await v.key("K", { modifiers: ["shift"] });
+  t.check("Shift+K turns it off", !(await sceneState()).follow);
+  c6 = await v.camera();
+  await v.evaluate("window.__ll2scene.show(8)");
+  await waitLoaded(8);
+  t.check("and then the camera stays put", dist3(c6.pos, (await v.camera()).pos) < 1e-9);
+
+  // A car that turns: the camera turns with it, about the car.
+  const turning = sceneInfo();
+  turning.id = "e2e-scene-turning";
+  const headingOf = (i) => (i * 10 * Math.PI) / 180;
+  turning.ego = {
+    pos: ego.pos,
+    quat: ego.pos.map((_, i) => [0, 0, Math.sin(headingOf(i) / 2), Math.cos(headingOf(i) / 2)]),
+  };
+  v.sendScene({ type: "scene", scene: turning });
+  await waitFor(async () => (await v.evaluate("document.getElementById('sceneName').textContent")) === turning.id);
+  await v.evaluate("window.__ll2scene.show(2)");
+  await waitLoaded(2);
+  await v.key("k");
+  await v.key("K", { modifiers: ["shift"] });
+  c2 = await v.camera();
+  await v.evaluate("window.__ll2scene.show(5)");
+  await waitLoaded(5);
+  const c5 = await v.camera();
+  const turn = headingOf(5) - headingOf(2);
+  const r2 = rel(c2, 2);
+  const want = [r2[0] * Math.cos(turn) - r2[1] * Math.sin(turn), r2[0] * Math.sin(turn) + r2[1] * Math.cos(turn), r2[2]];
+  t.check("a turning car takes the camera round with it",
+    dist3(rel(c5, 5), want) < 1e-6 && Math.abs(Math.sin(c5.yaw - c2.yaw - turn)) < 1e-9,
+    `${JSON.stringify(rel(c5, 5).map((n) => +n.toFixed(3)))} vs ${JSON.stringify(want.map((n) => +n.toFixed(3)))}`);
+  // While the lock drives the view, Follow waits; afterwards it carries on
+  // from wherever the lock left the camera, without a jump.
+  await v.key("L", { modifiers: ["shift"] });
+  await v.evaluate("window.__ll2scene.show(7)");
+  await waitLoaded(7);
+  await v.key("L", { modifiers: ["shift"] });
+  await sleep(150);
+  const c7 = await v.camera();
+  await v.evaluate("window.__ll2scene.show(8)");
+  await waitLoaded(8);
+  const c8 = await v.camera();
+  t.check("after the lock, Follow moves on one frame's worth", dist3(c7.pos, c8.pos) < 15
+    && dist3(c7.pos, c8.pos) > 1, `${dist3(c7.pos, c8.pos).toFixed(2)} m`);
+  await v.key("K", { modifiers: ["shift"] });
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {

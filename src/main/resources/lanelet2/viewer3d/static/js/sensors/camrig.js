@@ -16,6 +16,17 @@
 import * as THREE from "three";
 import { camera, view, lookAtPoint, setCameraView, CAM_NEAR_M, CAM_FAR_M, ortho, setOrtho } from "../camera.js";
 import { renderer, canvas } from "../scene.js";
+import { setIcon } from "../ui/icons.js";
+
+// Where each ring camera sits in the bar: front row on top, as seen from
+// above with the car driving up the screen.
+const RING_LAYOUT = {
+  camera_ring_front_left: [0, 0, "FL"], camera_ring_front: [0, 1, "F"], camera_ring_front_right: [0, 2, "FR"],
+  camera_ring_rear_left: [1, 0, "RL"], camera_ring_rear: [1, 1, "R"], camera_ring_rear_right: [1, 2, "RR"],
+};
+const shortCamera = (name) => (RING_LAYOUT[name] ? RING_LAYOUT[name][2]
+  : name.replace("camera_ring_", "").replace("camera_", "").slice(0, 3).toUpperCase());
+const prettyCamera = (name) => name.replace("camera_ring_", "").replace("camera_", "").replace(/_/g, " ");
 
 export const rig = {
   on: false,
@@ -49,16 +60,34 @@ export function installCamRig({ urlFor, currentFrame } = {}) {
   imageUrlFor = urlFor;
   if (currentFrame) frameOf = currentFrame;
   els = {
-    bar: document.getElementById("sceneBar"),
+    bar: document.getElementById("camBar"),
     lock: document.getElementById("sceneLock"),
-    select: document.getElementById("sceneCamera"),
+    buttons: document.getElementById("camButtons"),
     overlay: document.getElementById("sceneOverlay"),
     opacity: document.getElementById("sceneOpacity"),
     image: document.getElementById("sceneImage"),
   };
   if (!els.lock) return;
+  // A frame without its image (not recorded, or the server could not read
+  // it) shows the render alone rather than a broken-image box.
+  if (els.image) {
+    els.image.addEventListener("error", () => { els.image.style.visibility = "hidden"; });
+    els.image.addEventListener("load", () => { els.image.style.visibility = ""; });
+  }
   els.lock.addEventListener("click", () => setLocked(!rig.on));
-  els.select.addEventListener("change", () => setCamera(els.select.value));
+  // A camera button looks through that camera; the one already looked
+  // through lets go again.
+  els.buttons.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-camera]");
+    if (!b) return;
+    const name = b.dataset.camera;
+    if (rig.on && rig.camera === name) {
+      setLocked(false);
+      return;
+    }
+    setCamera(name);
+    setLocked(true);
+  });
   els.overlay.addEventListener("click", () => setOverlay(!rig.overlay));
   els.opacity.addEventListener("input", () => setOpacity(Number(els.opacity.value) / 100));
   setOpacity(rig.opacity);
@@ -69,19 +98,28 @@ export function setSceneInfo(sceneInfo) {
   info = sceneInfo;
   const names = Object.keys((info && info.cameras) || {});
   rig.camera = names.includes(DEFAULT_CAMERA) ? DEFAULT_CAMERA : (names[0] || null);
-  if (els.select) {
-    els.select.innerHTML = "";
+  if (els.buttons) {
+    els.buttons.textContent = "";
+    // Known ring positions first, anything else in a third row.
+    let extra = 0;
     for (const name of names) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name.replace("camera_ring_", "");
-      els.select.appendChild(option);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.camera = name;
+      b.textContent = shortCamera(name);
+      b.dataset.tip = `Look through the ${prettyCamera(name)} camera`;
+      const at = RING_LAYOUT[name];
+      const row = at ? at[0] : 2 + Math.floor(extra / 3);
+      const col = at ? at[1] : extra++ % 3;
+      b.style.gridRow = String(row + 1);
+      b.style.gridColumn = String(col + 1);
+      els.buttons.appendChild(b);
     }
-    els.select.value = rig.camera || "";
-    els.select.disabled = names.length === 0;
     els.lock.disabled = names.length === 0;
   }
+  if (els.bar) els.bar.hidden = !info || names.length === 0;
   if (rig.on) setLocked(false);
+  refreshBar();
 }
 
 export const rigActive = () => rig.on;
@@ -89,8 +127,26 @@ export const rigActive = () => rig.on;
 export function setCamera(name) {
   if (!info || !info.cameras[name]) return;
   rig.camera = name;
-  if (els.select) els.select.value = name;
+  refreshBar();
   if (rig.on) refreshImage();
+}
+
+/** Which camera is picked, whether the view is locked to it. */
+function refreshBar() {
+  if (!els.bar) return;
+  els.bar.classList.toggle("locked", rig.on);
+  if (els.lock) {
+    els.lock.classList.toggle("on", rig.on);
+    const label = els.lock.querySelector(".lbl");
+    const name = rig.camera ? prettyCamera(rig.camera) : "";
+    if (label) label.textContent = rig.on ? `Locked: ${name}` : "Camera view";
+    setIcon(els.lock.querySelector("[data-icon]"), rig.on ? "lock" : "unlock");
+  }
+  for (const b of els.buttons ? els.buttons.children : []) {
+    b.classList.toggle("sel", b.dataset.camera === rig.camera);
+    b.classList.toggle("live", rig.on && b.dataset.camera === rig.camera);
+  }
+  window.dispatchEvent(new CustomEvent("ll2:rig", { detail: { on: rig.on, camera: rig.camera } }));
 }
 
 export function setLocked(on, frame) {
@@ -102,7 +158,7 @@ export function setLocked(on, frame) {
   // The lock is the recorded camera's own perspective; a map view has none.
   if (next && ortho.on) setOrtho(false);
   rig.on = next;
-  if (els.lock) els.lock.classList.toggle("on", rig.on);
+  refreshBar();
   if (rig.on) {
     saved = { fov: camera.fov, aspect: camera.aspect };
     update(frame);
@@ -180,8 +236,8 @@ function applyIntrinsics(calib) {
  * rendered pixel is an image pixel. Returns that rectangle in CSS pixels.
  */
 export function viewportRect(calib) {
-  const cw = window.innerWidth;
-  const ch = window.innerHeight;
+  const cw = canvas.clientWidth || window.innerWidth;
+  const ch = canvas.clientHeight || window.innerHeight;
   const aspect = calib.width / calib.height;
   let w = cw;
   let h = Math.round(cw / aspect);
@@ -201,8 +257,9 @@ function applyViewport(calib) {
   renderer.setClearColor(0x05070a, 1);
   renderer.clear();
   // three.js viewport y counts from the bottom.
-  renderer.setViewport(r.x, window.innerHeight - r.y - r.height, r.width, r.height);
-  renderer.setScissor(r.x, window.innerHeight - r.y - r.height, r.width, r.height);
+  const ch = canvas.clientHeight || window.innerHeight;
+  renderer.setViewport(r.x, ch - r.y - r.height, r.width, r.height);
+  renderer.setScissor(r.x, ch - r.y - r.height, r.width, r.height);
   renderer.setScissorTest(true);
   if (els.image) {
     Object.assign(els.image.style, {
@@ -234,14 +291,14 @@ function refreshImage() {
  */
 function restore() {
   renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+  renderer.setViewport(0, 0, canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
   if (els.image) {
     els.image.hidden = true;
     els.image.removeAttribute("src");
   }
   if (saved) {
     camera.fov = saved.fov;
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight);
     saved = null;
   }
   camera.updateProjectionMatrix();
@@ -253,11 +310,15 @@ function restore() {
   setCameraView(null, yaw, Math.atan2(dir.z, horiz));
 }
 
-/** Keys: C locks/unlocks, [ and ] walk the ring. */
+/** Keys: Shift+L locks/unlocks, Esc unlocks, [ and ] walk the ring, O the image. */
 export function handleRigKey(event) {
   if (!info || !rig.camera) return false;
   if ((event.key === "l" || event.key === "L") && event.shiftKey) {
     setLocked(!rig.on);
+    return true;
+  }
+  if (rig.on && event.key === "Escape") {
+    setLocked(false);
     return true;
   }
   if (rig.on && (event.key === "[" || event.key === "]")) {
