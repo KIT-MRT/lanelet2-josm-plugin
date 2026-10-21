@@ -16,6 +16,7 @@ kept under a size limit by deleting the least recently used frames.
 import json
 import os
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -85,9 +86,14 @@ class FrameDiskCache:
         if not self.enabled:
             return
         path = self._path(index, kind)
-        tmp = path.with_suffix(".part")
+        # Own temp name per writer: the HTTP thread, the prewarm and the
+        # aggregation workers can all write the same entry at once.
+        tmp = path.with_name("%s.%d.%d.part" % (path.name, os.getpid(), threading.get_ident()))
         try:
-            tmp.write_bytes(blob)
+            with open(tmp, "wb") as handle:
+                handle.write(blob)
+                handle.flush()
+                os.fsync(handle.fileno())
             tmp.replace(path)  # atomic, so a killed server leaves no half frame
         except OSError as exc:
             self.log("scene: could not cache %s %d (%s)" % (kind, index, exc))
@@ -98,15 +104,33 @@ class FrameDiskCache:
             return
         self._evict()
 
-    def _evict(self):
-        """Drop the least recently used frames once over the size limit."""
-        if not self.limit_bytes:
+    def drop(self, index, kind="frame"):
+        """Forget one entry -- one that turned out unreadable, say."""
+        if not self.enabled:
             return
         try:
-            files = [(p.stat().st_atime, p.stat().st_size, p)
-                     for p in self.dir.parent.glob("*/*-[0-9]*.bin")]
+            self._path(index, kind).unlink()
         except OSError:
+            pass
+
+    def _evict(self):
+        """Drop the least recently used frames once over the size limit.
+
+        Only in this cache's own scene directories (`<scene>-v<n>` holding an
+        about.json), never anything else that happens to share the root.
+        """
+        if not self.limit_bytes:
             return
+        files = []
+        for scene_dir in self.dir.parent.glob("*-v%d" % FORMAT_VERSION):
+            if not (scene_dir / "about.json").is_file():
+                continue
+            for p in scene_dir.glob("*-[0-9]*.bin"):
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue  # another writer removed or replaced it meanwhile
+                files.append((st.st_atime, st.st_size, p))
         total = sum(size for _, size, _ in files)
         if total <= self.limit_bytes:
             return

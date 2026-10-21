@@ -111,7 +111,11 @@ class ViewerBridge:
     def _handle(self, line):
         try:
             command = json.loads(line.decode("utf-8"))
-        except ValueError:
+        except (ValueError, UnicodeDecodeError):
+            return
+        # Anything that can POST /command to the viewer reaches this line; a
+        # malformed one must not end the reader (and with it the reconnects).
+        if not isinstance(command, dict):
             return
         reply = None
         if self.on_command:
@@ -128,6 +132,8 @@ class ViewerBridge:
 def default_reply(command):
     """Accept camera/selection traffic, refuse anything that would edit."""
     ops = command.get("ops") or []
-    if ops and all(op.get("op") in HARMLESS_OPS for op in ops):
+    if not isinstance(ops, list):
+        return {"ok": False, "message": READ_ONLY_MESSAGE}
+    if ops and all(isinstance(op, dict) and op.get("op") in HARMLESS_OPS for op in ops):
         return {"ok": True, "message": "ok"}
     return {"ok": False, "message": READ_ONLY_MESSAGE}

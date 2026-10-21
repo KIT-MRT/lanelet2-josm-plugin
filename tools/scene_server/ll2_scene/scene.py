@@ -168,7 +168,9 @@ class SceneSource:
         from kitscenes.sensors import SensorDataLoader  # noqa: E402 (needs the path above)
 
         self.loader = SensorDataLoader(self.dir)
-        self.scene_id = self.dir.name
+        # The name as given, not as resolved: a symlinked scene directory
+        # keeps the id (and cache directory) the city index knows it by.
+        self.scene_id = Path(scene_dir).name or self.dir.name
         self.origin_lat, self.origin_lon = self._read_origin()
         self._projector = None
         self._lanelet_map = None

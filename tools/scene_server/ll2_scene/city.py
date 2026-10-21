@@ -63,7 +63,8 @@ def find_scenes(root, max_depth=3):
     root = _data_root(root)
     scenes, tars = [], []
     if (root / "poses.txt").is_file():
-        return [(root.parent.name, root)], []
+        # One scene: its id still ends up in URLs.
+        return ([(root.parent.name, root)] if SCENE_ID_RE.match(root.name) else []), []
 
     def walk(directory, depth):
         try:
@@ -102,6 +103,14 @@ class CityScene:
         poses = read_poses(scene_dir)
         timestamps = read_reference_timestamps(scene_dir, poses)
         frames = int(min(len(poses["time"]), len(timestamps)))
+        # What would otherwise only fail later, while describing the whole
+        # city -- and take every other scene down with it.
+        if frames < 1:
+            raise ValueError("no frames")
+        if len(poses["time"]) > 1 and not np.all(np.diff(poses["time"]) > 0):
+            raise ValueError("pose times are not strictly increasing")
+        if not np.all(np.isfinite(poses["t"])) or not np.all(np.isfinite(timestamps[:frames])):
+            raise ValueError("non-finite poses or timestamps")
         frame = SceneFrame(origin[0], origin[1], origin[0], origin[1])
         start = frame.to_lat_lon(poses["t"][0, 0], poses["t"][0, 1])
         return cls(id=scene_dir.name, split=split, dir=Path(scene_dir), origin=origin,
@@ -185,7 +194,11 @@ class CityIndex:
         frames = {}
         scenes = []
         for s in self.scenes:
-            pos, quat = s.track(anchor, frames)
+            try:
+                pos, quat = s.track(anchor, frames)
+            except Exception as exc:  # one bad scene must not hide the city
+                self.log("city: leaving out %s (%r)" % (s.id, exc))
+                continue
             lo = pos.min(axis=0)
             hi = pos.max(axis=0)
             scenes.append({

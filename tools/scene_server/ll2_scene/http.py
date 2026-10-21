@@ -26,6 +26,7 @@ import json
 import re
 import select
 import socket
+import struct
 import sys
 import threading
 import time
@@ -73,8 +74,10 @@ def client_gone(connection):
     with bytes waiting is just the next pipelined request.
     """
     try:
-        ready, _, _ = select.select([connection], [], [], 0)
-        if not ready:
+        # poll, not select: select fails on descriptors numbered over 1023.
+        poller = select.poll()
+        poller.register(connection, select.POLLIN | select.POLLHUP)
+        if not poller.poll(0):
             return False
         return connection.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b""
     except (BlockingIOError, InterruptedError):
@@ -113,6 +116,7 @@ class SceneHttpServer:
         self._aggregate_thread = None
         self._aggregate_error = None
         self._aggregate_blobs = {}      # (index, anchor) -> encoded bytes
+        self._aggregate_lock = threading.Lock()  # one build thread; the blob cache
         self._thread = None
         self._base_url = base_url
         self._httpd = None
@@ -184,10 +188,16 @@ class SceneHttpServer:
             return {"ready": False, "error": self._aggregate_error}
         if self.aggregator is None:
             return {"ready": False, "error": "no aggregator configured"}
-        if self._aggregate_thread is None or not self._aggregate_thread.is_alive():
-            self._aggregate_thread = threading.Thread(
-                target=self._build_aggregate, name="ll2-scene-aggregate", daemon=True)
-            self._aggregate_thread.start()
+        if self._stopping.is_set():
+            return {"ready": False, "error": "scene closed; ask again"}
+        # Checked and started under one lock: two tabs (or a poll racing
+        # --aggregate-now) once started a build each.
+        with self._aggregate_lock:
+            if self._aggregate is None and (self._aggregate_thread is None
+                                            or not self._aggregate_thread.is_alive()):
+                self._aggregate_thread = threading.Thread(
+                    target=self._build_aggregate, name="ll2-scene-aggregate", daemon=True)
+                self._aggregate_thread.start()
         return {"ready": False, "progress": dict(self.aggregator.progress)}
 
     def _build_aggregate(self):
@@ -203,8 +213,14 @@ class SceneHttpServer:
                 try:
                     if self._stopping.is_set():
                         return
-                    xyz, intensity, classes, colour, stats = self.aggregator.build()
-                    self.aggregator.save_cached(xyz, intensity, classes, colour, stats)
+                    # Another process (--build-aggregates) may have built it
+                    # while this one queued for the gate.
+                    cached = self.aggregator.load_cached()
+                    if cached is not None:
+                        xyz, intensity, classes, colour, stats = cached
+                    else:
+                        xyz, intensity, classes, colour, stats = self.aggregator.build()
+                        self.aggregator.save_cached(xyz, intensity, classes, colour, stats)
                 finally:
                     if self._build_gate is not None:
                         self._build_gate.release()
@@ -223,16 +239,18 @@ class SceneHttpServer:
         if not 0 <= index < len(chunks):
             return None
         key = (index, self.source.anchor)
-        blob = self._aggregate_blobs.get(key)
+        with self._aggregate_lock:
+            blob = self._aggregate_blobs.get(key)
         if blob is None:
             chunk = chunks[index]
             blob = encode_points(self.source.to_enu(chunk["xyz"]), chunk["intensity"],
                                  classes=chunk.get("classes"), rgb=chunk.get("rgb"))
-            self._aggregate_blobs[key] = blob
-            # Keyed by anchor as well, so a chunk is re-projected if JOSM's
-            # anchor is adopted later; keep only a handful of them.
-            while len(self._aggregate_blobs) > 32:
-                self._aggregate_blobs.pop(next(iter(self._aggregate_blobs)))
+            with self._aggregate_lock:
+                self._aggregate_blobs[key] = blob
+                # Keyed by anchor as well, so a chunk is re-projected if JOSM's
+                # anchor is adopted later; keep only a handful of them.
+                while len(self._aggregate_blobs) > 32:
+                    self._aggregate_blobs.pop(next(iter(self._aggregate_blobs)))
         return blob
 
     def route(self, handler, path):
@@ -338,6 +356,13 @@ class SceneHttpServer:
                 return hit
             t0 = time.perf_counter()
             cached = self.disk.get(index) if self.disk else None
+            if cached is not None:
+                try:
+                    decode_points(cached)
+                except (ValueError, struct.error):
+                    # A damaged cache entry is a miss, not a 500 forever.
+                    self.disk.drop(index)
+                    cached = None
             if cached is not None:
                 xyz, intensity, sensor, _origin, _c, _r, _i = decode_points(cached)
                 if intensity is not None:
@@ -478,19 +503,20 @@ class CityHttpServer:
                 self.log("city: opened %s in %.2fs" % (scene_id, time.perf_counter() - t0))
                 with self._lock:
                     self._open[scene_id] = service
-                    evicted = self._evict_locked()
+                    evicted = self._evict_locked(keep=scene_id)
                 for old in evicted:
                     old.stop()
             return service
 
-    def _evict_locked(self):
-        """Close least recently used scenes beyond `max_open`, never a busy one."""
+    def _evict_locked(self, keep=None):
+        """Close least recently used scenes beyond `max_open`: never a busy
+        one, and never `keep`, the scene that was just asked for."""
         evicted = []
         for scene_id in list(self._open):
             if len(self._open) <= self.max_open:
                 break
             service = self._open[scene_id]
-            if service.building or service._waiting:
+            if scene_id == keep or service.building or service._waiting:
                 continue
             evicted.append(self._open.pop(scene_id))
             self.log("city: closed %s (least recently used)" % scene_id)
@@ -541,6 +567,33 @@ class _QuietThreadingHTTPServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+_LOCAL_NAMES = {"127.0.0.1", "localhost", "::1", "[::1]"}
+
+
+def _request_allowed(h, allow_origin):
+    """Refuse other Host names (DNS rebinding) and cross-site requests (CSRF).
+
+    CORS already keeps other sites from *reading* answers; this keeps them
+    from *triggering* work -- a page could otherwise start a minutes-long
+    aggregate build for every scene of a city with a few image tags. The
+    viewer page is same-site (same host, another port) and passes.
+    """
+    host = (h.headers.get("Host") or "").strip().lower()
+    host = host[:host.find("]") + 1] if host.startswith("[") else host.rsplit(":", 1)[0]
+    bound = (h.server.server_address[0] or "").lower()
+    if host and bound not in ("0.0.0.0", "::", "") and host not in _LOCAL_NAMES and host != bound:
+        h._json({"error": "unknown host name"}, 403)
+        return False
+    if (h.headers.get("Sec-Fetch-Site") or "").lower() == "cross-site":
+        h._json({"error": "cross-site request refused"}, 403)
+        return False
+    origin = h.headers.get("Origin")
+    if origin and allow_origin not in ("*", origin):
+        h._json({"error": "origin not allowed"}, 403)
+        return False
+    return True
+
+
 def _make_handler(router):
     """A request handler that hands every GET to `router.route(handler, path)`."""
     class Handler(BaseHTTPRequestHandler):
@@ -574,7 +627,16 @@ def _make_handler(router):
             self.end_headers()
 
         def do_GET(self):
-            router.route(self, self.path.split("?", 1)[0])
+            if not _request_allowed(self, router.allow_origin):
+                return
+            try:
+                router.route(self, self.path.split("?", 1)[0])
+            except Exception as exc:  # one bad scene must not just drop the connection
+                router.log("scene: %s failed: %r" % (self.path, exc))
+                try:
+                    self._json({"error": repr(exc)}, 500)
+                except Exception:
+                    self.close_connection = True
 
     return Handler
 

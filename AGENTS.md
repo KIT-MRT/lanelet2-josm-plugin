@@ -528,6 +528,20 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   The viewer server's `/tileproxy` fetches only from hosts named on its
   command line or in `LL2_TILE_PROXY_HOSTS`, follows no redirects and passes
   on images only.
+- **Who may talk to the two local servers.** Both listen on loopback, but
+  any web page can send them requests. Both refuse a `Host` that is not a
+  loopback name or the bind address (DNS rebinding; skipped for a wildcard
+  bind) and requests a browser marks cross-site (`Sec-Fetch-Site`, a foreign
+  `Origin`) -- on the viewer server for `/state`, `/events`, `/tileproxy`,
+  `/command`, `/shutdown` (the page and assets stay open), on the scene
+  server for everything (a page could otherwise start minutes-long builds).
+  JOSM's own HTTP client sends neither header. The ingest port drops a
+  connection that speaks HTTP (a browser's no-cors POST would otherwise get
+  its body in as a message) and refuses NaN and non-objects, which would
+  break every new tab's bootstrap. The tile proxy passes raster images only
+  (no SVG: script in the viewer's origin), nosniff and sandboxed, at most 8
+  at a time, refuses user info, and a bare allowed host means its standard
+  port only. `testdata/viewer3d/e2e_server_security.mjs` checks all of it.
 - **Trajectory lines are quads, not `linewidth`.** WebGL ignores line width,
   so each segment is an instanced quad widened in screen space after being
   trimmed to the near plane (otherwise a segment passing behind the camera

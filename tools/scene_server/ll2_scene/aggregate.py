@@ -36,7 +36,9 @@ the viewer's ENU anchor is applied later and can change.
 """
 
 import math
+import multiprocessing
 import os
+import struct
 import time
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
@@ -49,8 +51,10 @@ from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 # built by an older version is rebuilt instead of silently lacking it.
 AGGREGATE_FORMAT = 3
 
-# Voxel keys are packed into one int64 so numpy can sort them: 22 bits an axis
-# is +-419 km at 0.2 m, far beyond any scene.
+# Voxel keys are packed into one int64 so numpy can sort them: 22 bits for x
+# and y (+-419 km at 0.2 m, far beyond any scene); z gets the 20 bits left
+# below the sign bit, +-105 km at 0.2 m -- the range check below covers 22
+# bits, but no scene comes near the difference.
 _BITS = 22
 _HALF = 1 << (_BITS - 1)
 _MASK = (1 << _BITS) - 1
@@ -101,11 +105,16 @@ def merge_counts(keys_a, counts_a, keys_b, counts_b):
 _WORKER = {}
 
 
-def _init_worker(scene_dir, cache_dir, kitscenes_path, voxel, max_range_m, ego_box, kept_keys):
+def _init_worker(scene_dir, cache_dir, limit_gb, kitscenes_path, voxel, max_range_m, ego_box,
+                 kept_keys):
     from .cache import FrameDiskCache
-    from .scene import SceneSource
-    source = SceneSource(scene_dir, kitscenes_path=kitscenes_path)
-    disk = FrameDiskCache(source.scene_id, cache_dir, log=lambda _m: None) if cache_dir else None
+    from .scene import SceneSource, read_origin
+    # Any anchor will do -- workers never convert to the viewer's frame -- and
+    # giving one spares each worker parsing the scene's map to pick it.
+    source = SceneSource(scene_dir, kitscenes_path=kitscenes_path, anchor=read_origin(scene_dir))
+    # The user's cache limit, not the default: trimming covers every scene.
+    disk = (FrameDiskCache(source.scene_id, cache_dir, limit_gb, log=lambda _m: None)
+            if cache_dir else None)
     _WORKER["aggregator"] = SceneAggregator(
         source, disk_cache=disk, voxel=voxel, max_range_m=max_range_m,
         ego_box=ego_box, log=lambda _m: None)
@@ -165,26 +174,48 @@ class SceneAggregator:
         return rgb
 
     def _frame_classes(self, index, xyz):
-        """Vistas class per point of a frame, from the cache when it is there."""
-        from .mvd import UNLABELLED
+        """Vistas class per point of the *whole* frame, cached like the frame server does.
+
+        Same entries, same content as `SceneHttpServer._labels_for`: the two
+        used to store classes of differently filtered points under one name,
+        so each threw the other's away and neither ever hit the cache.
+        """
         cached = self.disk.get(index, "class") if self.disk else None
         if cached is not None and len(cached) == len(xyz):
             return np.frombuffer(cached, np.uint8)
-        if not getattr(self.source, "frame_classes", None):
-            return None
+        instances = None
         try:
-            classes = self.source.frame_classes(index, xyz)
+            if getattr(self.source, "frame_labels", None):
+                classes, instances = self.source.frame_labels(index, xyz)
+            elif getattr(self.source, "frame_classes", None):
+                classes = self.source.frame_classes(index, xyz)
+            else:
+                return None
         except Exception:
             return None
         if self.disk and classes is not None:
             self.disk.put(index, classes.tobytes(), "class")
+            if instances is not None:
+                self.disk.put(index, instances.tobytes(), "inst")
         return classes
 
     def _frame_points(self, index):
         """Scene-frame points of one frame, ego and far returns removed."""
+        xyz, intensity, keep = self._frame_full(index)
+        return xyz[keep], intensity[keep]
+
+    def _frame_full(self, index):
+        """The whole frame (xyz, intensity) and which points to aggregate."""
         blob = self.disk.get(index) if self.disk else None
+        decoded = None
         if blob is not None:
-            xyz, intensity, _sensor, _origin, _classes, _rgb, _inst = decode_points(blob)
+            try:
+                decoded = decode_points(blob)
+            except (ValueError, struct.error):
+                # A damaged cache entry is a miss, not an error forever.
+                self.disk.drop(index)
+        if decoded is not None:
+            xyz, intensity, _sensor, _origin, _classes, _rgb, _inst = decoded
             intensity = (intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
                          if intensity is not None else np.zeros(len(xyz), np.float32))
         else:
@@ -192,7 +223,7 @@ class SceneAggregator:
             if self.disk:
                 self.disk.put(index, encode_points(xyz, intensity, sensor))
         if not len(xyz):
-            return xyz, intensity
+            return xyz, intensity, np.zeros(0, bool)
         rot, pos = self.source.pose_at(float(self.source.timestamps[index]))
         local = (xyz - pos) @ rot  # back into the ego frame
         # Returns off our own bodywork are static in the ego frame and smear
@@ -202,7 +233,7 @@ class SceneAggregator:
                   & (np.abs(local[:, 2]) < self.ego_box[2]))
         near = (local[:, 0] ** 2 + local[:, 1] ** 2) < self.max_range_m ** 2
         keep = near & ~on_ego
-        return xyz[keep], intensity[keep]
+        return xyz, intensity, keep
 
     def frames(self):
         return range(0, self.source.frame_count, self.step)
@@ -220,13 +251,18 @@ class SceneAggregator:
         if self.workers <= 1 or scene_dir is None:
             return None
         root = getattr(self.disk, "root", None) if self.disk else None
-        return (str(scene_dir), str(root) if root else None,
+        limit_gb = getattr(self.disk, "limit_bytes", 0) / 1e9 if self.disk else 0
+        return (str(scene_dir), str(root) if root else None, limit_gb,
                 getattr(self.source, "kitscenes_path", None),
                 self.voxel, self.max_range_m, tuple(self.ego_box))
 
     def _pool(self, setup, kept_keys=None):
+        # spawn, not fork: the server forking this has HTTP and decode threads
+        # running, and a forked child can inherit one of their locks held.
+        # Workers rebuild everything from paths anyway.
         return ProcessPoolExecutor(max_workers=self.workers, initializer=_init_worker,
-                                   initargs=setup + (kept_keys,))
+                                   initargs=setup + (kept_keys,),
+                                   mp_context=multiprocessing.get_context("spawn"))
 
     def _scan_frames(self):
         """(index, voxel keys of that frame) in order, computed ahead in parallel."""
@@ -361,7 +397,8 @@ class SceneAggregator:
         votes_count = np.zeros(0, np.int32)
         batch = []
         for i, index in enumerate(frames):
-            xyz, inten = self._frame_points(index)
+            full, full_inten, keep = self._frame_full(index)
+            xyz, inten = full[keep], full_inten[keep]
             if not len(xyz):
                 continue
             key = voxel_keys(xyz, self.voxel)
@@ -372,15 +409,19 @@ class SceneAggregator:
             np.add.at(sums, slot_hit, xyz[hit])
             np.add.at(weight, slot_hit, 1.0)
             np.add.at(intensity, slot_hit, inten[hit].astype(np.float64))
-            rgb = self._frame_rgb(index, xyz)
+            # Colours and classes of the whole frame, as the frame server
+            # caches them, then cut down to the points aggregated.
+            rgb = self._frame_rgb(index, full)
             if rgb is not None:
+                rgb = rgb[keep]
                 # 90 is the neutral grey of a point no camera saw.
                 seen = (rgb[hit] != 90).any(axis=1)
                 if seen.any():
                     np.add.at(rgb_sums, slot_hit[seen], rgb[hit][seen].astype(np.float64))
                     np.add.at(rgb_weight, slot_hit[seen], 1.0)
-            classes = self._frame_classes(index, xyz)
+            classes = self._frame_classes(index, full)
             if classes is not None:
+                classes = classes[keep]
                 labelled = classes[hit] != UNLABELLED
                 if labelled.any():
                     batch.append(slot_hit[labelled].astype(np.int64) * 256

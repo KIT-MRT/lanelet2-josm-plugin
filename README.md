@@ -172,9 +172,9 @@ culling.
   in ortho and in perspective. They are off on every start, since turning
   them on sends the viewed area to the tile server. WebGL can only use tiles
   from servers that allow cross-origin use (CORS); for one that does not,
-  start the viewer with `--tile-proxy-host <host>` (or set
-  `LL2_TILE_PROXY_HOSTS`) to fetch through the viewer server, for that host
-  only.
+  start the viewer with `--tile-proxy-host <host>` (`<host>:<port>` for a
+  non-standard port; or set `LL2_TILE_PROXY_HOSTS`) to fetch through the
+  viewer server, for that host only.
 
 New nodes created in JOSM without `ele` get a height (on by default; settings:
 *Heights*): a node inserted into a way, or joining ways, is interpolated
