@@ -358,9 +358,16 @@ class TileLayer {
   update() {
     const anchor = this.anchor();
     if (!this.on || !anchor) return;
+    // Tiles bake ENU vertices about the anchor they were built with; a new
+    // map (or JOSM's anchor replacing the city's) moves the frame under them.
+    const anchorKey = `${anchor.lat},${anchor.lon}`;
+    if (this.builtFor !== anchorKey) {
+      if (this.builtFor !== undefined) this.setSource(this.source);
+      this.builtFor = anchorKey;
+    }
     camera.updateMatrixWorld();
     const key = `${camera.position.toArray().map((v) => v.toFixed(2))}|${camera.quaternion.toArray()
-      .map((v) => v.toFixed(4))}|${camera.top}|${this.opacity}|${renderer.domElement.clientWidth}`;
+      .map((v) => v.toFixed(4))}|${camera.top}|${camera.fov}|${this.opacity}|${renderer.domElement.clientWidth}x${renderer.domElement.clientHeight}`;
     this.group.position.z = this._groundZ() - 0.05;
     if (key === this.lastKey) {
       this._pump();

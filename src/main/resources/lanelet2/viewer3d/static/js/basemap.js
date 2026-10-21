@@ -6,6 +6,7 @@
 // source and opacity are remembered per browser.
 import { TEST_HOOKS } from "./util.js";
 import { ortho, setOrtho } from "./camera.js";
+import { rigActive, setLocked } from "./sensors/camrig.js";
 import { grid } from "./scene.js";
 import { toast } from "./hud.js";
 import { tileLayer, TILE_PRESETS, checkSource, tileUrl, toUtm, wmsBox } from "./render/tiles.js";
@@ -87,7 +88,10 @@ export function installBasemap() {
 }
 
 export function toggleOrtho(on) {
-  setOrtho(on === undefined ? !ortho.on : on);
+  const next = on === undefined ? !ortho.on : !!on;
+  // The lock drives the camera with a recorded pinhole; a map view replaces it.
+  if (next && rigActive()) setLocked(false);
+  setOrtho(next);
   if (els.ortho) els.ortho.classList.toggle("on", ortho.on);
 }
 

@@ -49,6 +49,7 @@ const loaded = new Map();    // chunk key -> { id, centre, radius }
 const queue = [];            // chunk jobs, nearest first
 let busy = false;
 let generation = 0;          // bumped by Unload, so jobs in flight are dropped
+let cityGen = 0;             // bumped by a new or reset city: its answers are stale
 let lastFocus = null;
 let lastTick = 0;
 let status = {};             // /city/status.json
@@ -100,6 +101,7 @@ export function onCityMessage(msg) {
   cityState.info = info;
   cityState.name = info.name || null;
   cityState.loading = true;
+  const gen = ++cityGen;
   els.bar.hidden = false;
   setCityActive(true);
   refreshBar();
@@ -109,6 +111,7 @@ export function onCityMessage(msg) {
       return r.json();
     })
     .then((city) => {
+      if (gen !== cityGen) return false;  // a newer city arrived meanwhile
       cityState.scenes = city.scenes || [];
       cityState.name = city.city || cityState.name;
       cityState.error = null;
@@ -121,17 +124,20 @@ export function onCityMessage(msg) {
       return true;
     })
     .catch((err) => {
+      if (gen !== cityGen) return false;
       cityState.error = String(err.message || err);
       toast(`City: ${cityState.error}`, "error");
       return false;
     })
     .finally(() => {
-      cityState.loading = false;
+      if (gen === cityGen) cityState.loading = false;
       refreshBar();
     });
 }
 
 function resetCity() {
+  cityGen++;
+  cityState.opening = null;
   unloadAll();
   clearScene();
   trajectoryLayer.clear();
@@ -225,6 +231,7 @@ export function openScene(id, frame = 0) {
     return Promise.resolve(true);
   }
   cityState.opening = id;
+  const gen = cityGen;
   refreshBar();
   return fetch(`${s.base}/scene.json`)
     .then((r) => {
@@ -232,7 +239,8 @@ export function openScene(id, frame = 0) {
       return r.json();
     })
     .then((info) => {
-      if (cityState.opening !== id) return false;  // another click won
+      // Another click won, Deselect came first, or the city changed.
+      if (cityState.opening !== id || gen !== cityGen) return false;
       onSceneMessage({ scene: info }, frame);
       return true;
     })
@@ -249,6 +257,8 @@ export function openScene(id, frame = 0) {
 function onSceneChanged(e) {
   const id = e.detail ? e.detail.id : null;
   hideHover();
+  // Deselect also cancels a scene still being opened.
+  if (!id) cityState.opening = null;
   trajectoryLayer.setSelected(id ? trajectoryLayer.indexOf(id) : -1);
   // While the picked scene shows its own whole-scene cloud, its city chunks
   // would be the same points twice. The layer remembers the hidden scene, so
@@ -338,6 +348,7 @@ function requestMeta(s) {
       refreshBar();
     })
     .catch((err) => {
+      if (gen !== generation) return;  // unloaded meanwhile: not this scene's fault
       st.state = "error";
       st.error = String(err.message || err);
       refreshBar();

@@ -94,7 +94,9 @@ void main() {
   if (texture2D(uClassFilter, vec2((aClass * 255.0 + 0.5) / 256.0, 0.5)).r < 0.5) {
     keep = false;
   }
-  if (uAboveGround > 0.0 && position.z - aGround > uAboveGround) {
+  // aGround below -1e5 means "no ground known here yet" (a cloud that has
+  // just arrived): keep it rather than drop a whole new frame.
+  if (uAboveGround > 0.0 && aGround > -1e5 && position.z - aGround > uAboveGround) {
     keep = false;
   }
   if (!keep) {
@@ -107,7 +109,8 @@ void main() {
   gl_Position = projectionMatrix * mvPosition;
   gl_PointSize = uSize;
   if (uMode == 1) {
-    vColor = viridis((position.z + uZMin) / uZRange);
+    // World height: each cloud has its own origin, and the ramp spans them all.
+    vColor = viridis(((modelMatrix * vec4(position, 1.0)).z + uZMin) / uZRange);
   } else if (uMode == 2) {
     vColor = uSensorColors[int(clamp(aSensor, 0.0, 6.0))];
   } else if (uMode == 3) {
@@ -170,7 +173,13 @@ export function parseCloud(buffer) {
     offset += count * 3;
   }
   let instances = null;
-  if (flags & FLAG_INSTANCE) instances = new Uint16Array(buffer, offset, count);
+  if (flags & FLAG_INSTANCE) {
+    // A Uint16Array view needs an even offset; without the rgb channel an
+    // odd point count leaves it odd, so copy the bytes out instead.
+    instances = offset % 2 === 0
+      ? new Uint16Array(buffer, offset, count)
+      : new Uint16Array(buffer.slice(offset, offset + count * 2));
+  }
   return { count, origin, positions, intensity, sensor, classes, rgb, instances };
 }
 
@@ -307,7 +316,7 @@ class PointLayer {
     const cloud = parseCloud(buffer);
     const points = this._staticPoints(cloud);
     this.aggregateGroup.add(points);
-    this.groundReady = false;
+    this._groundChanged();
     this.aggregateCount += cloud.count;
     if (cloud.classes) this.aggregateHasClasses = true;
     if (cloud.rgb) this.aggregateHasRgb = true;
@@ -350,7 +359,7 @@ class PointLayer {
     points.visible = !this.hiddenCityScenes || !this.hiddenCityScenes.has(sceneId);
     this.cityGroup.add(points);
     this.cityChunks.set(key, points);
-    this.groundReady = false;
+    this._groundChanged();
     this._refreshStaticRange();
     return cloud.count;
   }
@@ -361,7 +370,7 @@ class PointLayer {
     points.geometry.dispose();
     this.cityGroup.remove(points);
     this.cityChunks.delete(key);
-    this.groundReady = false;
+    this._groundChanged();
     this._refreshStaticRange();
     return true;
   }
@@ -469,7 +478,7 @@ class PointLayer {
     let min = Infinity;
     let max = -Infinity;
     for (let i = 2; i < cloud.positions.length; i += 3) {
-      const z = cloud.positions[i];
+      const z = cloud.origin[2] + cloud.positions[i];  // absolute, as the shader reads it
       if (z < min) min = z;
       if (z > max) max = z;
     }
@@ -480,7 +489,22 @@ class PointLayer {
     this.material.uniforms.uZMin.value = -min;
     this.material.uniforms.uZRange.value = Math.max(0.5, max - min);
     this.frameGroup.visible = this.visible;
+    this._groundChanged();
     return this.cloud;
+  }
+
+  /**
+   * A cloud came or went: with the above-ground filter on, the ground grid
+   * is rebuilt once things settle (a stream of chunks is one rebuild, not
+   * one each). Until then the new points count as "ground unknown" and stay.
+   */
+  _groundChanged() {
+    this.groundReady = false;
+    if (!(this.aboveGround > 0)) return;
+    clearTimeout(this._groundTimer);
+    this._groundTimer = setTimeout(() => {
+      if (this.aboveGround > 0 && !this.groundReady) this.ensureGround();
+    }, 250);
   }
 
   clear() {
@@ -558,7 +582,9 @@ class PointLayer {
   /** Hide points more than `metres` above the local ground; 0 turns it off. */
   setAboveGround(metres) {
     this.aboveGround = Math.max(0, metres || 0);
-    if (this.aboveGround > 0) this.ensureGround();
+    // The grid depends on the clouds, not the threshold: dragging the slider
+    // must not rebuild it on every step.
+    if (this.aboveGround > 0 && !this.groundReady) this.ensureGround();
     for (const m of this.materials) m.uniforms.uAboveGround.value = this.aboveGround;
   }
 
@@ -628,12 +654,16 @@ class PointLayer {
     const clouds = everything ? this._allClouds() : (this.cloud ? [this.cloud] : []);
     const withClasses = clouds.filter((c) => c.classes);
     if (!withClasses.length) return null;
+    // Counted once per cloud and kept on it: this runs after every frame and
+    // every chunk, and a city holds millions of points.
     const counts = {};
     for (const cloud of withClasses) {
-      for (let i = 0; i < cloud.count; i++) {
-        const id = cloud.classes[i];
-        counts[id] = (counts[id] || 0) + 1;
+      if (!cloud.histogram) {
+        const own = new Uint32Array(256);
+        for (let i = 0; i < cloud.count; i++) own[cloud.classes[i]]++;
+        cloud.histogram = own;
       }
+      cloud.histogram.forEach((n, id) => { if (n) counts[id] = (counts[id] || 0) + n; });
     }
     return counts;
   }
@@ -654,6 +684,9 @@ class PointLayer {
       size: this.size,
       alpha: this.alpha,
       aboveGround: this.aboveGround,
+      // Share of the frame's points with a known ground under them.
+      groundKnown: cloud ? Array.from(cloud.object.geometry.getAttribute("aGround").array)
+        .filter((g) => g > -1e5).length / Math.max(1, cloud.count) : 0,
       intensityRange: this.intensityRange,
       origin: cloud ? cloud.origin : null,
       aggregate: this.aggregateCount,

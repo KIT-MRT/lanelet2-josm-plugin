@@ -218,9 +218,16 @@ export function onSceneMessage(msg, startFrame) {
   if (!info || !info.base) return;
   // A reloaded tab gets the same announcement again; only another scene
   // throws away what this one has loaded.
-  const other = sceneState.info && (sceneState.info.id !== info.id
-    || sceneState.info.base !== info.base);
-  if (other) resetScene();
+  const same = sceneState.info && sceneState.info.id === info.id
+    && sceneState.info.base === info.base;
+  // An EventSource reconnect replays the bootstrap snapshot, scene included.
+  // Nothing about the scene changed: replacing its info object would orphan
+  // the whole-scene load in flight and release the camera lock.
+  if (same) {
+    if (startFrame !== undefined) showFrame(startFrame);
+    return;
+  }
+  if (sceneState.info) resetScene();
   sceneState.info = info;
   if (startFrame !== undefined) sceneState.frame = startFrame;
   cache.clear();
@@ -265,6 +272,19 @@ function resetScene() {
   sceneState.loading = false;
   sceneState.error = null;
   sceneState.frame = 0;
+  // What the old scene's data offered goes with it; whatever is still loaded
+  // (the city's clouds) offers it again just below.
+  for (const value of ["rgb", "instance"]) {
+    const option = els.mode && els.mode.querySelector(`option[value="${value}"]`);
+    if (option) option.remove();
+  }
+  if (els.chips) els.chips.textContent = "";
+  refreshColourOptions();
+  refreshClassChips();
+  if (els.mode && !els.mode.querySelector(`option[value="${pointLayer.mode}"]`)) {
+    els.mode.value = "intensity";
+    pointLayer.setMode("intensity");
+  }
 }
 
 /** No current scene any more: the city map is all that is left. */
@@ -484,7 +504,16 @@ export function showFrame(index) {
     return Promise.resolve(cached);
   }
   if (pending) {
-    if (pending.index === index) return pending.promise;
+    if (pending.index === index) {
+      // The look-ahead is now what the user waits for: let it say so, and
+      // report a failure, instead of finishing silently.
+      if (!pending.show) {
+        pending.show = true;
+        sceneState.loading = true;
+        updateLabels();
+      }
+      return pending.promise;
+    }
     // A look-ahead is worth dropping for a frame the user is waiting for; a
     // request already being decoded is not -- aborting it would send one
     // request per keypress anyway, and the server has started the work. Let
@@ -503,6 +532,8 @@ export function showFrame(index) {
 /** Fetch one frame. `show` distinguishes a user step from a look-ahead. */
 function startFetch(index, show) {
   const controller = new AbortController();
+  // `job.show` may be raised later, when the user steps onto a look-ahead.
+  const job = { index, controller, show, promise: null };
   if (show) {
     sceneState.loading = true;
     updateLabels();
@@ -515,12 +546,12 @@ function startFetch(index, show) {
     .then((buf) => {
       remember(index, buf);
       sceneState.error = null;
-      if (show && sceneState.frame === index) apply(index, buf);
+      if (job.show && sceneState.frame === index) apply(index, buf);
       return buf;
     })
     .catch((err) => {
       if (err && err.name === "AbortError") return null; // we moved on; normal
-      if (show) {
+      if (job.show) {
         sceneState.error = String(err.message || err);
         setPlaying(false);
         toast(`Point cloud: ${sceneState.error}`, "error");
@@ -543,7 +574,8 @@ function startFetch(index, show) {
       updateLabels();
       schedulePrefetch();
     });
-  pending = { index, controller, show, promise };
+  job.promise = promise;
+  pending = job;
   return promise;
 }
 

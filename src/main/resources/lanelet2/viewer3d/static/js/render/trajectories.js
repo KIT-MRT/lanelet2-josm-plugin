@@ -263,6 +263,8 @@ class TrajectoryLayer {
     for (const obj of [this.lines, this.dots, this.arrows]) {
       if (!obj) continue;
       obj.geometry.dispose();
+      // An InstancedMesh's instanceMatrix buffer is only freed by its own dispose().
+      if (obj.isInstancedMesh) obj.dispose();
       this.group.remove(obj);
     }
     this.lines = null;

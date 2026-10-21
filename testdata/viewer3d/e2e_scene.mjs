@@ -454,6 +454,20 @@ try {
   t.check("the tint steps aside for it", inst.tintFrame && inst.frameMode !== "solid");
   // Nothing numbers an object across frames, so the aggregate has no
   // instances; grey would be the honest colour but a useless picture.
+  // Instances without camera colour and an odd point count start at an odd
+  // byte, where a Uint16Array view throws.
+  const oddInstances = await v.evaluate(`import('/js/render/points.js').then((m) => {
+    const n = 5;
+    const buf = new ArrayBuffer(40 + n * 12 + n * 3 + n * 2);
+    const dv = new DataView(buf);
+    [...'LL2PC1'].forEach((c, i) => dv.setUint8(i, c.charCodeAt(0)));
+    dv.setUint32(8, n, true);
+    dv.setUint32(12, 1 | 2 | 4 | 16, true);
+    for (let i = 0; i < n; i++) dv.setUint16(40 + n * 15 + 2 * i, i + 1, true);
+    return Array.from(m.parseCloud(buf).instances);
+  })`);
+  t.check("instances read at an odd offset too", JSON.stringify(oddInstances) === "[1,2,3,4,5]",
+    JSON.stringify(oddInstances));
   t.check("and the aggregate stays on intensity", inst.aggregateMode === "intensity",
     JSON.stringify(inst));
   await v.shot("scene_instances.png");
@@ -521,6 +535,15 @@ try {
     && (await points()).aboveGround === 2);
   t.check("and labels it in metres",
     (await v.evaluate("document.getElementById('aboveGroundLabel').textContent")) === "2.0 m");
+  // A frame stepped to while the filter is on gets its ground too. It used
+  // to keep "ground unknown", which the filter read as "far above" -- the
+  // whole new frame vanished.
+  const filteredFrame = (await sceneState()).frame;
+  await v.key(".");
+  await waitLoaded(filteredFrame + 1);
+  t.check("a frame stepped to under the filter gets its ground",
+    await waitFor(async () => (await points()).groundKnown > 0.99, 3000),
+    String((await points()).groundKnown));
   await setRange("aboveGround", 0);
   t.check("zero turns it off again",
     (await v.evaluate("document.getElementById('aboveGroundLabel').textContent")) === "off");
@@ -539,6 +562,13 @@ try {
   await v.key("v");
   t.check("(ortho on before locking)", (await v.evaluate("window.__ll2map.ortho()")).on);
   await clickElement("sceneLock");
+  // A reconnect replays the scene announcement; nothing about the scene
+  // changed, so nothing may be dropped -- the lock least of all.
+  const lockedBefore = (await v.evaluate("window.__ll2scene.rig()")).on;
+  v.sendScene({ type: "scene", scene: sceneInfo() });
+  await sleep(400);
+  t.check("the same scene announced again keeps the lock",
+    lockedBefore && (await v.evaluate("window.__ll2scene.rig()")).on);
   t.check("locking the camera leaves the ortho view", !(await v.evaluate("window.__ll2map.ortho()")).on
     && !(await v.evaluate("document.getElementById('orthoBtn').classList.contains('on')")));
   await sleep(200);
@@ -621,6 +651,15 @@ try {
     dot(lookDir(freed), freed.dir) > 0.9999, `dot ${dot(lookDir(freed), freed.dir).toFixed(5)}`);
   t.check("and the ordinary projection is back", Math.abs(freed.fov - 55) < 1e-6
     && (await rigOf()).viewport === null, String(freed.fov));
+
+  // The map view and the lock exclude each other in both directions.
+  await v.key("L", { modifiers: ["shift"] });
+  await sleep(200);
+  await v.key("v");
+  await sleep(200);
+  t.check("V during the camera lock releases the lock for the map view",
+    !(await rigOf()).on && (await v.evaluate("window.__ll2map.ortho()")).on);
+  await v.key("v");
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {

@@ -32,6 +32,9 @@ export function screenProjector() {
     // Orthographic: pixels per metre, the same at every depth.
     ortho: ortho.on,
     k: ortho.on ? rect.height / 2 / camera.top : 0,
+    // In ortho the frustum reaches behind the camera (see camera.js), so
+    // geometry above a low camera is drawn and must be pickable too.
+    near: ortho.on ? -1e4 : camera.near,
     cx: rect.left + rect.width / 2,
     cy: rect.top + rect.height / 2,
   };
@@ -52,7 +55,7 @@ export function toViewSpace(e, x, y, z, out) {
 export function projectToPage(pr, x, y, z) {
   toViewSpace(pr.e, x, y, z, _tmp);
   const d = _tmp[5];
-  if (d < camera.near) return null;
+  if (d < pr.near) return null;
   return [screenX(pr, _tmp[3], d), screenY(pr, _tmp[4], d), d];
 }
 
@@ -98,7 +101,7 @@ function* candidateFeatures(pr, mx, my, radiusPx) {
 // plane. Fills _segHit with the pixel distance and the 3D point on the segment
 // under that screen position (perspective-correct).
 function segmentUnderCursor(pr, mx, my, A, B) {
-  const near = camera.near;
+  const near = pr.near;
   const da = A[5];
   const db = B[5];
   if (da < near && db < near) return false;
@@ -237,7 +240,7 @@ export function nodesUnderCursor(clientX, clientY, radiusPx = PICK_RADIUS_PX) {
     for (let i = 0; i < n; i++) {
       toViewSpace(pr.e, p[i * 3], p[i * 3 + 1], p[i * 3 + 2], _tmp);
       const d = _tmp[5];
-      if (d < camera.near) continue;
+      if (d < pr.near) continue;
       const px = Math.hypot(screenX(pr, _tmp[3], d) - clientX, screenY(pr, _tmp[4], d) - clientY);
       if (px > radiusPx) continue;
       const id = f.nodes[i];
