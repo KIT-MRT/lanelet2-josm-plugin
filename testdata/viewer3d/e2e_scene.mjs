@@ -145,6 +145,15 @@ async function clickElement(id) {
   await v.click(box[0], box[1]);
   await sleep(120);
 }
+// Where the free camera looks, from its yaw/pitch (camera.js: yaw 0 is north
+// along +y, counter-clockwise positive).
+const lookDir = (cam) => [
+  -Math.sin(cam.yaw) * Math.cos(cam.pitch),
+  Math.cos(cam.yaw) * Math.cos(cam.pitch),
+  Math.sin(cam.pitch),
+];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unit = (a) => { const n = Math.hypot(...a) || 1; return a.map((v) => v / n); };
 const waitLoaded = (frame) => waitFor(async () => {
   const s = await sceneState();
   return s.frame === frame && !s.loading;
@@ -206,16 +215,21 @@ try {
 
   // ---- jump to the car -------------------------------------------------------------
   const before = await v.camera();
+  const atFrame = (await sceneState()).frame;
   await v.key("k");
   await sleep(150);
   const cam = await v.camera();
-  const car = ego.pos[3];
+  const car = ego.pos[atFrame];
   const away = Math.hypot(cam.pos[0] - car[0], cam.pos[1] - car[1]);
   t.check("K puts the camera behind the car of the current frame",
     away > 5 && away < 40 && cam.pos[2] > car[2] && dist3(cam.pos, before.pos) > 1,
     `${away.toFixed(1)} m away, ${(cam.pos[2] - car[2]).toFixed(1)} m up`);
-  t.check("looking the way it drives", Math.abs(cam.yaw) < 0.2 && cam.pitch < 0,
-    `yaw ${cam.yaw.toFixed(2)} pitch ${cam.pitch.toFixed(2)}`);
+  // The car drives +x here, so the camera belongs west of it, aimed at it.
+  t.check("standing behind the car, not beside it", cam.pos[0] < car[0] - 5
+    && Math.abs(cam.pos[1] - car[1]) < 1, JSON.stringify(cam.pos.map((n) => +n.toFixed(2))));
+  const atCar = unit([car[0] - cam.pos[0], car[1] - cam.pos[1], car[2] - cam.pos[2]]);
+  t.check("and actually looking at it", dot(lookDir(cam), atCar) > 0.999,
+    `dot ${dot(lookDir(cam), atCar).toFixed(4)}, yaw ${cam.yaw.toFixed(2)}`);
   await v.shot("scene_car.png");
 
   // ---- hiding ----------------------------------------------------------------------
@@ -337,11 +351,23 @@ try {
     && dist3((await v.camera()).pos, mount) > 1,
     (await rigOf()).imageSrc);
 
+  // ---- releasing the lock leaves the view where it is ------------------------------
+  const locked = await v.camera();
+  const lockedDir = locked.dir;
   await v.key("L", { modifiers: ["shift"] });
   await sleep(200);
   t.check("Shift+L releases the lock", !(await rigOf()).on);
-  t.check("and the ordinary view is back", Math.abs((await v.camera()).fov - 55) < 1e-6,
-    String((await v.camera()).fov));
+  const freed = await v.camera();
+  t.check("the camera stays exactly where the lock left it",
+    dist3(freed.pos, locked.pos) < 1e-9,
+    `${JSON.stringify(locked.pos)} -> ${JSON.stringify(freed.pos)}`);
+  t.check("still looking the same way", dot(freed.dir, unit(lockedDir)) > 0.9999,
+    `${JSON.stringify(lockedDir.map((n) => +n.toFixed(4)))} -> `
+    + `${JSON.stringify(freed.dir.map((n) => +n.toFixed(4)))}`);
+  t.check("and yaw/pitch now describe that direction",
+    dot(lookDir(freed), freed.dir) > 0.9999, `dot ${dot(lookDir(freed), freed.dir).toFixed(5)}`);
+  t.check("and the ordinary projection is back", Math.abs(freed.fov - 55) < 1e-6
+    && (await rigOf()).viewport === null, String(freed.fov));
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {

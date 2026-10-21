@@ -131,6 +131,12 @@ to learn about the viewport rectangle.
       background for ~0.15 s stepping afterwards.
 - [x] Aborted fetches no longer print a BrokenPipeError traceback per request.
 
+- [x] Releasing the camera lock kept the pre-lock view, undoing the vantage
+      point just lined up. It now hands the view over in place.
+- [x] `Go to car` aimed 90 deg off: the viewer's yaw is `atan2(-dx, dy)`
+      (0 = north) and it was written `atan2(dy, dx)`. It uses `lookAtPoint`
+      now, which has no convention to get wrong.
+
 ### M3 — aggregated scene cloud
 - [ ] Voxel downsample + chunking + draw-distance LOD.
       220 frames x 740 k = 163 M points raw, so this is a downsampling problem,

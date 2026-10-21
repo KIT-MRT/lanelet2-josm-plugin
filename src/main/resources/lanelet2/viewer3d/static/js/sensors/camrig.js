@@ -14,7 +14,7 @@
 // KITScenes ring images are already rectified (the calibration carries no
 // distortion coefficients at all), so a pinhole is the whole truth here.
 import * as THREE from "three";
-import { camera, view, CAM_NEAR_M, CAM_FAR_M } from "../camera.js";
+import { camera, view, lookAtPoint, setCameraView, CAM_NEAR_M, CAM_FAR_M } from "../camera.js";
 import { renderer, canvas } from "../scene.js";
 
 export const rig = {
@@ -102,8 +102,7 @@ export function setLocked(on, frame) {
   rig.on = next;
   if (els.lock) els.lock.classList.toggle("on", rig.on);
   if (rig.on) {
-    saved = { pos: camera.position.clone(), yaw: view.yaw, pitch: view.pitch,
-              fov: camera.fov, aspect: camera.aspect };
+    saved = { fov: camera.fov, aspect: camera.aspect };
     update(frame);
   } else {
     restore();
@@ -222,6 +221,15 @@ function refreshImage() {
   if (els.image.getAttribute("src") !== url) els.image.setAttribute("src", url);
 }
 
+/**
+ * Hand the view back to the free camera **where it is now**.
+ *
+ * Releasing the lock used to jump back to wherever the camera was before it,
+ * which throws away the thing you locked on to look at. The position is kept
+ * untouched and the heading/pitch are read off the camera's own direction;
+ * only the roll is dropped, because the free camera is yaw/pitch about a
+ * fixed world up and has nowhere to put it.
+ */
 function restore() {
   renderer.setScissorTest(false);
   renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
@@ -229,14 +237,18 @@ function restore() {
     els.image.hidden = true;
     els.image.removeAttribute("src");
   }
-  if (!saved) return;
-  camera.fov = saved.fov;
-  camera.aspect = saved.aspect;
+  if (saved) {
+    camera.fov = saved.fov;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    saved = null;
+  }
   camera.updateProjectionMatrix();
-  camera.position.copy(saved.pos);
-  view.yaw = saved.yaw;
-  view.pitch = saved.pitch;
-  saved = null;
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const horiz = Math.hypot(dir.x, dir.y);
+  // yaw 0 looks north along +y, counter-clockwise positive (see camera.js).
+  const yaw = horiz > 1e-9 ? Math.atan2(-dir.x, dir.y) : view.yaw;
+  setCameraView(null, yaw, Math.atan2(dir.z, horiz));
 }
 
 /** Keys: C locks/unlocks, [ and ] walk the ring. */

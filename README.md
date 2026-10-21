@@ -164,7 +164,9 @@ server.
 **Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
 ring cameras was, with that camera's own intrinsics, and blends the recorded
 image over the render (`O`, with a blend slider) — so the map, the point cloud
-and the photograph can be compared pixel for pixel. `[` / `]` walk the ring,
+and the photograph can be compared pixel for pixel. Releasing the lock leaves
+the camera where it is, so you keep that vantage point and only lose the
+image. `[` / `]` walk the ring,
 `,` / `.` step frames, `K` jumps behind the car.
 
 See `tools/scene_server/README.md`; the plan is in

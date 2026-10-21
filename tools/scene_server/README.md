@@ -59,6 +59,10 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 | `[` `]` | walk the six ring cameras |
 | `Overlay` / `O`, `Blend` | blend the recorded image over the render |
 
+Releasing the lock leaves the camera **where it is**, so you keep the vantage
+point you locked on to and just lose the image; only the roll is dropped,
+because the free camera is yaw/pitch about a fixed world up.
+
 With JOSM also connected, the scene server notices that a map is already
 being streamed, adopts its ENU anchor and leaves the map alone — so the map
 stays JOSM's (and editable) while the sensor data comes from here.

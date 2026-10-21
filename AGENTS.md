@@ -399,7 +399,10 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   pixel is an image pixel. `projectToImage` exists so a test can hold the
   render against the plain pinhole formula (it matches to 0.0000 px).
   While locked, nav / held keys / hover are off, because picking still assumes
-  the ordinary projection and the full canvas.
+  the ordinary projection and the full canvas. **Releasing the lock keeps the
+  camera where it is** (heading/pitch read back off the camera's direction,
+  roll dropped) rather than restoring the pre-lock view, which threw away the
+  vantage point the user had just lined up.
 - **The dataset is read-only.** Decoded frames cache under
   `$XDG_CACHE_HOME/josm-lanelet2/scene-server/`, never beside the data, and
   they hold the frame in the *scene's* metric frame so adopting JOSM's anchor

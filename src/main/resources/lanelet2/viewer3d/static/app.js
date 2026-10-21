@@ -139,7 +139,14 @@ if (TEST_HOOKS) {
       const r = renderer.domElement.getBoundingClientRect();
       return [r.left + ((_tp.x + 1) / 2) * r.width, r.top + ((1 - _tp.y) / 2) * r.height, _tp.z];
     },
-    camera: () => ({ pos: camera.position.toArray(), yaw: view.yaw, pitch: view.pitch, fov: camera.fov }),
+    camera: () => {
+      // `dir` is the real look direction, which under the camera lock does not
+      // follow from yaw/pitch (the lock writes the matrix directly).
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      return { pos: camera.position.toArray(), yaw: view.yaw, pitch: view.pitch,
+               fov: camera.fov, dir: dir.toArray() };
+    },
     pivot: () => ({ point: nav.lastPivot ? nav.lastPivot.toArray() : null, kind: nav.lastPivotKind }),
     // The one selected node as "node/<id>", else null (older checks use this).
     selected: () => {

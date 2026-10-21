@@ -7,7 +7,7 @@
 // keeps knowing nothing about sensors.
 import * as THREE from "three";
 import { TEST_HOOKS } from "../util.js";
-import { camera, setCameraView, clampPitch } from "../camera.js";
+import { camera, view, setCameraView, lookAtPoint } from "../camera.js";
 import { pointLayer } from "../render/points.js";
 import { toast } from "../hud.js";
 import { store } from "../store.js";
@@ -241,14 +241,21 @@ export function goToCar() {
   if (!info || !info.ego || !info.ego.pos[sceneState.frame]) return false;
   const pos = info.ego.pos[sceneState.frame];
   const quat = info.ego.quat[sceneState.frame];
+  // The ego frame is x forward, y left, z up.
   const forward = new THREE.Vector3(1, 0, 0)
     .applyQuaternion(new THREE.Quaternion(quat[0], quat[1], quat[2], quat[3]));
-  const yaw = Math.atan2(forward.y, forward.x);
+  const horiz = Math.hypot(forward.x, forward.y) || 1;
+  const car = new THREE.Vector3(pos[0], pos[1], pos[2]);
   const back = 14;
   const up = 7;
-  setCameraView(
-    new THREE.Vector3(pos[0] - Math.cos(yaw) * back, pos[1] - Math.sin(yaw) * back, pos[2] + up),
-    yaw, clampPitch(-0.33));
+  // Stand behind and above the car, then aim at it. Pointing the camera with
+  // `lookAtPoint` keeps this independent of the yaw convention, which is
+  // atan2(-x, y) here and easy to get backwards.
+  setCameraView(new THREE.Vector3(
+    car.x - (forward.x / horiz) * back,
+    car.y - (forward.y / horiz) * back,
+    car.z + up), view.yaw, view.pitch);
+  lookAtPoint(car);
   return true;
 }
 
