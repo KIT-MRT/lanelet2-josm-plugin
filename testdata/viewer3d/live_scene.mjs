@@ -69,6 +69,38 @@ try {
     console.log(`=> map vs cloud: ${((compare.ground.p10 - compare.map.median) * 100).toFixed(1)} cm`);
   }
 
+  // The whole scene as one static cloud (built on the server, then cached).
+  if (process.argv.includes("--aggregate")) {
+    await v.evaluate("window.__ll2scene.showAggregate(true)");
+    const ok = await (async () => {
+      for (let i = 0; i < 600; i++) {
+        const a = await v.evaluate("window.__ll2scene.aggregate()");
+        if (a.error) throw new Error(a.error);
+        if (!a.building && a.points) return a;
+        await sleep(1000);
+      }
+      return null;
+    })();
+    console.log(`aggregate: ${ok ? `${ok.points} points in ${ok.chunks} chunks` : "timed out"}`);
+    if (ok && ok.stats) console.log(`  ${JSON.stringify(ok.stats)}`);
+    await v.key("b");
+    await sleep(1500);
+    await v.shot("live_aggregate_bev.png");
+    // Street level with the single frame hidden: only the aggregate is left,
+    // so any smeared traffic would be obvious.
+    await v.evaluate(`window.__ll2scene.show(${frame})`);
+    await sleep(1500);
+    await v.key("p");
+    await v.key("k");
+    await sleep(1500);
+    await v.shot("live_aggregate_car.png");
+    await v.evaluate("(() => { const el = document.getElementById('sceneSize');"
+      + " el.value = '1'; el.dispatchEvent(new Event('input')); })()");
+    await sleep(800);
+    await v.shot("live_aggregate_car_fine.png");
+    await v.key("p");
+  }
+
   await v.key("k");
   await sleep(1200);
   console.log(`icons: ${JSON.stringify(await v.evaluate("window.__ll2test.icons()"))}`);

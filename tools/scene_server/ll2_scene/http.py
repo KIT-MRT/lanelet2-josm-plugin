@@ -8,6 +8,9 @@ these read-only routes exist:
     GET /scene.json                     the same description sent over SSE
     GET /frame/<i>/points.bin           all LiDARs of frame i, viewer ENU
     GET /frame/<i>/camera/<name>.jpg    one ring camera image, as stored
+    GET /aggregate/meta.json            the whole scene as one static cloud;
+                                        202 with progress while it builds
+    GET /aggregate/<n>.bin              one spatial chunk of it
 
 **Decoding is serialised.** A frame costs seconds of CPU, and the
 thread-per-request behaviour of `ThreadingHTTPServer` turns a few taps on the
@@ -34,6 +37,7 @@ from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 
 FRAME_POINTS_RE = re.compile(r"^/frame/(\d+)/points\.bin$")
 FRAME_IMAGE_RE = re.compile(r"^/frame/(\d+)/camera/([A-Za-z0-9_]+)\.jpg$")
+AGGREGATE_CHUNK_RE = re.compile(r"^/aggregate/(\d+)\.bin$")
 GONE = object()  # the browser left before we got to its request
 
 
@@ -79,7 +83,7 @@ def client_gone(connection):
 
 class SceneHttpServer:
     def __init__(self, source, host="127.0.0.1", port=8767, allow_origin="*", log=print,
-                 disk_cache=None, decode_workers=1):
+                 disk_cache=None, decode_workers=1, aggregator=None):
         self.source = source
         self.disk = disk_cache
         self.host = host
@@ -95,6 +99,11 @@ class SceneHttpServer:
         self._waiting_lock = threading.Lock()
         self._prewarm = None
         self._stopping = threading.Event()
+        self.aggregator = aggregator
+        self._aggregate = None          # (chunks in the scene frame, stats)
+        self._aggregate_thread = None
+        self._aggregate_error = None
+        self._aggregate_blobs = {}      # (index, anchor) -> encoded bytes
         handler = _make_handler(self)
         self._httpd = _QuietThreadingHTTPServer((host, port), handler)
         self.port = self._httpd.server_address[1]
@@ -139,6 +148,62 @@ class SceneHttpServer:
                      % (warmed, time.perf_counter() - t0))
         self._prewarm = threading.Thread(target=run, name="ll2-scene-prewarm", daemon=True)
         self._prewarm.start()
+
+    # -- the whole-scene aggregate -----------------------------------------
+    def aggregate_meta(self):
+        """Chunk list once built, else progress; starts the build on demand."""
+        if self._aggregate is not None:
+            chunks, stats = self._aggregate
+            enu = [self.source.to_enu(np.array([c["centre"]]))[0].tolist() for c in chunks]
+            return {"ready": True, "stats": stats,
+                    "chunks": [{"index": i, "count": c["count"],
+                                "centre": [round(v, 2) for v in enu[i]],
+                                "radius": round(c["radius"], 2)}
+                               for i, c in enumerate(chunks)]}
+        if self._aggregate_error:
+            return {"ready": False, "error": self._aggregate_error}
+        if self.aggregator is None:
+            return {"ready": False, "error": "no aggregator configured"}
+        if self._aggregate_thread is None or not self._aggregate_thread.is_alive():
+            self._aggregate_thread = threading.Thread(
+                target=self._build_aggregate, name="ll2-scene-aggregate", daemon=True)
+            self._aggregate_thread.start()
+        return {"ready": False, "progress": dict(self.aggregator.progress)}
+
+    def _build_aggregate(self):
+        try:
+            cached = self.aggregator.load_cached() if self.aggregator else None
+            if cached is not None:
+                xyz, intensity, stats = cached
+                self.log("scene: aggregate loaded from cache (%d points)" % len(xyz))
+            else:
+                xyz, intensity, stats = self.aggregator.build()
+                self.aggregator.save_cached(xyz, intensity, stats)
+            from .aggregate import chunk_by_tile
+            chunks = chunk_by_tile(xyz, intensity)
+            self._aggregate = (chunks, stats)
+            self.aggregator.progress.update(state="ready", points=int(len(xyz)))
+        except Exception as exc:
+            self._aggregate_error = repr(exc)
+            self.log("scene: aggregate failed: %r" % exc)
+
+    def aggregate_chunk(self, index):
+        if self._aggregate is None:
+            return None
+        chunks, _stats = self._aggregate
+        if not 0 <= index < len(chunks):
+            return None
+        key = (index, self.source.anchor)
+        blob = self._aggregate_blobs.get(key)
+        if blob is None:
+            chunk = chunks[index]
+            blob = encode_points(self.source.to_enu(chunk["xyz"]), chunk["intensity"])
+            self._aggregate_blobs[key] = blob
+            # Keyed by anchor as well, so a chunk is re-projected if JOSM's
+            # anchor is adopted later; keep only a handful of them.
+            while len(self._aggregate_blobs) > 32:
+                self._aggregate_blobs.pop(next(iter(self._aggregate_blobs)))
+        return blob
 
     def stop(self):
         self._stopping.set()
@@ -274,6 +339,18 @@ def _make_handler(server):
             match = FRAME_IMAGE_RE.match(path)
             if match:
                 self._serve_image(int(match.group(1)), match.group(2))
+                return
+            if path == "/aggregate/meta.json":
+                meta = server.aggregate_meta()
+                self._json(meta, 200 if meta.get("ready") else 202)
+                return
+            match = AGGREGATE_CHUNK_RE.match(path)
+            if match:
+                blob = server.aggregate_chunk(int(match.group(1)))
+                if blob is None:
+                    self._json({"error": "no such chunk"}, 404)
+                else:
+                    self._send(blob, "application/octet-stream")
                 return
             self._json({"error": "not found"}, 404)
 

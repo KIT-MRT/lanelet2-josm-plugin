@@ -55,6 +55,7 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 | `◀` `▶|` / `,` `.` | step frames |
 | `▶` | play |
 | Colour | intensity, height or sensor |
+| `Whole scene` / `Shift+P` | the whole scene as one static cloud |
 | `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
 | `[` `]` | walk the six ring cameras |
 | `Overlay` / `O`, `Blend` | blend the recorded image over the render |
@@ -82,6 +83,11 @@ stays JOSM's (and editable) while the sensor data comes from here.
 | `--cache-limit-gb N` | trim the cache to N GB, least recently used first (default 10) |
 | `--clear-cache` | drop this scene's cached frames before starting |
 | `--prewarm` | decode the whole scene into the cache in the background |
+| `--aggregate-voxel M` | voxel size of the whole-scene cloud (default 0.15 m) |
+| `--aggregate-min-frames N` | a voxel must be seen in N frames to count as static (default 3; `1` keeps the traffic) |
+| `--aggregate-range M` | only aggregate returns within this range of the car (default 60 m) |
+| `--aggregate-step N` | use every Nth frame |
+| `--aggregate-now` | build it at startup instead of on demand |
 | `--decode-workers N` | frames decoded at once (default 1, see below) |
 
 ## Cache
@@ -113,6 +119,34 @@ you stopped.
 Raising `--decode-workers` gives better bulk throughput (8 at once decode ~1.8x
 more frames per second overall) at the cost of every individual answer, so it
 is worth it for `--prewarm` and not for stepping.
+
+### The whole scene as one cloud
+
+`Shift+P` in the viewer (or `--aggregate-now`) stacks every frame into one
+cloud. Two things make that usable:
+
+**Voxel downsampling.** Points are binned to `--aggregate-voxel` metres and
+replaced by the centroid of the bin. The example scene: 163 M raw points ->
+**2.7 M**, 44 MB on the wire in 12 spatial chunks.
+
+**Dynamic removal.** `kitscenes` deskews each sweep against the *ego* pose, so
+the car's own motion during the ~100 ms sweep is compensated — but another
+vehicle driving past is a rigid body moving on its own, and lands somewhere
+different in every frame. Stacking leaves a chain of car-shaped blobs down the
+road. A static surface is hit frame after frame as the car approaches; a
+moving vehicle occupies a voxel once or twice. Keeping only voxels seen in at
+least `--aggregate-min-frames` distinct frames removes the traffic with no
+labels, in every direction, at the resolution the cloud is binned to anyway.
+
+On the example scene that is **5.19 M occupied voxels, 2.74 M static** — 47 %
+dropped as moving. What it removes is the traffic; what it also removes is
+wind-blown foliage, which no persistence test can keep. Pass
+`--aggregate-min-frames 1` to keep everything.
+
+Building costs one decode per frame (~100 s with the frame cache warm, far
+longer cold — use `--prewarm`), and is cached as a single `.npz` next to the
+frames, so later runs load it in 0.07 s. The settings are in the file name, so
+changing them builds a new one rather than serving a stale aggregate.
 
 ### Prewarming
 

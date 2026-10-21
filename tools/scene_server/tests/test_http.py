@@ -223,3 +223,85 @@ class PrewarmTest(unittest.TestCase):
         self.assertLessEqual(len(self.source.decodes) - seen, 1,
                              "the warmer kept going after stop()")
         self.server.start()  # so tearDown's stop() has something to stop
+
+
+class AggregateServingTest(unittest.TestCase):
+    """The whole-scene cloud: progress while building, then chunks."""
+
+    def setUp(self):
+        from ll2_scene.aggregate import SceneAggregator
+        from tests.test_aggregate import MovingObjectSource
+        self.source = MovingObjectSource()
+        self.source.scene_id = "stub"
+        self.source.frame_count = 12
+        self.source.cameras = []
+        aggregator = SceneAggregator(self.source, disk_cache=None, voxel=0.3,
+                                     max_range_m=200.0, ego_box=(0.1, 0.1, 0.1),
+                                     log=lambda _m: None)
+        self.server = SceneHttpServer(self.source, port=0, log=lambda _m: None,
+                                      aggregator=aggregator)
+        self.server.start()
+
+    def tearDown(self):
+        self.server.stop()
+
+    def _get(self, path):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=30)
+        try:
+            conn.request("GET", path)
+            response = conn.getresponse()
+            return response.status, response.read()
+        finally:
+            conn.close()
+
+    def _wait_ready(self):
+        import json
+        for _ in range(200):
+            status, body = self._get("/aggregate/meta.json")
+            meta = json.loads(body)
+            if status == 200 and meta.get("ready"):
+                return meta
+            self.assertIsNone(meta.get("error"), meta.get("error"))
+            time.sleep(0.05)
+        self.fail("the aggregate never finished")
+
+    def test_reports_progress_then_serves_chunks(self):
+        status, _ = self._get("/aggregate/meta.json")
+        self.assertEqual(202, status, "the first ask should start the build")
+        meta = self._wait_ready()
+        self.assertGreater(len(meta["chunks"]), 0)
+        self.assertGreater(meta["stats"]["points"], 0)
+        total = 0
+        for chunk in meta["chunks"]:
+            status, body = self._get("/aggregate/%d.bin" % chunk["index"])
+            self.assertEqual(200, status)
+            xyz, _i, _s, _o = decode_points(body)
+            self.assertEqual(chunk["count"], len(xyz))
+            total += len(xyz)
+        self.assertEqual(meta["stats"]["points"], total)
+
+    def test_a_chunk_is_encoded_once_and_reused(self):
+        meta = self._wait_ready()
+        first = self._get("/aggregate/0.bin")[1]
+        second = self._get("/aggregate/0.bin")[1]
+        self.assertEqual(first, second)
+        self.assertGreater(len(meta["chunks"]), 0)
+
+    def test_unknown_chunk(self):
+        self._wait_ready()
+        self.assertEqual(404, self._get("/aggregate/999.bin")[0])
+
+    def test_without_an_aggregator(self):
+        import json
+        server = SceneHttpServer(self.source, port=0, log=lambda _m: None)
+        server.start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
+            conn.request("GET", "/aggregate/meta.json")
+            response = conn.getresponse()
+            meta = json.loads(response.read())
+            conn.close()
+            self.assertEqual(202, response.status)
+            self.assertIn("aggregator", meta["error"])
+        finally:
+            server.stop()

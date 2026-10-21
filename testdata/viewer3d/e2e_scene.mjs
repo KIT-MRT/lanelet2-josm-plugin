@@ -22,9 +22,8 @@ const POINTS_PER_FRAME = 500;
 // question about geometry, not about a counter.
 const frameOrigin = (i) => [10 * i, 0, Z];
 
-function encodeCloud(index) {
-  const count = POINTS_PER_FRAME;
-  const origin = frameOrigin(index);
+function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
+  const origin = [spacing * index, 0, Z];
   const header = new ArrayBuffer(40);
   const view = new DataView(header);
   for (const [k, ch] of [..."LL2PC1"].entries()) view.setUint8(k, ch.charCodeAt(0));
@@ -55,12 +54,37 @@ const ego = {
 };
 
 let served = [];
+let aggregateReadyAfter = 2;   // 202 with progress this many times, then ready
+let aggregateAsked = 0;
+let aggregateChunksServed = [];
+const AGG_CHUNKS = 3;
+const AGG_PER_CHUNK = 200;
 let delayMs = 0;        // pretend a frame costs real decode time
 let inFlight = 0;
 let maxInFlight = 0;
 const data = http.createServer((req, res) => {
   const cors = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
   const match = /^\/frame\/(\d+)\/points\.bin$/.exec(req.url);
+  if (req.url === "/aggregate/meta.json") {
+    aggregateAsked++;
+    const ready = aggregateAsked > aggregateReadyAfter;
+    res.writeHead(ready ? 200 : 202, { ...cors, "Content-Type": "application/json" });
+    res.end(JSON.stringify(ready
+      ? { ready: true,
+          stats: { points: AGG_CHUNKS * AGG_PER_CHUNK, voxel_m: 0.15, min_frames: 3 },
+          chunks: Array.from({ length: AGG_CHUNKS }, (_, i) => (
+            { index: i, count: AGG_PER_CHUNK, centre: [i * 40, 0, 100], radius: 20 })) }
+      : { ready: false, progress: { state: "scanning", done: aggregateAsked, total: 9 } }));
+    return;
+  }
+  const aggChunk = /^\/aggregate\/(\d+)\.bin$/.exec(req.url);
+  if (aggChunk) {
+    const index = Number(aggChunk[1]);
+    aggregateChunksServed.push(index);
+    res.writeHead(200, { ...cors, "Content-Type": "application/octet-stream" });
+    res.end(encodeCloud(index, AGG_PER_CHUNK, 40));
+    return;
+  }
   if (req.url === "/scene.json") {
     res.writeHead(200, { ...cors, "Content-Type": "application/json" });
     res.end(JSON.stringify(sceneInfo()));
@@ -282,6 +306,56 @@ try {
   t.check("showing the frame that was asked for",
     dist3((await points()).origin, frameOrigin(5)) < 1e-9, JSON.stringify((await points()).origin));
   delayMs = 0;
+
+  // ---- the whole scene as one cloud ------------------------------------------------
+  const aggOf = () => v.evaluate("window.__ll2scene.aggregate()");
+  const aggLabel = () => v.evaluate("document.getElementById('sceneAggregate').textContent");
+  t.check("nothing is aggregated to begin with", (await aggOf()).points === 0);
+  await v.key("P", { modifiers: ["shift"] });
+  await sleep(300);
+  t.check("Shift+P asks the server to build it", (await aggOf()).building,
+    JSON.stringify(await aggOf()));
+  t.check("and the button reports the progress", (await aggLabel()).startsWith("Building"),
+    await aggLabel());
+  const built = await waitFor(async () => {
+    const a = await aggOf();
+    return !a.building && a.points > 0;
+  }, 15000);
+  t.check("it arrives once the server says ready", built, JSON.stringify(await aggOf()));
+  let agg = await aggOf();
+  t.check("every chunk is loaded", agg.loaded === AGG_CHUNKS
+    && agg.points === AGG_CHUNKS * AGG_PER_CHUNK, JSON.stringify(agg));
+  t.check("chunks are fetched one at a time, in order",
+    aggregateChunksServed.join() === "0,1,2", aggregateChunksServed.join());
+  let stats = await points();
+  t.check("the aggregate is drawn beside the single frame",
+    stats.aggregate === AGG_CHUNKS * AGG_PER_CHUNK && stats.aggregateChunks === AGG_CHUNKS
+    && stats.count === POINTS_PER_FRAME, JSON.stringify(stats));
+  await v.key("b");
+  await v.shot("scene_aggregate.png");
+
+  await v.key("P", { modifiers: ["shift"] });
+  await sleep(200);
+  t.check("Shift+P again hides it without throwing it away",
+    !(await points()).aggregateVisible && (await aggOf()).points > 0);
+  await v.key("P", { modifiers: ["shift"] });
+  await sleep(200);
+  t.check("and shows it again without refetching",
+    (await points()).aggregateVisible && aggregateChunksServed.length === AGG_CHUNKS,
+    aggregateChunksServed.join());
+  await v.key("p");
+  await sleep(150);
+  // Both live under one parent group; hiding the frame cloud by hiding that
+  // parent took the aggregate with it, while the child's own flag still said
+  // "visible". The hook reports effective visibility for that reason.
+  let vis = await points();
+  t.check("P hides the frame cloud but leaves the aggregate",
+    !vis.visible && vis.aggregateVisible, JSON.stringify(vis));
+  t.check("and the aggregate is still actually drawn",
+    (await v.evaluate("window.__ll2test.stats().drawCalls")) > 0);
+  await v.key("p");
+  vis = await points();
+  t.check("P brings the frame cloud back", vis.visible && vis.aggregateVisible);
 
   // ---- camera lock ---------------------------------------------------------------
   await v.evaluate("window.__ll2scene.show(2)");

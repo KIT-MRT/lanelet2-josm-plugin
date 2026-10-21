@@ -14,6 +14,7 @@ import sys
 import time
 import urllib.request
 
+from .aggregate import SceneAggregator
 from .bridge import ViewerBridge
 from .cache import DEFAULT_LIMIT_GB, FrameDiskCache, default_cache_dir
 from .http import SceneHttpServer
@@ -66,6 +67,17 @@ def main(argv=None):
     parser.add_argument("--prewarm", action="store_true",
                         help="decode the whole scene into the cache in the background, "
                              "pausing whenever the browser asks for something")
+    parser.add_argument("--aggregate-voxel", type=float, default=0.15,
+                        help="voxel size of the whole-scene cloud, metres")
+    parser.add_argument("--aggregate-min-frames", type=int, default=3,
+                        help="a voxel must be seen in this many frames to count as "
+                             "static; 1 keeps the moving traffic in")
+    parser.add_argument("--aggregate-range", type=float, default=60.0,
+                        help="only aggregate returns within this range of the car")
+    parser.add_argument("--aggregate-step", type=int, default=1,
+                        help="use every Nth frame when aggregating")
+    parser.add_argument("--aggregate-now", action="store_true",
+                        help="build the aggregate at startup instead of on demand")
     parser.add_argument("--decode-workers", type=int, default=1,
                         help="frames decoded at once (default 1: more of them makes "
                              "every single answer slower, which is what the user feels)")
@@ -96,13 +108,19 @@ def main(argv=None):
             disk.clear()
         log("scene: %s" % disk.describe())
         origin = "http://%s:%d" % (args.viewer_host, args.viewer_port)
+        aggregator = SceneAggregator(
+            source, disk_cache=disk, voxel=args.aggregate_voxel,
+            max_range_m=args.aggregate_range, min_frames=args.aggregate_min_frames,
+            step=args.aggregate_step, log=log)
         http = SceneHttpServer(source, host=args.viewer_host, port=args.http_port,
                                allow_origin=origin, log=log, disk_cache=disk,
-                               decode_workers=args.decode_workers)
+                               decode_workers=args.decode_workers, aggregator=aggregator)
         http.start()
         if args.prewarm:
             log("scene: prewarming %d frames in the background" % source.frame_count)
             http.prewarm()
+        if args.aggregate_now:
+            http.aggregate_meta()  # starts the build thread
 
     def on_connect():
         if send_map:

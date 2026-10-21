@@ -137,10 +137,25 @@ to learn about the viewport rectangle.
       (0 = north) and it was written `atan2(dy, dx)`. It uses `lookAtPoint`
       now, which has no convention to get wrong.
 
-### M3 — aggregated scene cloud
-- [ ] Voxel downsample + chunking + draw-distance LOD.
-      220 frames x 740 k = 163 M points raw, so this is a downsampling problem,
-      not a streaming one.
+### M3 — aggregated scene cloud  [x]
+- [x] Voxel downsample: 163 M raw points -> 2.7 M at 0.15 m, 44 MB in 12
+      spatial chunks, streamed one at a time so a frame the user asks for is
+      never stuck behind them.
+- [x] **Dynamic removal by voxel persistence.** Deskew fixes the *ego's*
+      motion, not other vehicles': stacking frames leaves a chain of
+      car-shaped blobs down the road. A voxel seen in fewer than
+      `--aggregate-min-frames` distinct frames is dropped. On the example
+      scene 5.19 M occupied voxels -> 2.74 M static (47 % dropped), and what
+      goes is the traffic (plus wind-blown foliage, which nothing can keep).
+- [x] Built on demand (`Shift+P`) with progress on the button, or
+      `--aggregate-now`; cached as one `.npz`, reloaded in 0.07 s.
+- [ ] Draw-distance LOD: not needed at 2.7 M points / 12 draw calls. The
+      chunks carry centre and radius for when it is.
+
+**Fixed while testing it:** `P` hid the aggregate too, because the frame
+cloud's switch toggled the *parent* group of both. The test had asserted the
+child's own `visible` flag, which stays true under a hidden parent, so it
+passed while the viewer was wrong; the hook now reports effective visibility.
 
 ### M4 — remaining colourings
 - [ ] Height colormap, per-sensor colour, camera-projected RGB.

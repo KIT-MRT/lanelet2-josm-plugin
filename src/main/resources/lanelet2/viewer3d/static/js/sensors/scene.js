@@ -14,6 +14,11 @@ import { store } from "../store.js";
 import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handleRigKey,
          projectToImage } from "./camrig.js";
 
+/** The whole-scene aggregate: built on the server, streamed in chunks. */
+export const aggregateState = {
+  on: false, building: false, chunks: 0, loaded: 0, points: 0, error: null, stats: null,
+};
+
 export const sceneState = {
   info: null,      // the scene message's payload
   frame: 0,
@@ -52,8 +57,10 @@ export function installScene() {
     label: document.getElementById("sceneFrameLabel"),
     mode: document.getElementById("sceneMode"),
     size: document.getElementById("sceneSize"),
+    aggregate: document.getElementById("sceneAggregate"),
   };
   if (!els.bar) return;
+  els.aggregate.addEventListener("click", () => toggleAggregate());
   els.points.classList.add("on");
   els.points.addEventListener("click", () => togglePoints());
   els.car.addEventListener("click", () => goToCar());
@@ -87,6 +94,91 @@ const shortId = (id) => (id && id.length > 12 ? `${id.slice(0, 8)}…` : id || "
 
 export function frameUrl(index) {
   return `${sceneState.info.base}/frame/${index}/points.bin`;
+}
+
+// ---- the whole-scene aggregate ------------------------------------------------
+// Building it means decoding every frame, so the server does it once in the
+// background and caches it; until it is ready the meta route answers 202 with
+// progress, which the button shows.
+const AGGREGATE_POLL_MS = 1000;
+let aggregateTimer = null;
+
+export function toggleAggregate(on) {
+  const next = on === undefined ? !aggregateState.on : !!on;
+  aggregateState.on = next;
+  pointLayer.setAggregateVisible(next);
+  refreshAggregateButton();
+  if (next && !aggregateState.loaded && !aggregateState.building) loadAggregate();
+}
+
+function loadAggregate() {
+  const info = sceneState.info;
+  if (!info) return Promise.resolve(null);
+  aggregateState.building = true;
+  aggregateState.error = null;
+  refreshAggregateButton();
+  return fetch(`${info.base}/aggregate/meta.json`)
+    .then((r) => r.json().then((meta) => ({ status: r.status, meta })))
+    .then(({ status, meta }) => {
+      if (meta.error) throw new Error(meta.error);
+      if (status === 202 || !meta.ready) {
+        aggregateState.stats = meta.progress || null;
+        refreshAggregateButton();
+        clearTimeout(aggregateTimer);
+        aggregateTimer = setTimeout(loadAggregate, AGGREGATE_POLL_MS);
+        return null;
+      }
+      aggregateState.stats = meta.stats || null;
+      aggregateState.chunks = meta.chunks.length;
+      aggregateState.loaded = 0;
+      aggregateState.points = 0;
+      pointLayer.clearAggregate();
+      return fetchChunks(meta.chunks);
+    })
+    .catch((err) => {
+      aggregateState.building = false;
+      aggregateState.error = String(err.message || err);
+      toast(`Whole scene: ${aggregateState.error}`, "error");
+      refreshAggregateButton();
+      return null;
+    });
+}
+
+/** One chunk at a time, so a frame the user asks for is never stuck behind them. */
+function fetchChunks(chunks) {
+  const info = sceneState.info;
+  const next = (i) => {
+    if (i >= chunks.length || !sceneState.info || sceneState.info !== info) {
+      aggregateState.building = false;
+      refreshAggregateButton();
+      return Promise.resolve(null);
+    }
+    return fetch(`${info.base}/aggregate/${chunks[i].index}.bin`)
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .then((buf) => {
+        if (buf) {
+          aggregateState.points += pointLayer.addAggregateChunk(buf);
+          aggregateState.loaded++;
+          refreshAggregateButton();
+        }
+        return next(i + 1);
+      });
+  };
+  return next(0);
+}
+
+function refreshAggregateButton() {
+  if (!els.aggregate) return;
+  els.aggregate.classList.toggle("on", aggregateState.on);
+  const s = aggregateState;
+  let label = "Whole scene";
+  if (s.error) label = "Whole scene ✕";
+  else if (s.building && s.chunks) label = `Whole scene ${s.loaded}/${s.chunks}`;
+  else if (s.building) {
+    const p = s.stats || {};
+    label = p.total ? `Building ${p.done || 0}/${p.total}` : "Building…";
+  } else if (s.points) label = `Whole scene ${(s.points / 1e6).toFixed(1)}M`;
+  els.aggregate.textContent = label;
 }
 
 /** Where a recorded camera frame lives; the camera lock blends it over the render. */
@@ -280,6 +372,11 @@ export function handleSceneKey(event) {
     step(1);
     return true;
   }
+  // Shift+P before P: `event.key` is already "P" when shift is held.
+  if ((event.key === "p" || event.key === "P") && event.shiftKey) {
+    toggleAggregate();
+    return true;
+  }
   if (event.key === "p" || event.key === "P") {
     togglePoints();
     return true;
@@ -336,6 +433,8 @@ if (TEST_HOOKS) {
                     base: sceneState.info ? sceneState.info.base : null }),
     points: () => pointLayer.stats(),
     rig: () => rigState(),
+    aggregate: () => ({ ...aggregateState }),
+    showAggregate: (on) => toggleAggregate(on),
     project: (world) => projectToImage(world),
     show: (i) => showFrame(i),
     ego: (i) => (sceneState.info && sceneState.info.ego ? sceneState.info.ego.pos[i] : null),

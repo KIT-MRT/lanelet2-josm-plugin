@@ -234,6 +234,8 @@
     </select></label>
     <label title="Point size in pixels">Size <input type="range" id="sceneSize" min="1" max="8" step="1" value="2"></label>
     <span class="sep"></span>
+    <button type="button" id="sceneAggregate" title="The whole scene as one cloud, with the moving traffic filtered out (Shift+P). Built once on the server, then cached.">Whole scene</button>
+    <span class="sep"></span>
     <button type="button" id="sceneLock" title="Lock the view to a ring camera of the car: exact pose and intrinsics, so the render matches the recorded image pixel for pixel (Shift+L)">Camera lock</button>
     <select id="sceneCamera" title="Which ring camera ([ and ] cycle)"></select>
     <button type="button" id="sceneOverlay" class="on" title="Blend the recorded camera image over the render (O)">Overlay</button>
@@ -288,7 +290,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P points · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P points · shift+P whole scene · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {

@@ -403,6 +403,18 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   camera where it is** (heading/pitch read back off the camera's direction,
   roll dropped) rather than restoring the pre-lock view, which threw away the
   vantage point the user had just lined up.
+- **The whole-scene aggregate** (`ll2_scene/aggregate.py`) voxel-downsamples
+  every frame into one cloud (163 M -> 2.7 M points) and drops **dynamic**
+  points by voxel persistence: a voxel seen in fewer than `min_frames`
+  distinct frames was traffic, not structure. This is needed because
+  `kitscenes` deskews against the *ego* pose only -- other vehicles are rigid
+  bodies moving on their own and smear into a chain of car-shaped blobs.
+  Cached as one `.npz` whose name carries the settings.
+- **A flag on a group whose parent is hidden means nothing.** The frame cloud
+  and the aggregate share a parent, and hiding the frame cloud by hiding that
+  parent silently took the aggregate with it while its own `visible` stayed
+  true -- the test asserted the flag and passed. `pointLayer.stats()` reports
+  effective visibility now.
 - **The dataset is read-only.** Decoded frames cache under
   `$XDG_CACHE_HOME/josm-lanelet2/scene-server/`, never beside the data, and
   they hold the frame in the *scene's* metric frame so adopting JOSM's anchor

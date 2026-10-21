@@ -93,34 +93,96 @@ export function parseCloud(buffer) {
   return { count, origin, positions, intensity, sensor };
 }
 
+function makeMaterial(size, gain) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uSize: { value: size },
+      uMode: { value: 0 },
+      uGain: { value: gain },
+      uZMin: { value: 0 },
+      uZRange: { value: 10 },
+      uSensorColors: { value: SENSOR_COLORS.map((c) => new THREE.Color(c)) },
+    },
+    vertexShader: VERTEX,
+    fragmentShader: FRAGMENT,
+  });
+}
+
 class PointLayer {
   constructor() {
     this.group = new THREE.Group();
     this.group.name = "pointClouds";
+    // The single frame and the whole-scene aggregate are separate groups so
+    // either can be shown alone, and separate materials because the height
+    // colouring is scaled to the cloud it belongs to.
+    this.frameGroup = new THREE.Group();
+    this.aggregateGroup = new THREE.Group();
+    this.group.add(this.frameGroup);
+    this.group.add(this.aggregateGroup);
     this.cloud = null;
     this.visible = true;
+    this.aggregateVisible = true;
+    this.aggregateBounds = null; // { min, max } z over every chunk loaded
+    this.aggregateCount = 0;
     this.mode = "intensity";
     this.size = 2;
     this.gain = 3; // most returns sit well below the retro-reflector ceiling
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        uSize: { value: this.size },
-        uMode: { value: 0 },
-        uGain: { value: this.gain },
-        uZMin: { value: 0 },
-        uZRange: { value: 10 },
-        uSensorColors: { value: SENSOR_COLORS.map((c) => new THREE.Color(c)) },
-      },
-      vertexShader: VERTEX,
-      fragmentShader: FRAGMENT,
-    });
+    this.material = makeMaterial(this.size, this.gain);
+    this.aggregateMaterial = makeMaterial(this.size, this.gain);
+    this.materials = [this.material, this.aggregateMaterial];
+  }
+
+  /** Add one chunk of the whole-scene aggregate. */
+  addAggregateChunk(buffer) {
+    const cloud = parseCloud(buffer);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(cloud.positions, 3));
+    geometry.setAttribute("aIntensity", new THREE.BufferAttribute(
+      cloud.intensity || new Uint8Array(cloud.count), 1, true));
+    geometry.setAttribute("aSensor", new THREE.BufferAttribute(new Uint8Array(cloud.count), 1, false));
+    geometry.computeBoundingSphere();
+    const points = new THREE.Points(geometry, this.aggregateMaterial);
+    points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
+    points.renderOrder = 2;
+    this.aggregateGroup.add(points);
+    this.aggregateCount += cloud.count;
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 2; i < cloud.positions.length; i += 3) {
+      const z = cloud.origin[2] + cloud.positions[i];
+      if (z < min) min = z;
+      if (z > max) max = z;
+    }
+    const bounds = this.aggregateBounds || { min, max };
+    bounds.min = Math.min(bounds.min, min);
+    bounds.max = Math.max(bounds.max, max);
+    this.aggregateBounds = bounds;
+    // Heights are absolute metres here, so the colour ramp has to span what
+    // was actually loaded or everything comes out one colour.
+    this.aggregateMaterial.uniforms.uZMin.value = -bounds.min;
+    this.aggregateMaterial.uniforms.uZRange.value = Math.max(0.5, bounds.max - bounds.min);
+    return cloud.count;
+  }
+
+  clearAggregate() {
+    for (const child of [...this.aggregateGroup.children]) {
+      child.geometry.dispose();
+      this.aggregateGroup.remove(child);
+    }
+    this.aggregateCount = 0;
+    this.aggregateBounds = null;
+  }
+
+  setAggregateVisible(on) {
+    this.aggregateVisible = !!on;
+    this.aggregateGroup.visible = this.aggregateVisible;
   }
 
   attach(parent) {
     parent.add(this.group);
   }
 
-  /** Replace the shown cloud with one decoded blob. */
+  /** Replace the shown single-frame cloud with one decoded blob. */
   setCloud(buffer) {
     const cloud = parseCloud(buffer);
     this.clear();
@@ -138,7 +200,7 @@ class PointLayer {
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
     points.frustumCulled = true;
     points.renderOrder = 2;
-    this.group.add(points);
+    this.frameGroup.add(points);
     this.cloud = { ...cloud, object: points };
     // Height colouring spans this cloud: a fixed range would be meaningless
     // in a map whose absolute heights are in the hundreds of metres.
@@ -155,46 +217,53 @@ class PointLayer {
     }
     this.material.uniforms.uZMin.value = -min;
     this.material.uniforms.uZRange.value = Math.max(0.5, max - min);
-    this.group.visible = this.visible;
+    this.frameGroup.visible = this.visible;
     return this.cloud;
   }
 
   clear() {
-    for (const child of [...this.group.children]) {
+    for (const child of [...this.frameGroup.children]) {
       child.geometry.dispose();
-      this.group.remove(child);
+      this.frameGroup.remove(child);
     }
     this.cloud = null;
   }
 
+  /** The single-frame cloud only. The aggregate has its own switch. */
   setVisible(on) {
     this.visible = !!on;
-    this.group.visible = this.visible;
+    this.frameGroup.visible = this.visible;
   }
 
   setMode(mode) {
     this.mode = COLOR_MODES.includes(mode) ? mode : "intensity";
-    this.material.uniforms.uMode.value = COLOR_MODES.indexOf(this.mode);
+    for (const m of this.materials) m.uniforms.uMode.value = COLOR_MODES.indexOf(this.mode);
   }
 
   setSize(px) {
     this.size = Math.max(1, Math.min(12, px));
-    this.material.uniforms.uSize.value = this.size;
+    for (const m of this.materials) m.uniforms.uSize.value = this.size;
   }
 
   setGain(gain) {
     this.gain = Math.max(0.25, Math.min(16, gain));
-    this.material.uniforms.uGain.value = this.gain;
+    for (const m of this.materials) m.uniforms.uGain.value = this.gain;
   }
 
   stats() {
     const cloud = this.cloud;
     return {
       count: cloud ? cloud.count : 0,
-      visible: this.group.visible,
+      // Effective visibility: a flag on a group whose parent is hidden says
+      // nothing, which is exactly how hiding the frame cloud once took the
+      // aggregate with it.
+      visible: this.group.visible && this.frameGroup.visible,
       mode: this.mode,
       size: this.size,
       origin: cloud ? cloud.origin : null,
+      aggregate: this.aggregateCount,
+      aggregateChunks: this.aggregateGroup.children.length,
+      aggregateVisible: this.group.visible && this.aggregateGroup.visible,
       // First point in world ENU, so a test can check where a cloud landed.
       first: cloud && cloud.count
         ? [cloud.origin[0] + cloud.positions[0],

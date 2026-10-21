@@ -161,6 +161,10 @@ JOSM bridge does, so **viewing needs no JOSM** — and when JOSM *is* connected,
 the map stays JOSM's (editable) while the sensor data comes from the scene
 server.
 
+**Whole scene (Shift+P)** stacks every frame into one point cloud with the
+moving traffic filtered out (163 M points become 2.7 M), so the map can be
+checked against everything the car saw rather than one frame at a time.
+
 **Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
 ring cameras was, with that camera's own intrinsics, and blends the recorded
 image over the render (`O`, with a blend slider) — so the map, the point cloud
