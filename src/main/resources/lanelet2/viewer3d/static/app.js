@@ -118,6 +118,22 @@ document.addEventListener("click", (e) => {
   const b = e.target && e.target.closest ? e.target.closest("button") : null;
   if (b) b.blur();
 }, true);
+// The same for sliders, checkboxes and drop-downs once the mouse is done
+// with them: otherwise WASD stays with the control until the map is clicked.
+// Keyboard users who tabbed there keep the focus (no pointer involved).
+let pointerOnControl = null;
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target;
+  pointerOnControl = el && el.tagName === "INPUT" && (el.type === "range" || el.type === "checkbox") ? el : null;
+}, true);
+document.addEventListener("pointerup", () => {
+  const el = pointerOnControl;
+  pointerOnControl = null;
+  if (el) setTimeout(() => el.blur(), 0);
+}, true);
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.tagName === "SELECT") e.target.blur();
+}, true);
 
 // Only auto-frame the first time data appears; later snapshots (e.g. live
 // edits streamed from JOSM) must not yank the camera the user has set. Framed

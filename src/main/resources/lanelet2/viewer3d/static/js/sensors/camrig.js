@@ -146,7 +146,6 @@ function refreshBar() {
     b.classList.toggle("sel", b.dataset.camera === rig.camera);
     b.classList.toggle("live", rig.on && b.dataset.camera === rig.camera);
   }
-  window.dispatchEvent(new CustomEvent("ll2:rig", { detail: { on: rig.on, camera: rig.camera } }));
 }
 
 export function setLocked(on, frame) {
