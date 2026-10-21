@@ -284,6 +284,61 @@ re-projection is redone. Positions are stored as float32 relative to a local
 origin, which costs at most 0.034 mm against source data quantised to 5 mm;
 intensity and sensor id come back exact.
 
+## A whole city
+
+```bash
+# every scene of a city (all splits) on the city-wide map, without JOSM
+.venv/bin/python -m ll2_scene --city $KITSCENES_ROOT --map /path/to/city/lanelet2_map.osm
+
+# or with the map already open in JOSM (3D viewer running): leave out --map
+.venv/bin/python -m ll2_scene --city $KITSCENES_ROOT
+
+# once, ahead of time: build every scene's static cloud into the cache
+.venv/bin/python -m ll2_scene --city $KITSCENES_ROOT --build-aggregates
+```
+
+`--city` takes `KITSCENES_ROOT`, its `data/`, or a single split. The dataset
+has no city column anywhere, but every scene's `maps/origin.json` is its
+city's origin and its trajectory says where it drove, so each scene goes to
+the nearest of the three cities the dataset names (Karlsruhe, Frankfurt,
+Sindelfingen). By default the city with the most scenes is served;
+`--city-name` picks another, and the log lists what else is there. Archives
+that were never extracted are counted and skipped — nothing can be served
+from a tar.
+
+In the viewer:
+
+| | |
+|---|---|
+| tracks | every scene's ego trajectory: a line, a dot per frame, an arrow per frame for the 6D pose once close enough to read one. One colour per scene |
+| hover a track | scene id, split and frame under the pointer |
+| click a dot, arrow or line | that scene becomes *the* scene, at that frame; everything above (frames, camera lock, overlay, whole scene, colours) then works as for a single scene. The camera stays put; `K` goes to the car |
+| `Deselect` | back to the city alone |
+| `Load 300 m` | the static clouds of every scene within the radius of the camera; scenes whose cloud is not built yet are built now (one at a time, minutes each) |
+| `Auto` | keep loading around the camera as it moves — but only clouds that are **already built**: flying across a city should never start a build |
+| Radius | how far around the camera; clouds beyond 1.3× of it are dropped again |
+| `Unload`, `Tracks` | drop every city cloud; hide the trajectories |
+
+Clicking works in view mode; in edit mode a click belongs to the map. With
+no scene picked, the scene bar shrinks to colour, size and the filter
+panel, which act on the city's clouds. Clouds from overlapping scenes simply
+add up, which is the point: one street driven by five scenes is five
+scenes' worth of static points. While the picked scene shows its own
+whole-scene cloud, its city copy is hidden so nothing is drawn twice.
+
+The trajectories are the pose of the base frame, which is `lidar_top` —
+2.1 m above the road, which is where they are drawn.
+
+**Disk.** A whole-scene cloud is ~31 MB in the cache at the default settings,
+so a city of 300 scenes is ~9 GB of them. Those are never trimmed (frames are,
+to `--cache-limit-gb`, shared by every scene of the city); delete the
+`aggregate-*.npz` files to reclaim the space.
+
+**One at a time, city-wide.** All scenes share one decode gate and one
+aggregate-build gate, so loading ten scenes cannot start ten builds; a cached
+cloud never waits behind a build. Scenes are opened on first use and the
+least recently used idle ones are closed beyond `--max-open-scenes` (8).
+
 ## Routes
 
 Read-only, CORS-restricted to the viewer's origin:
@@ -294,6 +349,15 @@ Read-only, CORS-restricted to the viewer's origin:
 | `GET /scene.json` | the scene description (frames, times, ego track, camera calibration) |
 | `GET /frame/<i>/points.bin` | all LiDARs of frame `i`, in viewer ENU — see `points.py` for the layout |
 | `GET /frame/<i>/camera/<name>.jpg` | one ring camera image |
+| `GET /aggregate/meta.json` | the whole-scene cloud's chunks; 202 with progress while it builds |
+| `GET /aggregate/<n>.bin` | one 128 m chunk of it |
+
+In city mode the same routes live under `/scene/<id>/`, next to:
+
+| route | returns |
+|---|---|
+| `GET /city.json` | every scene's trajectory in viewer ENU (gzipped), and the Vistas class table |
+| `GET /city/status.json` | per scene: cloud built, building, open |
 
 ## Coordinates
 
@@ -321,4 +385,13 @@ node ../../testdata/viewer3d/live_scene.mjs /path/to/<scene-uuid> --frame 110
 ```
 
 which also prints how far the point cloud's ground sits from the map's `ele`
-(−0.5 cm on the example scene).
+(−0.5 cm on the example scene). City mode has the same pair:
+`testdata/viewer3d/e2e_city.mjs` (fakes four scenes) and
+
+```bash
+node ../../testdata/viewer3d/live_city.mjs $KITSCENES_ROOT --map city.osm --load
+```
+
+which opens a scene by clicking its trajectory, checks the trajectory against
+the scene's own ego track (3.8 mm on the example scene: positions travel
+rounded to the centimetre) and loads the clouds around it.

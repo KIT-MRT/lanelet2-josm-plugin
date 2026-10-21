@@ -240,8 +240,13 @@ class PointLayer {
     // colouring is scaled to the cloud it belongs to.
     this.frameGroup = new THREE.Group();
     this.aggregateGroup = new THREE.Group();
+    // Whole-scene clouds of *other* scenes around the camera, in city mode:
+    // chunks come and go as the camera moves, keyed "<scene>/<chunk>".
+    this.cityGroup = new THREE.Group();
+    this.cityChunks = new Map();
     this.group.add(this.frameGroup);
     this.group.add(this.aggregateGroup);
+    this.group.add(this.cityGroup);
     this.cloud = null;
     this.visible = true;
     this.aggregateVisible = true;
@@ -265,9 +270,8 @@ class PointLayer {
     this.materials = [this.material, this.aggregateMaterial];
   }
 
-  /** Add one chunk of the whole-scene aggregate. */
-  addAggregateChunk(buffer) {
-    const cloud = parseCloud(buffer);
+  /** Points for one aggregate chunk (no instances: those are per frame). */
+  _staticPoints(cloud) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(cloud.positions, 3));
     geometry.setAttribute("aIntensity", new THREE.BufferAttribute(
@@ -287,12 +291,6 @@ class PointLayer {
     const points = new THREE.Points(geometry, this.aggregateMaterial);
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
     points.renderOrder = 2;
-    points.userData.cloud = { ...cloud, object: points };
-    this.aggregateGroup.add(points);
-    this.groundReady = false;
-    this.aggregateCount += cloud.count;
-    if (cloud.classes) this.aggregateHasClasses = true;
-    if (cloud.rgb) this.aggregateHasRgb = true;
     let min = Infinity;
     let max = -Infinity;
     for (let i = 2; i < cloud.positions.length; i += 3) {
@@ -300,15 +298,101 @@ class PointLayer {
       if (z < min) min = z;
       if (z > max) max = z;
     }
-    const bounds = this.aggregateBounds || { min, max };
-    bounds.min = Math.min(bounds.min, min);
-    bounds.max = Math.max(bounds.max, max);
-    this.aggregateBounds = bounds;
-    // Heights are absolute metres here, so the colour ramp has to span what
-    // was actually loaded or everything comes out one colour.
-    this.aggregateMaterial.uniforms.uZMin.value = -bounds.min;
-    this.aggregateMaterial.uniforms.uZRange.value = Math.max(0.5, bounds.max - bounds.min);
+    points.userData.cloud = { ...cloud, object: points, zMin: min, zMax: max };
+    return points;
+  }
+
+  /** Add one chunk of the whole-scene aggregate. */
+  addAggregateChunk(buffer) {
+    const cloud = parseCloud(buffer);
+    const points = this._staticPoints(cloud);
+    this.aggregateGroup.add(points);
+    this.groundReady = false;
+    this.aggregateCount += cloud.count;
+    if (cloud.classes) this.aggregateHasClasses = true;
+    if (cloud.rgb) this.aggregateHasRgb = true;
+    this._refreshStaticRange();
     return cloud.count;
+  }
+
+  /**
+   * Heights are absolute metres in the static clouds, so the colour ramp has
+   * to span what is actually loaded -- this scene's aggregate and every city
+   * chunk around it -- or everything comes out one colour.
+   */
+  _refreshStaticRange() {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const group of [this.aggregateGroup, this.cityGroup]) {
+      for (const child of group.children) {
+        const c = child.userData.cloud;
+        if (!c || !c.count) continue;
+        min = Math.min(min, c.zMin);
+        max = Math.max(max, c.zMax);
+      }
+    }
+    if (min > max) {
+      this.aggregateBounds = null;
+      return;
+    }
+    this.aggregateBounds = { min, max };
+    this.aggregateMaterial.uniforms.uZMin.value = -min;
+    this.aggregateMaterial.uniforms.uZRange.value = Math.max(0.5, max - min);
+  }
+
+  // ---- city mode: static chunks of many scenes, loaded around the camera ----
+  /** Add chunk `key` ("<scene>/<index>") of scene `sceneId`; replaces a same-key one. */
+  addCityChunk(key, sceneId, buffer) {
+    this.removeCityChunk(key);
+    const cloud = parseCloud(buffer);
+    const points = this._staticPoints(cloud);
+    points.userData.sceneId = sceneId;
+    points.visible = !this.hiddenCityScenes || !this.hiddenCityScenes.has(sceneId);
+    this.cityGroup.add(points);
+    this.cityChunks.set(key, points);
+    this.groundReady = false;
+    this._refreshStaticRange();
+    return cloud.count;
+  }
+
+  removeCityChunk(key) {
+    const points = this.cityChunks.get(key);
+    if (!points) return false;
+    points.geometry.dispose();
+    this.cityGroup.remove(points);
+    this.cityChunks.delete(key);
+    this.groundReady = false;
+    this._refreshStaticRange();
+    return true;
+  }
+
+  clearCity() {
+    for (const key of [...this.cityChunks.keys()]) this.removeCityChunk(key);
+  }
+
+  /**
+   * Hide one scene's city chunks while that scene shows its own aggregate, so
+   * the same points are not drawn twice.
+   */
+  setCitySceneVisible(sceneId, on) {
+    this.hiddenCityScenes = this.hiddenCityScenes || new Set();
+    if (on) this.hiddenCityScenes.delete(sceneId);
+    else this.hiddenCityScenes.add(sceneId);
+    for (const points of this.cityChunks.values()) {
+      if (points.userData.sceneId === sceneId) points.visible = !!on;
+    }
+  }
+
+  cityStats() {
+    const scenes = new Set();
+    let points = 0;
+    let shown = 0;
+    for (const p of this.cityChunks.values()) {
+      scenes.add(p.userData.sceneId);
+      points += p.userData.cloud.count;
+      if (p.visible) shown += p.userData.cloud.count;
+    }
+    return { chunks: this.cityChunks.size, scenes: scenes.size, points, shown };
   }
 
   clearAggregate() {
@@ -317,9 +401,9 @@ class PointLayer {
       this.aggregateGroup.remove(child);
     }
     this.aggregateCount = 0;
-    this.aggregateBounds = null;
     this.aggregateHasClasses = false;
     this.aggregateHasRgb = false;
+    this._refreshStaticRange();
   }
 
   setAggregateVisible(on) {
@@ -420,12 +504,14 @@ class PointLayer {
 
   /** Does the loaded data carry Vistas classes at all? */
   hasClasses() {
-    return Boolean((this.cloud && this.cloud.classes) || this.aggregateHasClasses);
+    return Boolean((this.cloud && this.cloud.classes) || this.aggregateHasClasses
+      || [...this.cityChunks.values()].some((p) => p.userData.cloud.classes));
   }
 
   /** Does it carry camera colour? */
   hasRgb() {
-    return Boolean((this.cloud && this.cloud.rgb) || this.aggregateHasRgb);
+    return Boolean((this.cloud && this.cloud.rgb) || this.aggregateHasRgb
+      || [...this.cityChunks.values()].some((p) => p.userData.cloud.rgb));
   }
 
   /** Does the loaded *frame* carry instance numbers? The aggregate never does. */
@@ -529,8 +615,10 @@ class PointLayer {
   _allClouds() {
     const out = [];
     if (this.cloud) out.push(this.cloud);
-    for (const child of this.aggregateGroup.children) {
-      if (child.userData.cloud) out.push(child.userData.cloud);
+    for (const group of [this.aggregateGroup, this.cityGroup]) {
+      for (const child of group.children) {
+        if (child.userData.cloud) out.push(child.userData.cloud);
+      }
     }
     return out;
   }
@@ -571,6 +659,7 @@ class PointLayer {
       aggregate: this.aggregateCount,
       aggregateChunks: this.aggregateGroup.children.length,
       aggregateVisible: this.group.visible && this.aggregateGroup.visible,
+      city: this.cityStats(),
       // First point in world ENU, so a test can check where a cloud landed.
       first: cloud && cloud.count
         ? [cloud.origin[0] + cloud.positions[0],

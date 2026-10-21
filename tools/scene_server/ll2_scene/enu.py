@@ -115,6 +115,18 @@ class SceneFrame:
         a11, _, a21, _ = self.jacobian_at(x, y)
         return math.degrees(math.atan2(a21, a11))
 
+    def rotation_deg_array(self, xy, step=10.0):
+        """`rotation_deg` for (N, 2) scene points at once.
+
+        A city's trajectories are tens of thousands of poses; one pyproj call
+        per pose (three per Jacobian) would take seconds.
+        """
+        import numpy as np
+        xy = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
+        here = self.apply_array(xy)
+        east = self.apply_array(xy + np.array([step, 0.0]))
+        return np.degrees(np.arctan2(east[:, 1] - here[:, 1], east[:, 0] - here[:, 0]))
+
     def scale(self, x=0.0, y=0.0):
         """(east, north) ENU metres per scene metre -- not equal, see the module docstring."""
         a11, a12, a21, a22 = self.jacobian_at(x, y)

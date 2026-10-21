@@ -1,7 +1,9 @@
-"""CLI: feed a recorded scene into the Lanelet2 3D viewer.
+"""CLI: feed a recorded scene -- or a whole city of them -- into the Lanelet2 3D viewer.
 
     # viewer only (no JOSM): start the viewer server, then
     python -m ll2_scene --scene /path/to/<scene-uuid>
+    python -m ll2_scene --city $KITSCENES_ROOT --map /path/to/city/lanelet2_map.osm
+    python -m ll2_scene --city $KITSCENES_ROOT --build-aggregates   # batch, then exit
 
 The scene server connects to the viewer's ingest port like the JOSM bridge
 does. If a bridge is already streaming a map (JOSM), its anchor is adopted and
@@ -15,11 +17,11 @@ import sys
 import time
 import urllib.request
 
-from .aggregate import SceneAggregator
+from .aggregate import SceneAggregator, aggregate_cache_name
 from .bridge import ViewerBridge
 from .cache import DEFAULT_LIMIT_GB, FrameDiskCache, default_cache_dir
-from .http import SceneHttpServer
-from .scene import SceneSource
+from .http import CityHttpServer, SceneHttpServer
+from .scene import MapFile, SceneSource
 
 ANCHOR_RE = re.compile(rb'"anchor":\s*\{"lat":\s*([-\d.eE+]+),\s*"lon":\s*([-\d.eE+]+)\}')
 
@@ -49,7 +51,23 @@ def probe_viewer_anchor(host, port, timeout=2.0):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Stream a recorded scene into the Lanelet2 3D viewer")
-    parser.add_argument("--scene", required=True, help="scene directory (the one holding poses.txt)")
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument("--scene", help="scene directory (the one holding poses.txt)")
+    which.add_argument("--city", metavar="ROOT",
+                       help="every scene of one city: KITSCENES_ROOT, its data/ or one split")
+    parser.add_argument("--city-name", default=None,
+                        help="karlsruhe, frankfurt or sindelfingen (default: the one with "
+                             "the most scenes under --city)")
+    parser.add_argument("--map", default=None,
+                        help="Lanelet2 map to send instead of the scene's own crop -- the "
+                             "city-wide map, typically. Ignored while JOSM streams one")
+    parser.add_argument("--max-open-scenes", type=int, default=8,
+                        help="city: scenes kept open at once; idle ones beyond this are "
+                             "closed (their disk cache stays)")
+    parser.add_argument("--build-aggregates", action="store_true",
+                        help="city: build every scene's whole-scene cloud into the cache, "
+                             "one after the other, then exit. Cold builds take minutes a "
+                             "scene; browsing the city afterwards only reads the cache")
     parser.add_argument("--viewer-host", default="127.0.0.1")
     parser.add_argument("--ingest-port", type=int, default=8766, help="the viewer's TCP ingest port")
     parser.add_argument("--viewer-port", type=int, default=8765, help="the viewer's HTTP port")
@@ -89,7 +107,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     log = lambda msg: print(msg, flush=True)  # noqa: E731
-    source = SceneSource(args.scene, kitscenes_path=args.kitscenes)
+    if args.city:
+        return run_city(args, log)
+    source = SceneSource(args.scene, kitscenes_path=args.kitscenes, map_path=args.map)
     log("scene: %s, %d frames, lidars=%s, cameras=%d"
         % (source.scene_id, source.frame_count, ",".join(source.lidars), len(source.cameras)))
 
@@ -152,6 +172,119 @@ def main(argv=None):
         if http:
             http.stop()
     return 0
+
+
+def run_city(args, log):
+    from .city import CityIndex
+
+    t0 = time.perf_counter()
+    index = CityIndex(args.city, city=args.city_name, log=log)
+    log("city: %s (indexed in %.1fs)" % (index.describe_log(), time.perf_counter() - t0))
+    origin = index.default_anchor()
+    cache_dir = None if args.no_cache else (args.cache_dir or default_cache_dir())
+
+    def aggregator_for(source, disk):
+        return SceneAggregator(
+            source, disk_cache=disk, voxel=args.aggregate_voxel,
+            max_range_m=args.aggregate_range, min_run=args.aggregate_min_run,
+            step=args.aggregate_step, workers=args.aggregate_workers, log=log)
+
+    name = aggregate_cache_name(args.aggregate_voxel, args.aggregate_min_run,
+                                args.aggregate_range, args.aggregate_step)
+
+    def aggregate_cached(scene):
+        return bool(cache_dir) and (FrameDiskCache.scene_dir(cache_dir, scene.id) / name).is_file()
+
+    if args.build_aggregates:
+        return build_all(index, origin, cache_dir, aggregator_for, aggregate_cached, args, log)
+
+    map_file = MapFile(args.map, origin) if args.map else None
+    anchor = origin
+    send_map = bool(map_file) and not args.no_map
+    existing = probe_viewer_anchor(args.viewer_host, args.viewer_port)
+    if existing:
+        anchor = existing
+        send_map = False
+        log("city: a bridge is already streaming a map; adopting its anchor %.7f, %.7f" % existing)
+    elif map_file:
+        t1 = time.perf_counter()
+        anchor = map_file.bbox_centre()
+        log("city: loaded %s in %.1fs" % (map_file.path.name, time.perf_counter() - t1))
+    elif not args.no_map:
+        log("city: no --map and no JOSM: the trajectories come without a map")
+    log("city: anchor %.7f, %.7f" % anchor)
+
+    viewer_origin = "http://%s:%d" % (args.viewer_host, args.viewer_port)
+
+    def open_scene(entry, base_url, gate, build_gate):
+        source = SceneSource(entry.dir, kitscenes_path=args.kitscenes, anchor=anchor)
+        disk = FrameDiskCache(source.scene_id, cache_dir, args.cache_limit_gb, log=log)
+        return SceneHttpServer(source, allow_origin=viewer_origin, log=log, disk_cache=disk,
+                               aggregator=aggregator_for(source, disk), listen=False,
+                               base_url=base_url, gate=gate, build_gate=build_gate)
+
+    http = CityHttpServer(index, open_scene, anchor, host=args.viewer_host,
+                          port=args.http_port, allow_origin=viewer_origin, log=log,
+                          max_open=args.max_open_scenes, decode_workers=args.decode_workers,
+                          aggregate_cached=aggregate_cached)
+    http.start()
+
+    def on_connect():
+        if send_map:
+            t1 = time.perf_counter()
+            features = map_file.features(anchor)
+            bridge.send({"type": "snapshot", "anchor": {"lat": anchor[0], "lon": anchor[1]},
+                         "features": features})
+            log("city: sent %d map features in %.2fs" % (len(features), time.perf_counter() - t1))
+        bridge.send({"type": "city", "city": {"name": index.city, "base": http.base_url,
+                                              "scenes": len(index.scenes),
+                                              "anchor": {"lat": anchor[0], "lon": anchor[1]}}})
+
+    bridge = ViewerBridge(args.viewer_host, args.ingest_port, log=log)
+    bridge.start(on_connect=on_connect)
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        log("city: stopping")
+    finally:
+        bridge.stop()
+        http.stop()
+    return 0
+
+
+def build_all(index, origin, cache_dir, aggregator_for, aggregate_cached, args, log):
+    """`--build-aggregates`: every scene's static cloud into the cache, then exit."""
+    if not cache_dir:
+        log("city: --build-aggregates needs the cache (drop --no-cache)")
+        return 2
+    todo = [s for s in index.scenes if not aggregate_cached(s)]
+    log("city: %d of %d aggregates already cached, %d to build"
+        % (len(index.scenes) - len(todo), len(index.scenes), len(todo)))
+    t0 = time.perf_counter()
+    failed = 0
+    for n, entry in enumerate(todo, 1):
+        t1 = time.perf_counter()
+        try:
+            source = SceneSource(entry.dir, kitscenes_path=args.kitscenes, anchor=origin)
+            disk = FrameDiskCache(source.scene_id, cache_dir, args.cache_limit_gb, log=log)
+            aggregator = aggregator_for(source, disk)
+            xyz, intensity, classes, colour, stats = aggregator.build()
+            aggregator.save_cached(xyz, intensity, classes, colour, stats)
+        except KeyboardInterrupt:
+            log("city: stopped; %d built, the rest next time" % (n - 1))
+            return 1
+        except Exception as exc:
+            failed += 1
+            log("city: %s failed (%r)" % (entry.id, exc))
+            continue
+        spent = time.perf_counter() - t0
+        log("city: %d/%d %s: %d points in %.0fs; about %.0f min to go"
+            % (n, len(todo), entry.id, len(xyz), time.perf_counter() - t1,
+               spent / n * (len(todo) - n) / 60))
+    log("city: done, %d built, %d failed, %.0f min" % (len(todo) - failed, failed,
+                                                       (time.perf_counter() - t0) / 60))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

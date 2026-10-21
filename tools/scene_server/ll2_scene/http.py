@@ -21,6 +21,7 @@ first; requests for the same frame share one decode, and work whose browser
 has already navigated away is dropped before it starts.
 """
 
+import gzip
 import json
 import re
 import select
@@ -38,6 +39,7 @@ from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 FRAME_POINTS_RE = re.compile(r"^/frame/(\d+)/points\.bin$")
 FRAME_IMAGE_RE = re.compile(r"^/frame/(\d+)/camera/([A-Za-z0-9_]+)\.jpg$")
 AGGREGATE_CHUNK_RE = re.compile(r"^/aggregate/(\d+)\.bin$")
+SCENE_ROUTE_RE = re.compile(r"^/scene/([A-Za-z0-9_-]{1,80})(/.*)$")
 GONE = object()  # the browser left before we got to its request
 
 
@@ -83,7 +85,11 @@ def client_gone(connection):
 
 class SceneHttpServer:
     def __init__(self, source, host="127.0.0.1", port=8767, allow_origin="*", log=print,
-                 disk_cache=None, decode_workers=1, aggregator=None):
+                 disk_cache=None, decode_workers=1, aggregator=None,
+                 listen=True, base_url=None, gate=None, build_gate=None):
+        """`listen=False` makes a scene that a `CityHttpServer` routes to: no
+        socket of its own, its routes under `base_url`, and the decode and
+        aggregate-build gates shared with every other scene of the city."""
         self.source = source
         self.disk = disk_cache
         self.host = host
@@ -92,7 +98,10 @@ class SceneHttpServer:
         self.cache = FrameCache()
         # One decoder by default: the work is CPU-bound, so more of them only
         # delay every answer (see the module docstring).
-        self._gate = threading.BoundedSemaphore(max(1, decode_workers))
+        self._gate = gate or threading.BoundedSemaphore(max(1, decode_workers))
+        # Building an aggregate takes every worker process for minutes, so a
+        # city runs one build at a time; a cached aggregate never waits here.
+        self._build_gate = build_gate
         self._inflight = {}
         self._inflight_lock = threading.Lock()
         self._waiting = 0          # browser requests currently queued or decoding
@@ -104,16 +113,27 @@ class SceneHttpServer:
         self._aggregate_thread = None
         self._aggregate_error = None
         self._aggregate_blobs = {}      # (index, anchor) -> encoded bytes
-        handler = _make_handler(self)
-        self._httpd = _QuietThreadingHTTPServer((host, port), handler)
-        self.port = self._httpd.server_address[1]
         self._thread = None
+        self._base_url = base_url
+        self._httpd = None
+        self.port = None
+        if listen:
+            self._httpd = _QuietThreadingHTTPServer((host, port), _make_handler(self))
+            self.port = self._httpd.server_address[1]
 
     @property
     def base_url(self):
+        if self._base_url:
+            return self._base_url
         return "http://%s:%d" % (self.host, self.port)
 
+    @property
+    def building(self):
+        return self._aggregate_thread is not None and self._aggregate_thread.is_alive()
+
     def start(self):
+        if self._httpd is None:
+            return
         self._thread = threading.Thread(target=self._httpd.serve_forever,
                                         name="ll2-scene-http", daemon=True)
         self._thread.start()
@@ -177,8 +197,17 @@ class SceneHttpServer:
                 xyz, intensity, classes, colour, stats = cached
                 self.log("scene: aggregate loaded from cache (%d points)" % len(xyz))
             else:
-                xyz, intensity, classes, colour, stats = self.aggregator.build()
-                self.aggregator.save_cached(xyz, intensity, classes, colour, stats)
+                if self._build_gate is not None:
+                    self.aggregator.progress.update(state="queued")
+                    self._build_gate.acquire()
+                try:
+                    if self._stopping.is_set():
+                        return
+                    xyz, intensity, classes, colour, stats = self.aggregator.build()
+                    self.aggregator.save_cached(xyz, intensity, classes, colour, stats)
+                finally:
+                    if self._build_gate is not None:
+                        self._build_gate.release()
             from .aggregate import chunk_by_tile
             chunks = chunk_by_tile(xyz, intensity, classes, colour)
             self._aggregate = (chunks, stats)
@@ -206,6 +235,9 @@ class SceneHttpServer:
                 self._aggregate_blobs.pop(next(iter(self._aggregate_blobs)))
         return blob
 
+    def route(self, handler, path):
+        _route_scene(self, handler, path)
+
     def stop(self):
         self._stopping.set()
         # shutdown() waits for serve_forever() to return and blocks forever if
@@ -214,7 +246,8 @@ class SceneHttpServer:
             self._httpd.shutdown()
             self._thread.join(timeout=5)
             self._thread = None
-        self._httpd.server_close()
+        if self._httpd is not None:
+            self._httpd.server_close()
 
     def points_blob(self, index, still_wanted=None):
         """Frame `index` in viewer ENU, or GONE if the browser left meanwhile.
@@ -327,6 +360,172 @@ class SceneHttpServer:
             return blob
 
 
+class CityHttpServer:
+    """Every scene of a city behind one port.
+
+        GET /healthz
+        GET /city.json               every trajectory, in viewer ENU (gzipped
+                                     when the browser takes it)
+        GET /city/status.json        per scene: aggregate cached / building
+        GET /scene/<id>/...          that scene's routes, exactly as above
+
+    A scene is opened on first use and the least recently used idle ones are
+    closed again beyond `max_open`; what they decoded stays in the disk cache.
+    All scenes share one decode gate and one aggregate-build gate, so loading
+    ten scenes around the camera cannot start ten builds at once.
+    """
+
+    def __init__(self, index, open_scene, anchor, host="127.0.0.1", port=8767,
+                 allow_origin="*", log=print, max_open=8, decode_workers=1,
+                 aggregate_cached=None):
+        self.index = index
+        self.open_scene = open_scene    # (CityScene, base_url, gate, build_gate) -> SceneHttpServer
+        self.anchor = tuple(anchor)
+        self.host = host
+        self.allow_origin = allow_origin
+        self.log = log
+        self.max_open = max(1, max_open)
+        self.aggregate_cached = aggregate_cached   # CityScene -> bool
+        self.gate = threading.BoundedSemaphore(max(1, decode_workers))
+        self.build_gate = threading.BoundedSemaphore(1)
+        self._open = OrderedDict()                 # id -> SceneHttpServer
+        self._lock = threading.Lock()
+        self._opening = {}                         # id -> Lock, so one open per scene
+        self._city_json = None                     # (anchor, raw bytes, gzipped bytes)
+        self._httpd = _QuietThreadingHTTPServer((host, port), _make_handler(self))
+        self.port = self._httpd.server_address[1]
+        self._thread = None
+
+    @property
+    def base_url(self):
+        return "http://%s:%d" % (self.host, self.port)
+
+    def start(self):
+        self._thread = threading.Thread(target=self._httpd.serve_forever,
+                                        name="ll2-city-http", daemon=True)
+        self._thread.start()
+        self.log("city: serving %d scenes on %s" % (len(self.index.scenes), self.base_url))
+
+    def stop(self):
+        with self._lock:
+            services = list(self._open.values())
+            self._open.clear()
+        for service in services:
+            service.stop()
+        if self._thread is not None:
+            self._httpd.shutdown()
+            self._thread.join(timeout=5)
+            self._thread = None
+        self._httpd.server_close()
+
+    def set_anchor(self, anchor):
+        """Adopt another ENU anchor (JOSM's): trajectories and open scenes follow."""
+        self.anchor = tuple(anchor)
+        with self._lock:
+            self._city_json = None
+            for service in self._open.values():
+                service.source.set_anchor(self.anchor)
+
+    def city_json(self):
+        with self._lock:
+            cached = self._city_json
+        if cached and cached[0] == self.anchor:
+            return cached[1], cached[2]
+        t0 = time.perf_counter()
+        raw = json.dumps(self.index.describe(self.anchor, self.base_url,
+                                             self.aggregate_cached),
+                         separators=(",", ":")).encode("utf-8")
+        packed = gzip.compress(raw, compresslevel=5)
+        with self._lock:
+            self._city_json = (self.anchor, raw, packed)
+        self.log("city: trajectories %.1f MB (%.1f MB gzipped) in %.2fs"
+                 % (len(raw) / 1e6, len(packed) / 1e6, time.perf_counter() - t0))
+        return raw, packed
+
+    def status(self):
+        with self._lock:
+            open_now = dict(self._open)
+        out = {}
+        for scene in self.index.scenes:
+            service = open_now.get(scene.id)
+            out[scene.id] = {
+                "aggregate": bool(self.aggregate_cached and self.aggregate_cached(scene))
+                             or bool(service is not None and service._aggregate is not None),
+                "building": bool(service is not None and service.building),
+                "open": service is not None,
+            }
+        return out
+
+    def scene(self, scene_id):
+        """The scene server for `scene_id`, opened on first use; None if unknown."""
+        entry = self.index.by_id.get(scene_id)
+        if entry is None:
+            return None
+        with self._lock:
+            service = self._open.get(scene_id)
+            if service is not None:
+                self._open.move_to_end(scene_id)
+                return service
+            opening = self._opening.setdefault(scene_id, threading.Lock())
+        with opening:
+            with self._lock:
+                service = self._open.get(scene_id)
+            if service is None:
+                t0 = time.perf_counter()
+                service = self.open_scene(entry, "%s/scene/%s" % (self.base_url, scene_id),
+                                          self.gate, self.build_gate)
+                service.source.set_anchor(self.anchor)
+                self.log("city: opened %s in %.2fs" % (scene_id, time.perf_counter() - t0))
+                with self._lock:
+                    self._open[scene_id] = service
+                    evicted = self._evict_locked()
+                for old in evicted:
+                    old.stop()
+            return service
+
+    def _evict_locked(self):
+        """Close least recently used scenes beyond `max_open`, never a busy one."""
+        evicted = []
+        for scene_id in list(self._open):
+            if len(self._open) <= self.max_open:
+                break
+            service = self._open[scene_id]
+            if service.building or service._waiting:
+                continue
+            evicted.append(self._open.pop(scene_id))
+            self.log("city: closed %s (least recently used)" % scene_id)
+        return evicted
+
+    def route(self, h, path):
+        if path == "/healthz":
+            h._json({"ok": True, "city": self.index.city, "scenes": len(self.index.scenes)})
+            return
+        if path == "/city.json":
+            raw, packed = self.city_json()
+            if "gzip" in (h.headers.get("Accept-Encoding") or ""):
+                h._send(packed, "application/json", headers={"Content-Encoding": "gzip"})
+            else:
+                h._send(raw, "application/json")
+            return
+        if path == "/city/status.json":
+            h._json(self.status())
+            return
+        match = SCENE_ROUTE_RE.match(path)
+        if match:
+            try:
+                service = self.scene(match.group(1))
+            except Exception as exc:
+                self.log("city: could not open %s (%r)" % (match.group(1), exc))
+                h._json({"error": "could not open scene: %r" % exc}, 500)
+                return
+            if service is None:
+                h._json({"error": "no such scene"}, 404)
+                return
+            service.route(h, match.group(2))
+            return
+        h._json({"error": "not found"}, 404)
+
+
 class _QuietThreadingHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -342,20 +541,23 @@ class _QuietThreadingHTTPServer(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def _make_handler(server):
+def _make_handler(router):
+    """A request handler that hands every GET to `router.route(handler, path)`."""
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, fmt, *args):  # quiet; the server logs what matters
             pass
 
-        def _send(self, body, content_type, status=200):
+        def _send(self, body, content_type, status=200, headers=None):
             try:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Access-Control-Allow-Origin", server.allow_origin)
+                self.send_header("Access-Control-Allow-Origin", router.allow_origin)
                 self.send_header("Cache-Control", "no-store")
+                for key, value in (headers or {}).items():
+                    self.send_header(key, value)
                 self.end_headers()
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
@@ -366,82 +568,86 @@ def _make_handler(server):
 
         def do_OPTIONS(self):
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Origin", server.allow_origin)
+            self.send_header("Access-Control-Allow-Origin", router.allow_origin)
             self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
             self.send_header("Content-Length", "0")
             self.end_headers()
 
         def do_GET(self):
-            path = self.path.split("?", 1)[0]
-            source = server.source
-            if path == "/healthz":
-                self._json({"ok": True, "scene": source.scene_id,
-                            "frames": int(source.frame_count)})
-                return
-            if path == "/scene.json":
-                self._json(source.describe(server.base_url)["scene"])
-                return
-            match = FRAME_POINTS_RE.match(path)
-            if match:
-                self._serve_points(int(match.group(1)))
-                return
-            match = FRAME_IMAGE_RE.match(path)
-            if match:
-                self._serve_image(int(match.group(1)), match.group(2))
-                return
-            if path == "/aggregate/meta.json":
-                meta = server.aggregate_meta()
-                self._json(meta, 200 if meta.get("ready") else 202)
-                return
-            match = AGGREGATE_CHUNK_RE.match(path)
-            if match:
-                blob = server.aggregate_chunk(int(match.group(1)))
-                if blob is None:
-                    self._json({"error": "no such chunk"}, 404)
-                else:
-                    self._send(blob, "application/octet-stream")
-                return
-            self._json({"error": "not found"}, 404)
-
-        def _serve_points(self, index):
-            source = server.source
-            if not 0 <= index < source.frame_count:
-                self._json({"error": "frame out of range"}, 404)
-                return
-            with server._waiting_lock:
-                server._waiting += 1
-            try:
-                blob = server.points_blob(
-                    index, still_wanted=lambda: not client_gone(self.connection))
-            except Exception as exc:
-                server.log("scene: frame %d failed: %r" % (index, exc))
-                self._json({"error": repr(exc)}, 500)
-                return
-            finally:
-                with server._waiting_lock:
-                    server._waiting -= 1
-            if blob is GONE:
-                # Nobody is listening any more; say so cheaply rather than
-                # spending seconds producing an answer for a closed socket.
-                self.close_connection = True
-                self._json({"error": "cancelled"}, 409)
-                return
-            self._send(blob, "application/octet-stream")
-
-        def _serve_image(self, index, camera):
-            source = server.source
-            if camera not in source.cameras:
-                self._json({"error": "unknown camera"}, 404)
-                return
-            image = source.image_path(camera, index)
-            if not image or not image.is_file():
-                self._json({"error": "no image"}, 404)
-                return
-            try:
-                body = image.read_bytes()
-            except OSError as exc:
-                self._json({"error": repr(exc)}, 500)
-                return
-            self._send(body, "image/jpeg")
+            router.route(self, self.path.split("?", 1)[0])
 
     return Handler
+
+
+def _route_scene(server, h, path):
+    """The per-scene routes of the module docstring, for one scene server."""
+    source = server.source
+    if path == "/healthz":
+        h._json({"ok": True, "scene": source.scene_id, "frames": int(source.frame_count)})
+        return
+    if path == "/scene.json":
+        h._json(source.describe(server.base_url)["scene"])
+        return
+    match = FRAME_POINTS_RE.match(path)
+    if match:
+        _serve_points(server, h, int(match.group(1)))
+        return
+    match = FRAME_IMAGE_RE.match(path)
+    if match:
+        _serve_image(server, h, int(match.group(1)), match.group(2))
+        return
+    if path == "/aggregate/meta.json":
+        meta = server.aggregate_meta()
+        h._json(meta, 200 if meta.get("ready") else 202)
+        return
+    match = AGGREGATE_CHUNK_RE.match(path)
+    if match:
+        blob = server.aggregate_chunk(int(match.group(1)))
+        if blob is None:
+            h._json({"error": "no such chunk"}, 404)
+        else:
+            h._send(blob, "application/octet-stream")
+        return
+    h._json({"error": "not found"}, 404)
+
+
+def _serve_points(server, h, index):
+    source = server.source
+    if not 0 <= index < source.frame_count:
+        h._json({"error": "frame out of range"}, 404)
+        return
+    with server._waiting_lock:
+        server._waiting += 1
+    try:
+        blob = server.points_blob(index, still_wanted=lambda: not client_gone(h.connection))
+    except Exception as exc:
+        server.log("scene: frame %d failed: %r" % (index, exc))
+        h._json({"error": repr(exc)}, 500)
+        return
+    finally:
+        with server._waiting_lock:
+            server._waiting -= 1
+    if blob is GONE:
+        # Nobody is listening any more; say so cheaply rather than spending
+        # seconds producing an answer for a closed socket.
+        h.close_connection = True
+        h._json({"error": "cancelled"}, 409)
+        return
+    h._send(blob, "application/octet-stream")
+
+
+def _serve_image(server, h, index, camera):
+    source = server.source
+    if camera not in source.cameras:
+        h._json({"error": "unknown camera"}, 404)
+        return
+    image = source.image_path(camera, index)
+    if not image or not image.is_file():
+        h._json({"error": "no image"}, 404)
+        return
+    try:
+        body = image.read_bytes()
+    except OSError as exc:
+        h._json({"error": repr(exc)}, 500)
+        return
+    h._send(body, "image/jpeg")

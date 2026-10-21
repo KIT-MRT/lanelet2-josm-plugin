@@ -129,6 +129,37 @@
       padding: 5px 7px; max-width: 760px;
     }
     #sceneBar[hidden] { display: none; }
+    /* City mode with no scene picked: colour, size and filters still act on
+       the city's clouds; everything that needs a scene steps aside. */
+    #sceneBar.noScene [data-scene-only] { display: none; }
+    #cityBar {
+      pointer-events: auto;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      background: rgba(18, 24, 33, 0.92); border: 1px solid #3d4d63; border-radius: 6px;
+      padding: 5px 7px; max-width: 760px;
+    }
+    #cityBar[hidden] { display: none; }
+    #cityBar button {
+      background: rgba(34, 46, 62, 0.95); color: #e8eef7; border: 1px solid #4a5a73;
+      border-radius: 5px; padding: 3px 8px; font: 12px/1.2 ui-monospace, Menlo, monospace; cursor: pointer;
+    }
+    #cityBar button:hover { background: rgba(52, 68, 90, 0.95); }
+    #cityBar button.on { border-color: #ffd23f; color: #ffe9a3; }
+    #cityBar button:disabled { opacity: 0.45; cursor: default; }
+    #cityBar label, #cityBar .slab {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #cdd6e4;
+      display: flex; align-items: center; gap: 4px;
+    }
+    #cityBar .sep { width: 1px; align-self: stretch; background: #3d4d63; margin: 0 3px; }
+    #cityBar input[type=range] { width: 110px; accent-color: #ffd23f; }
+    #cityBar #cityStatus { color: #9fb0c7; }
+    #cityHover {
+      position: fixed; z-index: 20; pointer-events: none;
+      font: 11px/1.35 ui-monospace, Menlo, monospace; color: #f2f5fb;
+      background: rgba(10, 14, 20, 0.88); border: 1px solid #4a5a73; border-radius: 5px;
+      padding: 3px 6px; white-space: nowrap;
+    }
+    #cityHover[hidden] { display: none; }
     #sceneBar button {
       background: rgba(34, 46, 62, 0.95); color: #e8eef7; border: 1px solid #4a5a73;
       border-radius: 5px; padding: 3px 8px; font: 12px/1.2 ui-monospace, Menlo, monospace; cursor: pointer;
@@ -198,6 +229,7 @@
 <body>
   <div id="app"></div>
   <img id="sceneImage" hidden alt="">
+  <div id="cityHover" hidden></div>
   <div id="leftCol">
   <div id="hud">
     <div id="hudTitle" title="Show / hide the camera and debug rows"><span id="status"></span><b>Lanelet2 3D</b> <span id="conn">connecting...</span> <span id="hudToggle">▸ details</span></div>
@@ -228,18 +260,30 @@
     <button type="button" data-edit="undo" title="Undo in JOSM (Ctrl+Z)">Undo</button>
     <button type="button" data-edit="redo" title="Redo in JOSM (Ctrl+Shift+Z / Ctrl+Y)">Redo</button>
   </div>
+  <div id="cityBar" hidden>
+    <span class="slab" id="cityName" title="Every recorded scene of this city">city</span>
+    <span class="sep"></span>
+    <button type="button" id="cityLoad" title="Load the static clouds of every scene within the radius of the camera. Scenes whose cloud is not built yet are built now (minutes each, one at a time).">Load here</button>
+    <button type="button" id="cityAuto" title="Keep loading already-built clouds around the camera as it moves. Never starts a build.">Auto</button>
+    <label title="How far around the camera clouds are loaded; beyond 1.3x this they are dropped again">Radius <input type="range" id="cityRadius" min="50" max="1000" step="50" value="300"><span id="cityRadiusLabel">300 m</span></label>
+    <button type="button" id="cityUnload" title="Drop every loaded city cloud">Unload</button>
+    <span class="sep"></span>
+    <button type="button" id="cityTracks" class="on" title="Show the scenes' trajectories. Click a pose arrow (or a line) to open that scene at that frame.">Tracks</button>
+    <button type="button" id="cityDeselect" disabled title="Close the current scene; the city stays">Deselect</button>
+    <span class="slab" id="cityStatus"></span>
+  </div>
   <div id="sceneBar" hidden>
     <span class="slab" id="sceneName" title="The recorded scene the point clouds come from">scene</span>
     <span class="sep"></span>
-    <button type="button" id="scenePoints" title="Show or hide the LiDAR point cloud (P)">Points</button>
-    <button type="button" id="sceneCar" title="Put the camera behind the car at this frame (K)">Go to car</button>
-    <span class="sep"></span>
-    <button type="button" id="scenePrev" title="Previous frame (,)">◀</button>
-    <button type="button" id="scenePlay" title="Play the scene (Space is a camera key, so use this or .)">▶</button>
-    <button type="button" id="sceneNext" title="Next frame (.)">▶|</button>
-    <input type="range" id="sceneFrame" min="0" max="0" value="0" step="1" title="Frame">
-    <span id="sceneFrameLabel">0 / 0</span>
-    <span class="sep"></span>
+    <button type="button" id="scenePoints" data-scene-only title="Show or hide the LiDAR point cloud (P)">Points</button>
+    <button type="button" id="sceneCar" data-scene-only title="Put the camera behind the car at this frame (K)">Go to car</button>
+    <span class="sep" data-scene-only></span>
+    <button type="button" id="scenePrev" data-scene-only title="Previous frame (,)">◀</button>
+    <button type="button" id="scenePlay" data-scene-only title="Play the scene (Space is a camera key, so use this or .)">▶</button>
+    <button type="button" id="sceneNext" data-scene-only title="Next frame (.)">▶|</button>
+    <input type="range" id="sceneFrame" data-scene-only min="0" max="0" value="0" step="1" title="Frame">
+    <span id="sceneFrameLabel" data-scene-only>0 / 0</span>
+    <span class="sep" data-scene-only></span>
     <label>Colour <select id="sceneMode" title="What the point colour shows">
       <option value="intensity">intensity</option>
       <option value="height">height</option>
@@ -247,14 +291,14 @@
     </select></label>
     <label title="Point size in pixels">Size <input type="range" id="sceneSize" min="1" max="8" step="1" value="2"></label>
     <button type="button" id="sceneFilterBtn" title="Hide points by class, height or intensity, and fade them (F while a scene is loaded)">Filter</button>
-    <span class="sep"></span>
-    <button type="button" id="sceneAggregate" title="The whole scene as one cloud, with the moving traffic filtered out (Shift+P). Built once on the server, then cached. Showing it hides the single frame; press P to put the frame back on top of it.">Whole scene</button>
-    <button type="button" id="sceneTint" class="on" title="While the whole scene is shown, paint the single frame one bright colour so it stands out against the aggregate (U)">Tint frame</button>
-    <span class="sep"></span>
-    <button type="button" id="sceneLock" title="Lock the view to a ring camera of the car: exact pose and intrinsics, so the render matches the recorded image pixel for pixel (Shift+L)">Camera lock</button>
-    <select id="sceneCamera" title="Which ring camera ([ and ] cycle)"></select>
-    <button type="button" id="sceneOverlay" class="on" title="Blend the recorded camera image over the render (O)">Overlay</button>
-    <label title="How strongly the camera image is blended in">Blend <input type="range" id="sceneOpacity" min="0" max="100" step="5" value="45"></label>
+    <span class="sep" data-scene-only></span>
+    <button type="button" id="sceneAggregate" data-scene-only title="The whole scene as one cloud, with the moving traffic filtered out (Shift+P). Built once on the server, then cached. Showing it hides the single frame; press P to put the frame back on top of it.">Whole scene</button>
+    <button type="button" id="sceneTint" data-scene-only class="on" title="While the whole scene is shown, paint the single frame one bright colour so it stands out against the aggregate (U)">Tint frame</button>
+    <span class="sep" data-scene-only></span>
+    <button type="button" id="sceneLock" data-scene-only title="Lock the view to a ring camera of the car: exact pose and intrinsics, so the render matches the recorded image pixel for pixel (Shift+L)">Camera lock</button>
+    <select id="sceneCamera" data-scene-only title="Which ring camera ([ and ] cycle)"></select>
+    <button type="button" id="sceneOverlay" data-scene-only class="on" title="Blend the recorded camera image over the render (O)">Overlay</button>
+    <label data-scene-only title="How strongly the camera image is blended in">Blend <input type="range" id="sceneOpacity" min="0" max="100" step="5" value="45"></label>
     <div id="sceneFilters" hidden>
       <label title="Point opacity: turn it down to read the map lines and icons behind the cloud">Opacity <input type="range" id="pointAlpha" min="10" max="100" step="5" value="100"></label>
       <label title="Hide points more than this far above the ground under them (0 = off). The ground is the lowest return in a 4 m cell.">Above ground <input type="range" id="aboveGround" min="0" max="30" step="0.5" value="0"><span id="aboveGroundLabel">off</span></label>
@@ -315,7 +359,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>City: click a pose arrow or a track to open that scene at that frame · Load / Auto: clouds around the camera · Deselect: back to the city<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {

@@ -34,6 +34,11 @@ def default_cache_dir():
 class FrameDiskCache:
     """Frames of one scene, as encoded point blobs in the scene frame."""
 
+    @staticmethod
+    def scene_dir(root, scene_id):
+        """Where one scene's cache lives, without creating it."""
+        return Path(root).expanduser() / ("%s-v%d" % (scene_id, FORMAT_VERSION))
+
     def __init__(self, scene_id, directory=None, limit_gb=DEFAULT_LIMIT_GB, log=print):
         self.enabled = directory is not None
         self.log = log
@@ -44,7 +49,7 @@ class FrameDiskCache:
         if not self.enabled:
             return
         self.root = Path(directory).expanduser()   # what the caller asked for
-        self.dir = self.root / ("%s-v%d" % (scene_id, FORMAT_VERSION))
+        self.dir = self.scene_dir(self.root, scene_id)
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
             (self.dir / "about.json").write_text(json.dumps(

@@ -59,11 +59,20 @@ export function updateHover(busy) {
   nextPickAt = ms > SLOW_PICK_MS ? t0 + ms * 5 : 0;
 }
 
+// Only a cursor this module set is taken back: the city's trajectories set
+// their own while edit mode is off, and this runs every frame.
+let cursorSet = false;
+
 function show(item) {
   current = item;
   setHover(item);
-  const cursor = item ? "pointer" : "";
-  if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+  if (item) {
+    if (canvas.style.cursor !== "pointer") canvas.style.cursor = "pointer";
+    cursorSet = true;
+  } else if (cursorSet) {
+    canvas.style.cursor = "";
+    cursorSet = false;
+  }
 }
 
 /** The hovered item ({ type, id } or null); for tests. */

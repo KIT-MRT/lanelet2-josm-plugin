@@ -178,26 +178,105 @@ function refreshFilterButton() {
   els.filterBtn.classList.toggle("on", active > 0 || !els.filters.hidden);
 }
 
-/** A `scene` message from the server. */
-export function onSceneMessage(msg) {
+/**
+ * A `scene` message from the server, or a scene picked on the city map
+ * (`startFrame` then says which frame was clicked).
+ */
+export function onSceneMessage(msg, startFrame) {
   const info = msg.scene;
   if (!info || !info.base) return;
+  // A reloaded tab gets the same announcement again; only another scene
+  // throws away what this one has loaded.
+  const other = sceneState.info && (sceneState.info.id !== info.id
+    || sceneState.info.base !== info.base);
+  if (other) resetScene();
   sceneState.info = info;
+  if (startFrame !== undefined) sceneState.frame = startFrame;
   cache.clear();
   setSceneInfo(info);
   // Classes come with their own Vistas palette and names, so the browser has
   // nothing hard-coded to drift from the server's table.
-  if (info.classes && info.classes.palette) {
-    setClassPalette(info.classes.palette);
-    addClassOption(info.classes);
-  }
+  if (info.classes && info.classes.palette) setClassTable(info.classes);
   if (els.bar) {
-    els.bar.hidden = false;
+    refreshBar();
     els.name.textContent = `${shortId(info.id)} · ${info.frames} frames`;
     els.name.title = `${info.id}\n${info.base}\n${info.lidars.length} LiDARs, ${Object.keys(info.cameras || {}).length} cameras`;
     els.frame.max = String(Math.max(0, info.frames - 1));
   }
   showFrame(Math.min(sceneState.frame, info.frames - 1));
+  announce();
+}
+
+/** Tell the city layer (and anyone else) which scene is current. */
+function announce() {
+  window.dispatchEvent(new CustomEvent("ll2:scene", {
+    detail: { id: sceneState.info ? sceneState.info.id : null, aggregate: aggregateState.on },
+  }));
+}
+
+/** Drop everything the current scene has loaded, ready for another or none. */
+function resetScene() {
+  setPlaying(false);
+  if (pending) {
+    pending.controller.abort();
+    pending = null;
+  }
+  wanted = null;
+  clearTimeout(prefetchTimer);
+  clearTimeout(aggregateTimer);
+  cache.clear();
+  if (aggregateState.on) toggleAggregate(false);
+  pointLayer.clear();
+  pointLayer.clearAggregate();
+  Object.assign(aggregateState, { on: false, building: false, chunks: 0, loaded: 0, points: 0,
+                                  error: null, stats: null, framesWere: undefined });
+  refreshAggregateButton();
+  sceneState.loading = false;
+  sceneState.error = null;
+  sceneState.frame = 0;
+}
+
+/** No current scene any more: the city map is all that is left. */
+export function clearScene() {
+  if (!sceneState.info) return;
+  resetScene();
+  sceneState.info = null;
+  setSceneInfo(null);  // releases the camera lock
+  refreshBar();
+  announce();
+}
+
+// In city mode the colour, size and filter controls act on the city's clouds
+// too, so the bar stays up without a scene; only what needs one is hidden.
+let cityActive = false;
+
+export function setCityActive(on) {
+  cityActive = !!on;
+  refreshBar();
+}
+
+function refreshBar() {
+  if (!els.bar) return;
+  els.bar.hidden = !(sceneState.info || cityActive);
+  els.bar.classList.toggle("noScene", !sceneState.info);
+  if (!sceneState.info) els.name.textContent = "no scene · click a trajectory";
+}
+
+// The Vistas table: from the scene, or from the city before any scene is open.
+let classTable = null;
+
+/** Install class colours and names: `classes` is { palette, names, ... }. */
+export function setClassTable(classes) {
+  if (!classes || !classes.palette) return;
+  classTable = classes;
+  setClassPalette(classes.palette);
+  addClassOption(classes);
+}
+
+/** After points arrived from elsewhere (the city): offer what they carry. */
+export function refreshPointUi() {
+  refreshColourOptions();
+  refreshClassChips();
 }
 
 const shortId = (id) => (id && id.length > 12 ? `${id.slice(0, 8)}…` : id || "scene");
@@ -213,8 +292,8 @@ function addColourOption(value, title) {
 }
 
 function addClassOption(classes) {
-  addColourOption("class", `Mapillary Vistas classes from the `
-    + `${(classes.cameras || []).length} segmented cameras`);
+  addColourOption("class", "Mapillary Vistas classes from the seamseg masks of the "
+    + "front and rear cameras");
 }
 
 /** The camera colour only shows up once a cloud with it has been decoded. */
@@ -232,7 +311,7 @@ function refreshColourOptions() {
 /** Name of a Vistas class id, for the HUD and the tests. */
 export function className(id) {
   const info = sceneState.info;
-  const names = info && info.classes && info.classes.names;
+  const names = (info && info.classes && info.classes.names) || (classTable && classTable.names);
   if (id === undefined || id === null) return null;
   if (names && names[String(id)]) return names[String(id)];
   return id === 255 ? "unlabelled" : `class ${id}`;
@@ -267,6 +346,7 @@ export function toggleAggregate(on) {
   }
   refreshAggregateButton();
   if (next && !aggregateState.loaded && !aggregateState.building) loadAggregate();
+  announce();
 }
 
 /** Paint the single frame one bright colour while the aggregate is shown. */
@@ -285,6 +365,7 @@ function loadAggregate() {
   return fetch(`${info.base}/aggregate/meta.json`)
     .then((r) => r.json().then((meta) => ({ status: r.status, meta })))
     .then(({ status, meta }) => {
+      if (sceneState.info !== info) return null;  // another scene since
       if (meta.error) throw new Error(meta.error);
       if (status === 202 || !meta.ready) {
         aggregateState.stats = meta.progress || null;
@@ -321,7 +402,7 @@ function fetchChunks(chunks) {
     return fetch(`${info.base}/aggregate/${chunks[i].index}.bin`)
       .then((r) => (r.ok ? r.arrayBuffer() : null))
       .then((buf) => {
-        if (buf) {
+        if (buf && sceneState.info === info) {
           aggregateState.points += pointLayer.addAggregateChunk(buf);
           refreshColourOptions();
           refreshClassChips();

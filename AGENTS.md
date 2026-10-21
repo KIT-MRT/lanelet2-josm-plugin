@@ -473,8 +473,28 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   request in flight and lets the newest wanted frame win, so stepped-over
   frames are never requested. Raising the worker count helps bulk `--prewarm`
   throughput and hurts every individual answer.
+- **City mode** (`--city`, `ll2_scene/city.py`, `CityHttpServer`,
+  `js/sensors/city.js`, `js/render/trajectories.js`). There is no city column
+  in KITScenes; a scene's city is the nearest named city to its first pose,
+  and each scene is placed through its *own* `origin.json` (a test puts two
+  scenes with different origins on one spot). The index reads only
+  `poses.txt` / `origin.json` / `timestamp.reference.txt` -- opening a sensor
+  loader per scene would cost more than the whole index. A city serves the
+  single-scene routes unchanged under `/scene/<id>/`, so picking a trajectory
+  is just `onSceneMessage` with that scene's `scene.json`, and every scene
+  tool works as before. The city's trajectories and a scene's ego track come
+  from the same `track_enu`, so a picked frame lands on its line. One decode
+  gate and one *build* gate city-wide; cached aggregates bypass the build
+  gate. `Auto` never starts a build (a cold one is minutes); only `Load` does.
+  Scenes switch via `resetScene()` -- before the city there was only ever one
+  scene per page, so switching had never had to drop anything.
+- **Trajectory lines are quads, not `linewidth`.** WebGL ignores line width,
+  so each segment is an instanced quad widened in screen space after being
+  trimmed to the near plane (otherwise a segment passing behind the camera
+  flips across the screen). Picking is CPU screen-space: nodes, then segments.
 - Tests: `.venv/bin/python -m unittest discover -s tests -t .` (pure),
-  `testdata/viewer3d/e2e_scene.mjs` (browser, fakes the scene server),
+  `testdata/viewer3d/e2e_scene.mjs` and `e2e_city.mjs` (browser, fake servers),
+  `testdata/viewer3d/live_city.mjs <root> [--map] [--load]` (real data),
   `testdata/viewer3d/live_scene.mjs <scene>` (real data; prints how far the
   cloud's ground sits from the map's `ele` -- -0.5 cm on the example scene).
 

@@ -25,6 +25,7 @@ import { updateHighlight } from "./js/render/highlight.js";
 import { updateHover, hoverItem } from "./js/hover.js";
 import { pointLayer } from "./js/render/points.js";
 import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
+import { installCity, onCityMessage, update as updateCity } from "./js/sensors/city.js";
 import { rigActive, update as updateRig } from "./js/sensors/camrig.js";
 import { selection } from "./js/selection.js";
 import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
@@ -46,6 +47,7 @@ installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
 installHudToggle();
 installScene();
+installCity();
 pointLayer.attach(mapRoot);
 
 // A clicked button must not keep keyboard focus, or Enter clicks it again
@@ -65,7 +67,11 @@ store.on("applied", (msg) => {
   // A reloaded tab gets the scene announcement folded into its bootstrap
   // snapshot, the same way JOSM's selection arrives.
   else if (msg.type === "scene") onSceneMessage(msg);
-  else if (msg.type === "snapshot" && msg.scene) onSceneMessage({ scene: msg.scene });
+  else if (msg.type === "city") onCityMessage(msg);
+  else if (msg.type === "snapshot") {
+    if (msg.city) onCityMessage({ city: msg.city });
+    if (msg.scene) onSceneMessage({ scene: msg.scene });
+  }
 });
 
 connect((msg, meta) => {
@@ -99,6 +105,7 @@ function tick() {
   updateHighlight();
   iconLayer.update(camera);
   updateScreenSizedMarkers();
+  updateCity();
   refreshCameraHud(nav);
   const tr = PROFILE ? now() : 0;
   renderer.render(scene, camera);

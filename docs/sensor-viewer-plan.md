@@ -225,6 +225,60 @@ passed while the viewer was wrong; the hook now reports effective visibility.
       pushed outside the clip volume. Dragging a slider refetches nothing
       and re-uploads nothing, which the e2e suite asserts.
 
+### M6 — a whole city  [x]
+Goal: every KITScenes scene of one city (all splits) in one viewer, on the
+city-wide map (`--map`, or JOSM's), navigable at city scale; one scene at a
+time is "the" scene with the existing frame / lock / overlay tools.
+
+Facts this rests on:
+- `data/sequence_archives.csv`: 1006 sequences in five splits (train 533,
+  test 206, test-e2e 127, val 117, overlap_train_val 23), 1.7-3.7 GB each.
+  No city column anywhere.
+- Each scene's `maps/origin.json` is the *city's* origin (Frankfurt's centre
+  for the example scene), and its `map.osm` is a crop. So a city is the set
+  of scenes whose trajectory lies near one of the three cities the dataset
+  names (Karlsruhe, Frankfurt, Sindelfingen); scenes are placed through
+  their own origin, so differing origins would still line up.
+- Only one scene is on disk here: everything multi-scene is tested with
+  synthetic scenes.
+
+Plan:
+- [x] `ll2_scene/city.py`: find scenes under `KITSCENES_ROOT` (or `data/`,
+      or one split), read only `poses.txt` / `origin.json` /
+      `timestamp.reference.txt` (no sensor loader), assign a city, report
+      tar-only (unextracted) scenes instead of silently skipping them.
+- [x] One HTTP server for the city: `/city.json` (trajectories in viewer
+      ENU), `/scene/<id>/...` = today's routes per scene, created lazily
+      and LRU-evicted. One decode gate and one aggregate *build* gate
+      city-wide, so ten scenes cannot start ten builds; cached aggregates
+      load without waiting for the build gate.
+- [x] A `city` message (kept and replayed by the hub like `scene`).
+- [x] Viewer: trajectories as screen-space-width polylines, one colour per
+      scene; pose nodes as oriented arrows (the 6D pose), sized with
+      distance so they stay visible at city scale and fade far away.
+- [x] Click a pose node (view mode) -> that scene becomes the scene, at
+      that frame; everything from M1-M5 then applies. `Deselect` drops it.
+- [x] Point data around the camera: per-scene static aggregates, loaded per
+      128 m chunk within a radius (default 300 m), disposed again with some
+      hysteresis once out of range. `Load here` loads on demand; `Auto`
+      follows the camera. Default is on demand, so flying across the city
+      costs nothing. Overlapping scenes simply add up.
+- [x] `--build-aggregates`: build every scene's aggregate up front (cold
+      builds are minutes per scene), so city browsing only ever reads cache.
+
+Measured on the example scene served as a one-scene city, with its own map
+standing in for a city map: in the browser 0.7 s after start; clicking the
+trajectory opens frame 110; the city's trajectory and the scene's ego track
+agree to 3.8 mm (cm rounding on the wire); map vs cloud still -0.5 cm;
+`Load` brings the cached 1.54 M-point cloud in 3.2 s. 13 KB of trajectory a
+scene, so a few hundred scenes are a few MB, gzipped.
+
+Open:
+- [ ] Only extracted scenes are served; archives are counted and skipped.
+- [ ] Without `--map` or JOSM there is no map: merging the scenes' own map
+      crops would need to know they share ids, which one scene cannot show.
+- [ ] Not yet run on more than one real scene -- only one is on disk here.
+
 ## Measured facts (example scene `c34c778f…`, Frankfurt, val split)
 
 | | |

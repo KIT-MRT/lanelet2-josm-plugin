@@ -43,10 +43,123 @@ def add_kitscenes_to_path(explicit=None):
     return None
 
 
+def read_origin(scene_dir):
+    """(lat, lon) of the scene's projector origin, from `maps/origin.json`."""
+    path = Path(scene_dir) / "maps" / "origin.json"
+    if not path.is_file():
+        raise FileNotFoundError("no maps/origin.json in %s" % scene_dir)
+    data = json.loads(path.read_text())
+    return float(data["latitude"]), float(data["longitude"])
+
+
+def read_poses(scene_dir):
+    """TUM `poses.txt` -> {t: (N,3), q: (N,4) xyzw, time: (N,)}.
+
+    The quaternions carry only four decimals, so they are not unit;
+    everything downstream normalises.
+    """
+    rows = []
+    for line in (Path(scene_dir) / "poses.txt").read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 8:
+            rows.append([float(v) for v in parts[:8]])
+    if not rows:
+        raise ValueError("no poses in %s/poses.txt" % scene_dir)
+    arr = np.array(rows, dtype=np.float64)
+    q = arr[:, 4:8]
+    q = q / np.linalg.norm(q, axis=1, keepdims=True)
+    return {"time": arr[:, 0], "t": arr[:, 1:4], "q": q}
+
+
+def read_reference_timestamps(scene_dir, poses):
+    """One timestamp per frame, in seconds; the pose times when there is no file."""
+    path = Path(scene_dir) / "timestamp.reference.txt"
+    if not path.is_file():
+        return poses["time"].copy()
+    vals = [float(v) for v in path.read_text().split() if v.strip()]
+    arr = np.array(vals, dtype=np.float64)
+    # Some released scenes store nanoseconds here while poses.txt is in
+    # seconds; the dataset's own loader uses the same 1e12 heuristic.
+    if arr.size and arr.max() > 1e12:
+        arr = arr / 1e9
+    return arr
+
+
+def track_enu(poses, timestamps, frame):
+    """Ego pose at every frame time, in viewer ENU: (positions (N,3), xyzw (N,4)).
+
+    Vectorised, because a city holds tens of thousands of frames. The heading
+    is turned by the meridian convergence *where the car is*, which is a
+    property of the place, not of the scene.
+    """
+    from scipy.spatial.transform import Rotation, Slerp
+    times = poses["time"]
+    t = np.clip(np.asarray(timestamps, dtype=np.float64), times[0], times[-1])
+    if len(times) > 1:
+        rots = Slerp(times, Rotation.from_quat(poses["q"]))(t)
+    else:
+        rots = Rotation.from_quat(np.repeat(poses["q"][:1], len(t), axis=0))
+    pos = np.column_stack([np.interp(t, times, poses["t"][:, i]) for i in range(3)])
+    xy = frame.apply_array(pos[:, :2])
+    spin = Rotation.from_euler("z", np.radians(frame.rotation_deg_array(pos[:, :2])))
+    return np.column_stack([xy, pos[:, 2]]), (spin * rots).as_quat()
+
+
+def map_bbox_centre(lanelet_map, origin):
+    """Centre of a map's lat/lon bbox, which is the anchor JOSM would pick."""
+    import pyproj
+    from .enu import utm_epsg
+    xy = np.array([[p.x, p.y] for p in lanelet_map.pointLayer], dtype=np.float64)
+    if not len(xy):
+        return origin
+    epsg = utm_epsg(*origin)
+    fwd = pyproj.Transformer.from_crs("EPSG:4326", epsg, always_xy=True)
+    inv = pyproj.Transformer.from_crs(epsg, "EPSG:4326", always_xy=True)
+    e0, n0 = fwd.transform(origin[1], origin[0])
+    lon, lat = inv.transform(xy[:, 0] + e0, xy[:, 1] + n0)
+    return ((float(np.min(lat)) + float(np.max(lat))) / 2,
+            (float(np.min(lon)) + float(np.max(lon))) / 2)
+
+
+class MapFile:
+    """A Lanelet2 map on disk -- a city-wide one, say -- loaded about `origin`.
+
+    The origin only has to be the one the features are then converted with:
+    lanelet2 projects lat/lon into that frame on load, and `SceneFrame` takes
+    the same frame back out to the viewer's ENU.
+    """
+
+    def __init__(self, path, origin):
+        self.path = Path(path).expanduser().resolve()
+        if not self.path.is_file():
+            raise FileNotFoundError("map not found: %s" % self.path)
+        self.origin = (float(origin[0]), float(origin[1]))
+        self._map = None
+
+    @property
+    def lanelet_map(self):
+        if self._map is None:
+            import lanelet2
+            from lanelet2.io import Origin
+            from lanelet2.projection import UtmProjector
+            self._map = lanelet2.io.load(str(self.path), UtmProjector(Origin(*self.origin)))
+        return self._map
+
+    def bbox_centre(self):
+        return map_bbox_centre(self.lanelet_map, self.origin)
+
+    def features(self, anchor):
+        return MapConverter(SceneFrame(*self.origin, *anchor)).features(self.lanelet_map)
+
+
 class SceneSource:
     """One recorded scene, in the viewer's frame."""
 
-    def __init__(self, scene_dir, kitscenes_path=None, anchor=None):
+    def __init__(self, scene_dir, kitscenes_path=None, anchor=None, map_path=None):
+        self.map_path = Path(map_path).expanduser().resolve() if map_path else None
         self.dir = Path(scene_dir).resolve()
         if not self.dir.is_dir():
             raise FileNotFoundError("scene directory not found: %s" % self.dir)
@@ -74,11 +187,7 @@ class SceneSource:
 
     # -- map ---------------------------------------------------------------
     def _read_origin(self):
-        path = self.dir / "maps" / "origin.json"
-        if not path.is_file():
-            raise FileNotFoundError("no maps/origin.json in %s" % self.dir)
-        data = json.loads(path.read_text())
-        return float(data["latitude"]), float(data["longitude"])
+        return read_origin(self.dir)
 
     @property
     def projector(self):
@@ -92,7 +201,8 @@ class SceneSource:
     def lanelet_map(self):
         if self._lanelet_map is None:
             import lanelet2
-            self._lanelet_map = lanelet2.io.load(str(self.dir / "maps" / "map.osm"), self.projector)
+            path = self.map_path or (self.dir / "maps" / "map.osm")
+            self._lanelet_map = lanelet2.io.load(str(path), self.projector)
         return self._lanelet_map
 
     def _reverse(self, x, y):
@@ -102,18 +212,7 @@ class SceneSource:
 
     def _default_anchor(self):
         """Centre of the map's lat/lon bbox, which is what JOSM would pick."""
-        import numpy as np
-        from .enu import utm_epsg
-        import pyproj
-        xy = np.array([[p.x, p.y] for p in self.lanelet_map.pointLayer], dtype=np.float64)
-        if not len(xy):
-            return self.origin_lat, self.origin_lon
-        epsg = utm_epsg(self.origin_lat, self.origin_lon)
-        fwd = pyproj.Transformer.from_crs("EPSG:4326", epsg, always_xy=True)
-        inv = pyproj.Transformer.from_crs(epsg, "EPSG:4326", always_xy=True)
-        e0, n0 = fwd.transform(self.origin_lon, self.origin_lat)
-        lon, lat = inv.transform(xy[:, 0] + e0, xy[:, 1] + n0)
-        return (float(np.min(lat)) + float(np.max(lat))) / 2, (float(np.min(lon)) + float(np.max(lon))) / 2
+        return map_bbox_centre(self.lanelet_map, (self.origin_lat, self.origin_lon))
 
     def _scene_centre(self):
         """Where the local similarity is fitted: the middle of the driven path."""
@@ -126,37 +225,10 @@ class SceneSource:
 
     # -- poses -------------------------------------------------------------
     def _read_poses(self):
-        """TUM `poses.txt` -> {t: (N,3), q: (N,4) xyzw, time: (N,)}.
-
-        The quaternions carry only four decimals, so they are not unit;
-        everything downstream normalises.
-        """
-        rows = []
-        for line in (self.dir / "poses.txt").read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            if len(parts) >= 8:
-                rows.append([float(v) for v in parts[:8]])
-        if not rows:
-            raise ValueError("no poses in %s/poses.txt" % self.dir)
-        arr = np.array(rows, dtype=np.float64)
-        q = arr[:, 4:8]
-        q = q / np.linalg.norm(q, axis=1, keepdims=True)
-        return {"time": arr[:, 0], "t": arr[:, 1:4], "q": q}
+        return read_poses(self.dir)
 
     def _read_reference_timestamps(self):
-        path = self.dir / "timestamp.reference.txt"
-        if not path.is_file():
-            return self.poses["time"].copy()
-        vals = [float(v) for v in path.read_text().split() if v.strip()]
-        arr = np.array(vals, dtype=np.float64)
-        # Some released scenes store nanoseconds here while poses.txt is in
-        # seconds; the dataset's own loader uses the same 1e12 heuristic.
-        if arr.size and arr.max() > 1e12:
-            arr = arr / 1e9
-        return arr
+        return read_reference_timestamps(self.dir, self.poses)
 
     @property
     def pose_rotations(self):
@@ -242,13 +314,11 @@ class SceneSource:
         description, which saves the browser a round trip per frame for the
         camera lock.
         """
-        from scipy.spatial.transform import Rotation
-        positions, quats = [], []
-        for i in range(self.frame_count):
-            pos, rot = self.ego_pose_enu(i)
-            positions.append([round(float(v), 4) for v in pos])
-            q = Rotation.from_matrix(rot).as_quat()  # xyzw, as three.js wants
-            quats.append([round(float(v), 7) for v in q])
+        # The same function draws the city's trajectories, so a scene picked
+        # there lands exactly on the line it was picked from.
+        pos, quat = track_enu(self.poses, self.timestamps[:self.frame_count], self.frame)
+        positions = [[round(float(v), 4) for v in row] for row in pos]
+        quats = [[round(float(v), 7) for v in row] for row in quat]  # xyzw, as three.js wants
         return positions, quats
 
     # -- projecting into the cameras ---------------------------------------

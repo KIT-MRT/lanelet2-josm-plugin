@@ -141,6 +141,12 @@ def _sse_encode(msg):
 #     {"type":"scene","scene":{"id":..,"base":"http://127.0.0.1:8767",
 #                              "frames":220,"cameras":{..},"ego":{..}}}
 #
+#   city     : every scene of a city, offered by the scene server in city
+#              mode; kept and replayed the same way. Trajectories and each
+#              scene's data come from `city.base`.
+#     {"type":"city","city":{"name":"frankfurt","base":"http://127.0.0.1:8767",
+#                            "scenes":117,"anchor":{"lat":..,"lon":..}}}
+#
 #   command_result: JOSM's answer to a browser command that had an "id"
 #     {"type":"command_result","id":"c12","ok":false,"message":"..."}
 #
@@ -173,6 +179,7 @@ class SceneHub:
         self._features = {}                 # id -> feature dict
         self._selection = None              # last JOSM selection message
         self._scene = None                  # last sensor-scene announcement
+        self._city = None                   # last city announcement
         self._seq = 0                       # monotonically increasing
         self._subscribers = set()           # set[queue.Queue]
         self._bridges = set()               # set[_BridgeConn] (command back-channel)
@@ -265,6 +272,8 @@ class SceneHub:
         elif mtype == "scene":
             # Same reason: a reloaded tab must find the scene server again.
             self._scene = msg.get("scene")
+        elif mtype == "city":
+            self._city = msg.get("city")
 
     def _snapshot_message_locked(self):
         msg = {
@@ -277,6 +286,8 @@ class SceneHub:
             msg["selection"] = self._selection
         if self._scene is not None:
             msg["scene"] = self._scene
+        if self._city is not None:
+            msg["city"] = self._city
         return msg
 
     def snapshot_message(self):

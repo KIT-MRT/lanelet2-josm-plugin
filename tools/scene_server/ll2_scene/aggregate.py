@@ -120,6 +120,14 @@ def _worker_block(frames):
     return _WORKER["aggregator"]._accumulate_block(_WORKER["kept"], frames)
 
 
+def aggregate_cache_name(voxel, min_run, max_range_m, step):
+    """File name of a cached aggregate. The rule is in the name, so a different
+    one builds a new file instead of serving an aggregate filtered some other
+    way -- and a city can tell which scenes are ready without opening them."""
+    return ("aggregate-v%.3f-c%d-r%.0f-s%d-f%d.npz"
+            % (voxel, min_run, max_range_m, step, AGGREGATE_FORMAT))
+
+
 class SceneAggregator:
     """Builds (and caches) the static aggregate of a whole scene."""
 
@@ -445,11 +453,8 @@ class SceneAggregator:
         """Where this exact aggregate lives; the parameters are in the name."""
         if not (self.disk and self.disk.enabled):
             return None
-        # The rule is in the name, so a different one builds a new file
-        # instead of serving an aggregate filtered some other way.
-        name = ("aggregate-v%.3f-c%d-r%.0f-s%d-f%d.npz"
-                % (self.voxel, self.min_run, self.max_range_m, self.step, AGGREGATE_FORMAT))
-        return self.disk.dir / name
+        return self.disk.dir / aggregate_cache_name(self.voxel, self.min_run,
+                                                    self.max_range_m, self.step)
 
     def load_cached(self):
         path = self.cache_path()
