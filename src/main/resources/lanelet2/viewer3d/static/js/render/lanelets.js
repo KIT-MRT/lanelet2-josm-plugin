@@ -31,6 +31,13 @@ const SURFACE_COLORS = {
 const DEFAULT_SURFACE_COLOR = 0x607890;
 const ARROW_LIFT_M = 0.05;
 const ARROW_LEN_M = 2.4;          // nominal geometry length
+// Drawn length: this share of the lane width, within the bounds. Kept
+// modest and half see-through so the arrows read without hiding the map
+// lines and point clouds under them.
+const ARROW_OF_LANE_WIDTH = 0.45;
+const ARROW_MIN_M = 0.6;
+const ARROW_MAX_M = 1.8;
+const ARROW_OPACITY = 0.5;
 const ONE_WAY_COLOR = new THREE.Color(0xf2f5fb);
 const TWO_WAY_COLOR = new THREE.Color(0xffd23f);
 const OVERRIDE_COLOR = new THREE.Color(0xc792ea); // e.g. one-way, but one_way:bicycle=no
@@ -75,7 +82,8 @@ function arrowGeometry(double) {
 /** Arrow colours come per instance (setColorAt), so the material is white. */
 function arrowMaterial() {
   return new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true,
+    color: 0xffffff, transparent: true, opacity: ARROW_OPACITY, side: THREE.DoubleSide, depthWrite: false,
+    forceSinglePass: true,
   });
 }
 
@@ -272,7 +280,8 @@ class LaneletLayer {
         X.set(a[3], a[4], a[5]).normalize();
         Z.copy(up).addScaledVector(X, -up.dot(X)).normalize();
         Y.crossVectors(Z, X);
-        const scale = Math.min(3.0, Math.max(0.8, (a[6] || 3) * 0.7)) / ARROW_LEN_M;
+        const scale = Math.min(ARROW_MAX_M, Math.max(ARROW_MIN_M, (a[6] || 3) * ARROW_OF_LANE_WIDTH))
+          / ARROW_LEN_M;
         m.makeBasis(X.multiplyScalar(scale), Y.multiplyScalar(scale), Z);
         p.set(a[0], a[1], a[2] + ARROW_LIFT_M);
         m.setPosition(p);
