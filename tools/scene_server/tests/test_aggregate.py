@@ -4,7 +4,8 @@ import unittest
 
 import numpy as np
 
-from ll2_scene.aggregate import SceneAggregator, chunk_by_tile, merge_counts, voxel_keys
+from ll2_scene.aggregate import (SceneAggregator, chunk_by_tile, merge_counts,
+                                 merge_sorted, voxel_keys)
 
 
 class VoxelKeyTest(unittest.TestCase):
@@ -267,3 +268,82 @@ class AggregateClassTest(unittest.TestCase):
         self.assertGreater(len(xyz), 0)
         from ll2_scene.mvd import UNLABELLED
         self.assertTrue(classes is None or (classes == UNLABELLED).all())
+
+
+class MergeSortedTest(unittest.TestCase):
+    """The merge that replaced a full sort per frame."""
+
+    def test_matches_unique_of_the_concatenation(self):
+        rng = np.random.default_rng(5)
+        for _ in range(20):
+            keys = np.unique(rng.integers(0, 500, 60).astype(np.int64))
+            fresh = np.unique(rng.integers(0, 500, 20).astype(np.int64))
+            fresh = fresh[~np.isin(fresh, keys)]
+            merged, keep_old, at_new = merge_sorted(keys, fresh)
+            np.testing.assert_array_equal(merged, np.unique(np.concatenate([keys, fresh])))
+            np.testing.assert_array_equal(merged[keep_old], keys)
+            np.testing.assert_array_equal(merged[at_new], fresh)
+
+    def test_carries_per_voxel_state_across(self):
+        keys = np.array([10, 20, 30], np.int64)
+        state = np.array([1, 2, 3], np.int32)
+        merged, keep_old, at_new = merge_sorted(keys, np.array([15, 40], np.int64))
+        moved = np.zeros(len(merged), np.int32)
+        moved[keep_old] = state
+        self.assertEqual([10, 15, 20, 30, 40], merged.tolist())
+        self.assertEqual([1, 0, 2, 3, 0], moved.tolist())
+
+    def test_empty_sides(self):
+        keys = np.array([1, 2], np.int64)
+        merged, keep_old, at_new = merge_sorted(keys, np.zeros(0, np.int64))
+        np.testing.assert_array_equal(merged, keys)
+        self.assertEqual(0, len(at_new))
+        merged, keep_old, at_new = merge_sorted(np.zeros(0, np.int64), keys)
+        np.testing.assert_array_equal(merged, keys)
+
+
+class ParallelTest(unittest.TestCase):
+    """Splitting the work must not change the answer."""
+
+    def setUp(self):
+        self.source = MovingObjectSource()
+
+    def _agg(self, workers=1):
+        return SceneAggregator(self.source, disk_cache=None, voxel=0.3, max_range_m=200.0,
+                               min_run=3, ego_box=(0.1, 0.1, 0.1), workers=workers,
+                               log=lambda _m: None)
+
+    def test_a_stub_source_stays_in_process(self):
+        # Workers rebuild the source from a directory; a stub has none, so
+        # asking for them must fall back rather than fail at pickling time.
+        self.assertIsNone(self._agg(workers=4)._worker_setup())
+
+    def test_blocks_of_frames_add_up_to_one_pass(self):
+        agg = self._agg()
+        keys, longest = agg._runs_per_voxel()
+        kept = keys[longest >= agg.min_run]
+        frames = list(agg.frames())
+        whole = agg._combine([agg._accumulate_block(kept, frames)], len(kept))
+        halves = agg._combine([agg._accumulate_block(kept, frames[:6]),
+                               agg._accumulate_block(kept, frames[6:])], len(kept))
+        np.testing.assert_allclose(whole[0], halves[0], atol=1e-9)
+        np.testing.assert_allclose(whole[1], halves[1], atol=1e-6)
+        np.testing.assert_array_equal(whole[2], halves[2])
+
+    def test_class_votes_survive_being_split(self):
+        def classes_for(index, xyz):
+            # Pole in most frames, Car in the first two: whichever block they
+            # land in, the majority has to come out the same.
+            return np.full(len(xyz), 58 if index < 2 else 48, np.uint8)
+
+        self.source.frame_classes = classes_for
+        agg = self._agg()
+        keys, longest = agg._runs_per_voxel()
+        kept = keys[longest >= agg.min_run]
+        frames = list(agg.frames())
+        whole = agg._combine([agg._accumulate_block(kept, frames)], len(kept))
+        split = agg._combine([agg._accumulate_block(kept, frames[:3]),
+                              agg._accumulate_block(kept, frames[3:8]),
+                              agg._accumulate_block(kept, frames[8:])], len(kept))
+        np.testing.assert_array_equal(whole[2], split[2])
+        self.assertTrue((whole[2] == 48).all())

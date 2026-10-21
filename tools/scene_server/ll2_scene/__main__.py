@@ -9,6 +9,7 @@ the map is left alone; otherwise the scene's own `maps/map.osm` is sent.
 """
 
 import argparse
+import os
 import re
 import sys
 import time
@@ -76,6 +77,10 @@ def main(argv=None):
                         help="only aggregate returns within this range of the car")
     parser.add_argument("--aggregate-step", type=int, default=1,
                         help="use every Nth frame when aggregating")
+    parser.add_argument("--aggregate-workers", type=int,
+                        default=max(1, (os.cpu_count() or 2) // 2),
+                        help="processes used to build the aggregate (default: half the "
+                             "cores). They compete with frame serving while it runs")
     parser.add_argument("--aggregate-now", action="store_true",
                         help="build the aggregate at startup instead of on demand")
     parser.add_argument("--decode-workers", type=int, default=1,
@@ -111,7 +116,8 @@ def main(argv=None):
         aggregator = SceneAggregator(
             source, disk_cache=disk, voxel=args.aggregate_voxel,
             max_range_m=args.aggregate_range, min_run=args.aggregate_min_run,
-            step=args.aggregate_step, log=log)
+            step=args.aggregate_step,
+            workers=args.aggregate_workers, log=log)
         http = SceneHttpServer(source, host=args.viewer_host, port=args.http_port,
                                allow_origin=origin, log=log, disk_cache=disk,
                                decode_workers=args.decode_workers, aggregator=aggregator)

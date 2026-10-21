@@ -43,7 +43,8 @@ class FrameDiskCache:
         self.misses = 0
         if not self.enabled:
             return
-        self.dir = Path(directory).expanduser() / ("%s-v%d" % (scene_id, FORMAT_VERSION))
+        self.root = Path(directory).expanduser()   # what the caller asked for
+        self.dir = self.root / ("%s-v%d" % (scene_id, FORMAT_VERSION))
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
             (self.dir / "about.json").write_text(json.dumps(

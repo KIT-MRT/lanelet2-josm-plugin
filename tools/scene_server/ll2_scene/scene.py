@@ -50,6 +50,7 @@ class SceneSource:
         self.dir = Path(scene_dir).resolve()
         if not self.dir.is_dir():
             raise FileNotFoundError("scene directory not found: %s" % self.dir)
+        self.kitscenes_path = kitscenes_path  # worker processes rebuild from this
         add_kitscenes_to_path(kitscenes_path)
         from kitscenes.sensors import SensorDataLoader  # noqa: E402 (needs the path above)
 

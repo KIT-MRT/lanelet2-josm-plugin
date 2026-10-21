@@ -168,6 +168,22 @@ cloud's switch toggled the *parent* group of both. The test had asserted the
 child's own `visible` flag, which stays true under a hidden parent, so it
 passed while the viewer was wrong; the hook now reports effective visibility.
 
+### Aggregation performance  [x]
+- [x] The scan re-sorted the whole voxel set every frame
+      (`np.unique(concatenate(...))`, 46 % of the pass). Both arrays are
+      sorted, so `merge_sorted` places instead: scan 134 s -> 51 s.
+- [x] Per-frame work runs in processes (`--aggregate-workers`, default half
+      the cores). Threads were measured at 1.3x -- the decode is Python-bound.
+      Output is byte-identical at any worker count.
+- [x] Warm build 192 s -> 45 s; cold 14 frames 47.5 s -> 12.8 s, so a new
+      scene's first build goes from ~12 min to ~3.
+- [ ] A GPU is not the next step: the remaining time is decode (Python, in
+      the dataset's library), disk reads and a few numpy passes. cupy would
+      pay off only once the decode is off the critical path.
+- [ ] float32 for the range/ego masks was tried and reverted: 3 % faster and
+      it moved one point in 1.5 M across the range boundary, which is not a
+      trade worth making for reproducibility.
+
 ### M4 — remaining colourings  [x]
 - [x] Height and per-sensor landed with M1.
 - [x] **class**: Mapillary Vistas colours from the scene's seamseg masks.

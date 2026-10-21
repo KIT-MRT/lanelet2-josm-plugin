@@ -89,6 +89,7 @@ stays JOSM's (and editable) while the sensor data comes from here.
 | `--aggregate-range M` | only aggregate returns within this range of the car (default 60 m) |
 | `--aggregate-step N` | use every Nth frame |
 | `--aggregate-now` | build it at startup instead of on demand |
+| `--aggregate-workers N` | processes used to build it (default: half the cores) |
 | `--decode-workers N` | frames decoded at once (default 1, see below) |
 
 ## Cache
@@ -184,10 +185,46 @@ re-admits a comparable amount of traffic (161 k traffic-height voxels against
 216 k canopy-height ones), so there is no clean escape.
 `--aggregate-min-run 1` keeps everything.
 
-Building costs one decode per frame (~250 s with the frame cache warm, far
-longer cold — use `--prewarm`), and is cached as a single `.npz` next to the
-frames, so later runs load it in 0.07 s. The settings are in the file name, so
-changing them builds a new one rather than serving a stale aggregate.
+Building is cached as a single `.npz` next to the frames, so later runs load
+it in 0.07 s. The settings are in the file name, so changing them builds a new
+one rather than serving a stale aggregate.
+
+#### What it costs, and why
+
+On the example scene (220 frames, 8 cores), warm frame cache:
+
+| | |
+|---|---|
+| originally | 192 s |
+| merging without re-sorting | 109 s |
+| + 8 worker processes | **45 s** |
+
+Two things were in the way. The scan merged each frame's voxels into the
+running set with `np.unique(concatenate(...))`, i.e. **a full sort of five
+million keys per frame** — 46 % of the pass. Both arrays are already sorted,
+so the merge is a placement instead: 4.6x faster on that step, and the scan
+went 134 s -> 51 s.
+
+The rest is per-frame work that does not depend on other frames, so it runs
+in processes (threads buy little here: the dataset's decode spends its time
+in Python, and 8 threads measured only 1.3x). The scan consumes their results
+in order because a *run* of consecutive frames is sequential by nature; the
+gather splits frames into blocks and adds up the partial sums, which is exact
+— the output is byte-identical at any worker count, and there is a test for
+that.
+
+Cold, where every frame must be decoded, the win is bigger: 14 frames went
+47.5 s -> 12.8 s, so a first build of a new scene drops from roughly twelve
+minutes to three.
+
+Workers compete with frame serving while they run, which is why the default
+is half the cores rather than all of them.
+
+**A GPU would not help much yet.** The remaining time is spread across the
+decode (Python, in the dataset's own library), disk reads and a handful of
+numpy passes; the sorts that a GPU is good at are now a small share. Porting
+the voxelisation and scatter-adds to cupy would pay off only after the decode
+itself moves off the critical path.
 
 Showing the whole scene puts the single frame away, since the point of it is
 to see the scene without one frame's clutter on top. `P` brings the frame

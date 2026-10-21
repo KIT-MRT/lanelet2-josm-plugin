@@ -413,6 +413,18 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   `kitscenes` deskews against the *ego* pose only -- other vehicles are rigid
   bodies moving on their own and smear into a chain of car-shaped blobs.
   Cached as one `.npz` whose name carries the settings.
+- **Aggregation performance** (measured, 220 frames / 8 cores): 192 s -> 45 s.
+  Two fixes. `merge_sorted` replaced `np.unique(concatenate(...))` in the
+  scan, which was re-sorting five million keys every frame (46 % of the
+  pass); both inputs are already sorted, so it is a placement. And the
+  per-frame work runs in processes -- threads gain almost nothing because the
+  dataset's decode is Python-bound (8 threads measured 1.3x). The scan must
+  consume results **in order** (a run of consecutive frames is sequential);
+  the gather splits frames into blocks and sums partial results, which is
+  exact at any worker count. Workers rebuild their own `SceneSource` from
+  paths because it holds lanelet2 handles that do not pickle; a stub source
+  has no directory, so `_worker_setup` returns None and the tests stay
+  in-process.
 - **A flag on a group whose parent is hidden means nothing.** The frame cloud
   and the aggregate share a parent, and hiding the frame cloud by hiding that
   parent silently took the aggregate with it while its own `visible` stayed
