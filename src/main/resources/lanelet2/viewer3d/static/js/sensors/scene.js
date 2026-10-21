@@ -8,7 +8,7 @@
 import * as THREE from "three";
 import { TEST_HOOKS } from "../util.js";
 import { camera, view, setCameraView, lookAtPoint } from "../camera.js";
-import { pointLayer } from "../render/points.js";
+import { pointLayer, setClassPalette } from "../render/points.js";
 import { toast } from "../hud.js";
 import { store } from "../store.js";
 import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handleRigKey,
@@ -84,6 +84,12 @@ export function onSceneMessage(msg) {
   sceneState.info = info;
   cache.clear();
   setSceneInfo(info);
+  // Classes come with their own Vistas palette and names, so the browser has
+  // nothing hard-coded to drift from the server's table.
+  if (info.classes && info.classes.palette) {
+    setClassPalette(info.classes.palette);
+    addClassOption(info.classes);
+  }
   if (els.bar) {
     els.bar.hidden = false;
     els.name.textContent = `${shortId(info.id)} · ${info.frames} frames`;
@@ -94,6 +100,37 @@ export function onSceneMessage(msg) {
 }
 
 const shortId = (id) => (id && id.length > 12 ? `${id.slice(0, 8)}…` : id || "scene");
+
+/** Add a colour mode to the menu once the data turns out to carry it. */
+function addColourOption(value, title) {
+  if (!els.mode || els.mode.querySelector(`option[value="${value}"]`)) return;
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = value;
+  option.title = title;
+  els.mode.appendChild(option);
+}
+
+function addClassOption(classes) {
+  addColourOption("class", `Mapillary Vistas classes from the `
+    + `${(classes.cameras || []).length} segmented cameras`);
+}
+
+/** The camera colour only shows up once a cloud with it has been decoded. */
+function refreshColourOptions() {
+  if (pointLayer.hasRgb()) {
+    addColourOption("rgb", "Colour sampled from the ring camera images");
+  }
+}
+
+/** Name of a Vistas class id, for the HUD and the tests. */
+export function className(id) {
+  const info = sceneState.info;
+  const names = info && info.classes && info.classes.names;
+  if (id === undefined || id === null) return null;
+  if (names && names[String(id)]) return names[String(id)];
+  return id === 255 ? "unlabelled" : `class ${id}`;
+}
 
 export function frameUrl(index) {
   return `${sceneState.info.base}/frame/${index}/points.bin`;
@@ -180,6 +217,7 @@ function fetchChunks(chunks) {
       .then((buf) => {
         if (buf) {
           aggregateState.points += pointLayer.addAggregateChunk(buf);
+          refreshColourOptions();
           aggregateState.loaded++;
           refreshAggregateButton();
         }
@@ -293,6 +331,7 @@ function startFetch(index, show) {
 function apply(index, buffer) {
   try {
     pointLayer.setCloud(buffer);
+    refreshColourOptions();
   } catch (err) {
     sceneState.error = String(err.message || err);
     toast(`Point cloud: ${sceneState.error}`, "error");
@@ -463,6 +502,17 @@ if (TEST_HOOKS) {
     points: () => pointLayer.stats(),
     rig: () => rigState(),
     aggregate: () => ({ ...aggregateState }),
+    classes: () => {
+      const info = sceneState.info;
+      return {
+        available: Boolean(info && info.classes),
+        cameras: (info && info.classes && info.classes.cameras) || [],
+        inData: pointLayer.hasClasses(),
+        rgb: pointLayer.hasRgb(),
+        car: className(58),
+        histogram: pointLayer.classHistogram(),
+      };
+    },
     showAggregate: (on) => toggleAggregate(on),
     project: (world) => projectToImage(world),
     show: (i) => showFrame(i),

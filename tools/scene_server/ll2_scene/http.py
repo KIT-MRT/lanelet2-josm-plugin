@@ -174,13 +174,13 @@ class SceneHttpServer:
         try:
             cached = self.aggregator.load_cached() if self.aggregator else None
             if cached is not None:
-                xyz, intensity, stats = cached
+                xyz, intensity, classes, colour, stats = cached
                 self.log("scene: aggregate loaded from cache (%d points)" % len(xyz))
             else:
-                xyz, intensity, stats = self.aggregator.build()
-                self.aggregator.save_cached(xyz, intensity, stats)
+                xyz, intensity, classes, colour, stats = self.aggregator.build()
+                self.aggregator.save_cached(xyz, intensity, classes, colour, stats)
             from .aggregate import chunk_by_tile
-            chunks = chunk_by_tile(xyz, intensity)
+            chunks = chunk_by_tile(xyz, intensity, classes, colour)
             self._aggregate = (chunks, stats)
             self.aggregator.progress.update(state="ready", points=int(len(xyz)))
         except Exception as exc:
@@ -197,7 +197,8 @@ class SceneHttpServer:
         blob = self._aggregate_blobs.get(key)
         if blob is None:
             chunk = chunks[index]
-            blob = encode_points(self.source.to_enu(chunk["xyz"]), chunk["intensity"])
+            blob = encode_points(self.source.to_enu(chunk["xyz"]), chunk["intensity"],
+                                 classes=chunk.get("classes"), rgb=chunk.get("rgb"))
             self._aggregate_blobs[key] = blob
             # Keyed by anchor as well, so a chunk is re-projected if JOSM's
             # anchor is adopted later; keep only a handful of them.
@@ -248,6 +249,43 @@ class SceneHttpServer:
                     self._inflight.pop(key, None)
                 event.set()
 
+    def _classes_for(self, index, xyz):
+        """Vistas class per point, cached beside the frame.
+
+        Decoding the two mask images costs ~0.9 s, so it is kept in its own
+        cache entry: adding it to the frame blob would have invalidated every
+        decoded frame already on disk.
+        """
+        if not getattr(self.source, "segmentation_path", None):
+            return None
+        cached = self.disk.get(index, "class") if self.disk else None
+        if cached is not None and len(cached) == len(xyz):
+            return np.frombuffer(cached, np.uint8)
+        try:
+            classes = self.source.frame_classes(index, xyz)
+        except Exception as exc:
+            self.log("scene: no classes for frame %d (%r)" % (index, exc))
+            return None
+        if self.disk:
+            self.disk.put(index, classes.tobytes(), "class")
+        return classes
+
+    def _rgb_for(self, index, xyz):
+        """Camera colour per point, cached beside the frame like the classes."""
+        if not getattr(self.source, "frame_rgb", None):
+            return None
+        cached = self.disk.get(index, "rgb") if self.disk else None
+        if cached is not None and len(cached) == len(xyz) * 3:
+            return np.frombuffer(cached, np.uint8).reshape(-1, 3)
+        try:
+            rgb = self.source.frame_rgb(index, xyz)
+        except Exception as exc:
+            self.log("scene: no camera colour for frame %d (%r)" % (index, exc))
+            return None
+        if self.disk:
+            self.disk.put(index, rgb.tobytes(), "rgb")
+        return rgb
+
     def _build(self, key, index, still_wanted):
         with self._gate:
             # Queued behind another decode; the tab may be long gone by now.
@@ -260,7 +298,7 @@ class SceneHttpServer:
             t0 = time.perf_counter()
             cached = self.disk.get(index) if self.disk else None
             if cached is not None:
-                xyz, intensity, sensor, _ = decode_points(cached)
+                xyz, intensity, sensor, _origin, _c, _r = decode_points(cached)
                 if intensity is not None:
                     # Came back quantised to a byte; give the encoder the
                     # 0..2 reflectivity it expects.
@@ -271,7 +309,10 @@ class SceneHttpServer:
                 if self.disk:
                     self.disk.put(index, encode_points(xyz, intensity, sensor))
                 where = "dataset"
-            blob = encode_points(self.source.to_enu(xyz), intensity, sensor)
+            classes = self._classes_for(index, xyz)
+            rgb = self._rgb_for(index, xyz)
+            blob = encode_points(self.source.to_enu(xyz), intensity, sensor,
+                                 classes=classes, rgb=rgb)
             self.cache.put(key, blob)
             self.log("scene: frame %d -> %d points, %.1f MB in %.2fs (%s)"
                      % (index, len(xyz), len(blob) / 1e6, time.perf_counter() - t0, where))

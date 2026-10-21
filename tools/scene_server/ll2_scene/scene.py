@@ -19,6 +19,8 @@ from .mapfeed import MapConverter
 
 RING_CAMERAS = ("camera_ring_front", "camera_ring_front_left", "camera_ring_front_right",
                 "camera_ring_rear_right", "camera_ring_rear", "camera_ring_rear_left")
+# The only cameras the dataset ships seamseg masks for.
+SEGMENTED_CAMERAS = ("camera_ring_front", "camera_ring_rear")
 
 
 def add_kitscenes_to_path(explicit=None):
@@ -248,6 +250,117 @@ class SceneSource:
             quats.append([round(float(v), 7) for v in q])
         return positions, quats
 
+    # -- projecting into the cameras ---------------------------------------
+    def camera_pose(self, camera, index):
+        """(R, t) of a camera in the scene frame for one frame, or None.
+
+        The camera frame is OpenCV: x right, y down, z forward.
+        """
+        try:
+            calib = self.loader.get_camera_calibration(camera)
+        except Exception:
+            return None
+        rot, pos = self.pose_at(float(self.timestamps[index]))
+        ext = np.asarray(calib.extrinsic, dtype=np.float64)  # camera -> ego
+        return rot @ ext[:3, :3], rot @ ext[:3, 3] + pos
+
+    def project_into(self, camera, index, xyz):
+        """Pixels of scene-frame points in one camera: (u, v, visible).
+
+        Plain pinhole -- the ring images are rectified and the calibration
+        carries no distortion coefficients at all.
+        """
+        pose = self.camera_pose(camera, index)
+        info = self.camera_info().get(camera)
+        if pose is None or not info or not info.get("width"):
+            return None
+        rot, pos = pose
+        local = (np.asarray(xyz, dtype=np.float64) - pos) @ rot  # world -> camera
+        depth = local[:, 2]
+        in_front = depth > 0.1
+        safe = np.where(in_front, depth, 1.0)
+        u = info["fx"] * local[:, 0] / safe + info["cx"]
+        v = info["fy"] * local[:, 1] / safe + info["cy"]
+        visible = (in_front & (u >= 0) & (u < info["width"])
+                   & (v >= 0) & (v < info["height"]))
+        return u, v, visible
+
+    def segmentation_path(self, camera, index):
+        path = self.dir / "processed" / "seamseg_instances" / camera / ("%010d.json" % int(index))
+        return path if path.is_file() else None
+
+    def frame_classes(self, index, xyz, cameras=SEGMENTED_CAMERAS):
+        """Vistas class per point, `UNLABELLED` where no mask covers it.
+
+        Points are projected into each segmented camera and read out of that
+        camera's class image. The front and rear cameras barely overlap, so
+        first label wins and there is nothing to arbitrate.
+        """
+        from .masks import label_image
+        from .mvd import UNLABELLED
+        out = np.full(len(xyz), UNLABELLED, np.uint8)
+        if not len(xyz):
+            return out
+        for camera in cameras:
+            path = self.segmentation_path(camera, index)
+            if path is None:
+                continue
+            projected = self.project_into(camera, index, xyz)
+            if projected is None:
+                continue
+            u, v, visible = projected
+            todo = visible & (out == UNLABELLED)
+            if not todo.any():
+                continue
+            try:
+                labels = label_image(path)
+            except (OSError, ValueError):
+                continue
+            rows = np.clip(v[todo].astype(np.int32), 0, labels.shape[0] - 1)
+            cols = np.clip(u[todo].astype(np.int32), 0, labels.shape[1] - 1)
+            out[todo] = labels[rows, cols]
+        return out
+
+    def frame_rgb(self, index, xyz, cameras=None):
+        """Camera colour per point; neutral grey where no camera saw it.
+
+        All six ring cameras are used, not just the two with masks, so most
+        of a frame gets a colour. Images are decoded at half resolution --
+        a JPEG can do that straight from the DCT coefficients, which is about
+        four times faster, and a point only needs one pixel.
+        """
+        from PIL import Image
+        out = np.full((len(xyz), 3), 90, np.uint8)
+        if not len(xyz):
+            return out
+        taken = np.zeros(len(xyz), bool)
+        for camera in (cameras or self.cameras):
+            path = self.image_path(camera, index)
+            if not path or not path.is_file():
+                continue
+            projected = self.project_into(camera, index, xyz)
+            if projected is None:
+                continue
+            u, v, visible = projected
+            todo = visible & ~taken
+            if not todo.any():
+                continue
+            try:
+                with Image.open(path) as image:
+                    image.draft("RGB", (image.width // 2, image.height // 2))
+                    pixels = np.asarray(image.convert("RGB"))
+            except OSError:
+                continue
+            # draft() only shrinks by powers of two, so take the real ratio.
+            info = self.camera_info()[camera]
+            scale_y = pixels.shape[0] / float(info["height"])
+            scale_x = pixels.shape[1] / float(info["width"])
+            rows = np.clip((v[todo] * scale_y).astype(np.int32), 0, pixels.shape[0] - 1)
+            cols = np.clip((u[todo] * scale_x).astype(np.int32), 0, pixels.shape[1] - 1)
+            out[todo] = pixels[rows, cols]
+            taken |= todo
+        return out
+
     # -- cameras -----------------------------------------------------------
     def camera_info(self):
         """Per ring camera: intrinsics, image size and the mount in the ego frame."""
@@ -284,6 +397,18 @@ class SceneSource:
             return None
 
     # -- description for the browser --------------------------------------
+    def class_palette(self):
+        """Class colours and names for the browser, or None without masks."""
+        from . import mvd
+        if not any(self.segmentation_path(c, 0) for c in SEGMENTED_CAMERAS):
+            return None
+        return {
+            "palette": mvd.palette(),
+            "names": {str(train_id): name for train_id, name in mvd.NAMES.items()},
+            "unlabelled": mvd.UNLABELLED,
+            "cameras": [c for c in SEGMENTED_CAMERAS if self.segmentation_path(c, 0)],
+        }
+
     def describe(self, base_url):
         lat, lon = self.anchor
         positions, quats = self.ego_track()
@@ -298,6 +423,9 @@ class SceneSource:
                 "ego": {"pos": positions, "quat": quats},
                 "cameras": self.camera_info(),
                 "anchor": {"lat": lat, "lon": lon},
+                # The Vistas palette travels with the scene, so the browser
+                # has one source of truth for class colours and names.
+                "classes": self.class_palette(),
                 "enuRotationDeg": round(self.frame.rotation_deg(*self._scene_centre()), 6),
                 "enuScale": [round(v, 9) for v in self.frame.scale(*self._scene_centre())],
             },

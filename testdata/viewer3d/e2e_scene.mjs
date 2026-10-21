@@ -22,19 +22,33 @@ const POINTS_PER_FRAME = 500;
 // question about geometry, not about a counter.
 const frameOrigin = (i) => [10 * i, 0, Z];
 
+// Mapillary Vistas ids the scene server also uses: 58 Car, 48 Pole, 31 Person.
+const CLASS_CAR = 58;
+const CLASS_POLE = 48;
+const CLASS_NONE = 255;
+const classPalette = () => {
+  const rows = Array.from({ length: 256 }, () => [90, 90, 90]);
+  rows[CLASS_CAR] = [0, 0, 142];
+  rows[CLASS_POLE] = [153, 153, 153];
+  rows[31] = [220, 20, 60];
+  return rows;
+};
+
 function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
   const origin = [spacing * index, 0, Z];
   const header = new ArrayBuffer(40);
   const view = new DataView(header);
   for (const [k, ch] of [..."LL2PC1"].entries()) view.setUint8(k, ch.charCodeAt(0));
   view.setUint32(8, count, true);
-  view.setUint32(12, 1 | 2, true); // intensity + sensor id
+  view.setUint32(12, 1 | 2 | 4 | 8, true); // intensity + sensor + class + rgb
   view.setFloat64(16, origin[0], true);
   view.setFloat64(24, origin[1], true);
   view.setFloat64(32, origin[2], true);
   const xyz = new Float32Array(count * 3);
   const intensity = new Uint8Array(count);
   const sensor = new Uint8Array(count);
+  const classes = new Uint8Array(count);
+  const rgb = new Uint8Array(count * 3);
   for (let p = 0; p < count; p++) {
     const a = (p / count) * Math.PI * 2;
     xyz[p * 3] = Math.cos(a) * 6;
@@ -42,9 +56,14 @@ function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
     xyz[p * 3 + 2] = (p % 10) * 0.2;
     intensity[p] = p % 256;
     sensor[p] = p % 7;
+    classes[p] = p % 5 === 0 ? CLASS_CAR : p % 5 === 1 ? CLASS_POLE : CLASS_NONE;
+    rgb[p * 3] = p % 256;
+    rgb[p * 3 + 1] = 255 - (p % 256);
+    rgb[p * 3 + 2] = 128;
   }
   return Buffer.concat([Buffer.from(header), Buffer.from(xyz.buffer),
-                        Buffer.from(intensity), Buffer.from(sensor)]);
+                        Buffer.from(intensity), Buffer.from(sensor),
+                        Buffer.from(classes), Buffer.from(rgb)]);
 }
 
 const ego = {
@@ -141,6 +160,12 @@ const sceneInfo = () => ({
     },
   },
   anchor: { lat: 49.0, lon: 8.4 },
+  classes: {
+    palette: classPalette(),
+    names: { 58: "Car", 48: "Pole", 31: "Person" },
+    unlabelled: CLASS_NONE,
+    cameras: ["camera_ring_front", "camera_ring_rear"],
+  },
 });
 
 const line = (id, nodes, pts) => ({ id: `way/${id}`, kind: "line", tags: { type: "line_thin" },
@@ -378,6 +403,34 @@ try {
     !vis.visible && vis.aggregateVisible, JSON.stringify(vis));
   t.check("and the aggregate is still actually drawn",
     (await v.evaluate("window.__ll2test.stats().drawCalls")) > 0);
+
+  // ---- Vistas classes from the seamseg masks ---------------------------------------
+  const classesOf = () => v.evaluate("window.__ll2scene.classes()");
+  let cls = await classesOf();
+  t.check("the scene brings its class table", cls.available && cls.car === "Car",
+    JSON.stringify({ available: cls.available, car: cls.car, cameras: cls.cameras }));
+  t.check("and the points carry a class each", cls.inData, JSON.stringify(cls));
+  const hist = cls.histogram || {};
+  t.check("which decode to the classes the server sent",
+    hist[CLASS_CAR] === POINTS_PER_FRAME / 5 && hist[CLASS_POLE] === POINTS_PER_FRAME / 5
+    && hist[CLASS_NONE] === (POINTS_PER_FRAME * 3) / 5, JSON.stringify(hist));
+  t.check("the colour menu offers class only for a scene that has it",
+    await v.evaluate("!!document.querySelector('#sceneMode option[value=\"class\"]')"));
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'class'; el.dispatchEvent(new Event('change')); })()");
+  await sleep(150);
+  t.check("selecting it colours by class", (await points()).mode === "class",
+    JSON.stringify(await points()));
+  await v.shot("scene_classes.png");
+  t.check("the camera colour shows up as a mode too",
+    (await classesOf()).rgb
+    && (await v.evaluate("!!document.querySelector('#sceneMode option[value=\"rgb\"]')")));
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'rgb'; el.dispatchEvent(new Event('change')); })()");
+  await sleep(150);
+  t.check("and selecting it colours from the cameras", (await points()).mode === "rgb");
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'intensity'; el.dispatchEvent(new Event('change')); })()");
 
   // ---- camera lock ---------------------------------------------------------------
   await v.evaluate("window.__ll2scene.show(2)");

@@ -89,7 +89,7 @@ class AggregateTest(unittest.TestCase):
         return agg.build()
 
     def test_the_moving_car_is_removed_and_the_wall_kept(self):
-        xyz, _intensity, stats = self._build()
+        xyz, _intensity, _classes, _rgb, stats = self._build()
         near_wall = np.abs(xyz[:, 0] - 6.0) < 1.0
         on_car = xyz[:, 0] < -1.0
         self.assertGreater(near_wall.sum(), 100, "the static wall was thrown away")
@@ -117,34 +117,34 @@ class AggregateTest(unittest.TestCase):
         source.frame_points_scene = three_passes
         agg = SceneAggregator(source, disk_cache=None, voxel=0.3, max_range_m=200.0,
                               min_run=3, ego_box=(0.1, 0.1, 0.1), log=lambda _m: None)
-        xyz, _i, _stats = agg.build()
+        xyz, _i, _c, _rgb, _stats = agg.build()
         self.assertEqual(0, (xyz[:, 0] < -1.0).sum(),
                          "three separate passes were mistaken for a static object")
 
     def test_keeping_everything_keeps_the_car(self):
-        xyz, _intensity, _stats = self._build(min_run=1)
+        xyz, _intensity, _classes, _rgb, _stats = self._build(min_run=1)
         self.assertGreater((xyz[:, 0] < -1.0).sum(), 100,
                            "min_run=1 should keep the traffic in")
 
     def test_downsamples_to_one_point_a_voxel(self):
-        xyz, _intensity, stats = self._build()
+        xyz, _intensity, _classes, _rgb, stats = self._build()
         keys = voxel_keys(xyz, 0.3)
         self.assertEqual(len(keys), len(set(keys.tolist())), "a voxel came back twice")
         self.assertEqual(stats["points"], len(xyz))
 
     def test_points_land_inside_their_voxel(self):
-        xyz, _intensity, _stats = self._build()
+        xyz, _intensity, _classes, _rgb, _stats = self._build()
         wall = xyz[np.abs(xyz[:, 0] - 6.0) < 1.0]
         # The wall is a plane at x = 6; centroids must sit on it, not drift.
         self.assertLess(np.abs(wall[:, 0] - 6.0).max(), 0.3)
 
     def test_range_limit_drops_far_returns(self):
-        _xyz, _i, stats = self._build(max_range_m=5.0)
-        far = self._build(max_range_m=200.0)[2]
+        _xyz, _i, _c, _rgb, stats = self._build(max_range_m=5.0)
+        far = self._build(max_range_m=200.0)[4]
         self.assertLess(stats["points"], far["points"])
 
     def test_stats_describe_the_settings(self):
-        _xyz, _i, stats = self._build(voxel=0.25, min_run=4)
+        _xyz, _i, _c, _rgb, stats = self._build(voxel=0.25, min_run=4)
         self.assertEqual(0.25, stats["voxel_m"])
         self.assertEqual(4, stats["min_run"])
 
@@ -191,13 +191,13 @@ class AggregateCacheTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_round_trip(self):
-        xyz, intensity, stats = self.agg.build()
+        xyz, intensity, classes, colour, stats = self.agg.build()
         self.assertIsNone(self.agg.load_cached(), "nothing should be cached yet")
-        self.agg.save_cached(xyz, intensity, stats)
+        self.agg.save_cached(xyz, intensity, classes, colour, stats)
         self.assertTrue(self.agg.cache_path().is_file(), "no file was written")
         loaded = self.agg.load_cached()
         self.assertIsNotNone(loaded, "the cache could not be read back")
-        back_xyz, back_i, back_stats = loaded
+        back_xyz, back_i, _back_c, _back_rgb, back_stats = loaded
         np.testing.assert_allclose(back_xyz, xyz, atol=1e-3)
         np.testing.assert_allclose(back_i, intensity, atol=1e-6)
         self.assertEqual(stats["points"], int(back_stats["points"]))
@@ -212,10 +212,58 @@ class AggregateCacheTest(unittest.TestCase):
         agg = SceneAggregator(MovingObjectSource(), disk_cache=None, log=lambda _m: None)
         self.assertIsNone(agg.cache_path())
         self.assertIsNone(agg.load_cached())
-        agg.save_cached(np.zeros((1, 3)), np.zeros(1, np.float32), {"points": 1})  # no raise
+        agg.save_cached(np.zeros((1, 3)), np.zeros(1, np.float32), None, None, {"points": 1})  # no raise
 
     def test_a_corrupt_cache_is_ignored(self):
-        xyz, intensity, stats = self.agg.build()
-        self.agg.save_cached(xyz, intensity, stats)
+        xyz, intensity, classes, colour, stats = self.agg.build()
+        self.agg.save_cached(xyz, intensity, classes, colour, stats)
         self.agg.cache_path().write_bytes(b"not an npz")
         self.assertIsNone(self.agg.load_cached())
+
+
+class AggregateClassTest(unittest.TestCase):
+    """Each voxel keeps the class most of its points were given."""
+
+    def setUp(self):
+        self.source = MovingObjectSource()
+        # Two patches of wall, labelled differently, plus one voxel that gets
+        # a minority vote for something else.
+        self.source.wall = np.stack([
+            np.full(200, 6.0), np.linspace(0.0, 20.0, 200), np.zeros(200),
+        ], axis=1)
+
+    def _aggregate(self, classes_for):
+        self.source.frame_classes = classes_for
+        agg = SceneAggregator(self.source, disk_cache=None, voxel=0.5, max_range_m=200.0,
+                              min_run=3, ego_box=(0.1, 0.1, 0.1), log=lambda _m: None)
+        return agg.build()
+
+    def test_the_majority_class_wins(self):
+        from ll2_scene.mvd import UNLABELLED
+
+        def classes_for(index, xyz):
+            # Everything is a Pole except in one frame, where it is a Car.
+            value = 58 if index == 0 else 48
+            return np.full(len(xyz), value, np.uint8)
+
+        xyz, _i, classes, _rgb, _stats = self._aggregate(classes_for)
+        self.assertIsNotNone(classes)
+        self.assertEqual(len(xyz), len(classes))
+        self.assertTrue((classes == 48).all(),
+                        "the one-frame class outvoted the one in every other frame")
+        self.assertNotIn(UNLABELLED, set(classes.tolist()))
+
+    def test_unlabelled_where_nothing_was_seen(self):
+        from ll2_scene.mvd import UNLABELLED
+        _xyz, _i, classes, _rgb, _stats = self._aggregate(
+            lambda index, xyz: np.full(len(xyz), UNLABELLED, np.uint8))
+        self.assertTrue((classes == UNLABELLED).all())
+
+    def test_a_source_without_classes_still_aggregates(self):
+        source = MovingObjectSource()
+        agg = SceneAggregator(source, disk_cache=None, voxel=0.5, max_range_m=200.0,
+                              min_run=3, ego_box=(0.1, 0.1, 0.1), log=lambda _m: None)
+        xyz, _i, classes, _rgb, _stats = agg.build()
+        self.assertGreater(len(xyz), 0)
+        from ll2_scene.mvd import UNLABELLED
+        self.assertTrue(classes is None or (classes == UNLABELLED).all())

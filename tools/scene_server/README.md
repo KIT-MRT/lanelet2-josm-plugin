@@ -54,7 +54,7 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 | `Go to car` / `K` | camera behind the car at this frame |
 | `◀` `▶|` / `,` `.` | step frames |
 | `▶` | play |
-| Colour | intensity, height or sensor |
+| Colour | intensity, height, sensor, class, rgb |
 | `Whole scene` / `Shift+P` | the whole scene as one static cloud (hides the single frame) |
 | `Tint frame` / `U` | paint the single frame one bright colour against the aggregate |
 | `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
@@ -102,6 +102,37 @@ hit, about 10x faster.
 `~/.cache/josm-lanelet2/scene-server/...` by default; it is safe to delete at
 any time, and it is trimmed to `--cache-limit-gb` (10 GB) by dropping the
 least recently used frames. A full 220-frame scene is about 2.3 GB.
+
+### Colouring by class and by camera
+
+Two more colour modes appear in the menu once the data carries them:
+
+**class** paints each point with its Mapillary Vistas colour, taken from the
+scene's own `processed/seamseg_instances/` masks
+([seamseg](https://github.com/mapillary/seamseg) trained on Vistas v1.2).
+Cars come out Vistas blue, people crimson, bicycles dark red, poles grey, and
+so on — the official palette, generated from the upstream category list
+rather than typed in.
+
+The mask JSON gives a class id, an objectness, a box and a COCO
+compressed-RLE mask per instance. The ids are **trainIds** in the 65-class
+taxonomy ordered stuff first (0–27) then things (28–64); confirmed against
+this scene, where they decode to a street full of Poles, Traffic Signs,
+Street Lights, Cars, a Bus and a Person. Only the front and rear cameras have
+masks, so about 4 % of a frame gets a class and everything else stays
+"unlabelled" grey rather than being guessed at. Where two instances overlap,
+the more confident one wins.
+
+**rgb** samples the colour straight out of the ring camera images — all six
+of them, so about 90 % of a frame gets a real colour (the rest keeps the same
+neutral grey). Images are decoded at half resolution, which a JPEG can do
+from its DCT coefficients at about four times the speed, and a point needs
+only one pixel.
+
+Both are computed once per frame and cached beside the decoded points
+(`class-NNNNNN.bin`, `rgb-NNNNNN.bin`), which is why they did not invalidate
+the frames already on disk. In the aggregate each voxel keeps the class most
+of its points voted for and the mean of their camera colours.
 
 ### Why one decode at a time
 

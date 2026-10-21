@@ -80,7 +80,7 @@ class ServingTest(unittest.TestCase):
     def test_serves_a_frame(self):
         status, body = self._get("/frame/3/points.bin")
         self.assertEqual(200, status)
-        xyz, _, _, _ = decode_points(body)
+        xyz, *_ = decode_points(body)
         self.assertEqual(4, len(xyz))
         np.testing.assert_allclose(xyz, 3.0)
 
@@ -277,7 +277,7 @@ class AggregateServingTest(unittest.TestCase):
         for chunk in meta["chunks"]:
             status, body = self._get("/aggregate/%d.bin" % chunk["index"])
             self.assertEqual(200, status)
-            xyz, _i, _s, _o = decode_points(body)
+            xyz, *_ = decode_points(body)
             self.assertEqual(chunk["count"], len(xyz))
             total += len(xyz)
         self.assertEqual(meta["stats"]["points"], total)

@@ -42,6 +42,10 @@ import numpy as np
 
 from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 
+# Bumped when the cached payload gains or changes a field, so an aggregate
+# built by an older version is rebuilt instead of silently lacking it.
+AGGREGATE_FORMAT = 3
+
 # Voxel keys are packed into one int64 so numpy can sort them: 22 bits an axis
 # is +-419 km at 0.2 m, far beyond any scene.
 _BITS = 22
@@ -86,11 +90,42 @@ class SceneAggregator:
         self.progress = {"state": "idle", "done": 0, "total": 0, "points": 0}
 
     # -- one frame ---------------------------------------------------------
+    def _frame_rgb(self, index, xyz):
+        """Camera colour per point of a frame, from the cache when it is there."""
+        cached = self.disk.get(index, "rgb") if self.disk else None
+        if cached is not None and len(cached) == len(xyz) * 3:
+            return np.frombuffer(cached, np.uint8).reshape(-1, 3)
+        if not getattr(self.source, "frame_rgb", None):
+            return None
+        try:
+            rgb = self.source.frame_rgb(index, xyz)
+        except Exception:
+            return None
+        if self.disk and rgb is not None:
+            self.disk.put(index, rgb.tobytes(), "rgb")
+        return rgb
+
+    def _frame_classes(self, index, xyz):
+        """Vistas class per point of a frame, from the cache when it is there."""
+        from .mvd import UNLABELLED
+        cached = self.disk.get(index, "class") if self.disk else None
+        if cached is not None and len(cached) == len(xyz):
+            return np.frombuffer(cached, np.uint8)
+        if not getattr(self.source, "frame_classes", None):
+            return None
+        try:
+            classes = self.source.frame_classes(index, xyz)
+        except Exception:
+            return None
+        if self.disk and classes is not None:
+            self.disk.put(index, classes.tobytes(), "class")
+        return classes
+
     def _frame_points(self, index):
         """Scene-frame points of one frame, ego and far returns removed."""
         blob = self.disk.get(index) if self.disk else None
         if blob is not None:
-            xyz, intensity, _sensor, _origin = decode_points(blob)
+            xyz, intensity, _sensor, _origin, _classes, _rgb = decode_points(blob)
             intensity = (intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
                          if intensity is not None else np.zeros(len(xyz), np.float32))
         else:
@@ -144,11 +179,19 @@ class SceneAggregator:
         return keys, longest
 
     def _accumulate(self, kept_keys):
-        """Centroid and mean intensity of every kept voxel."""
+        """Centroid, mean intensity and majority class of every kept voxel."""
+        from .mvd import UNLABELLED
         n = len(kept_keys)
         sums = np.zeros((n, 3), np.float64)
         weight = np.zeros(n, np.float64)
         intensity = np.zeros(n, np.float64)
+        rgb_sums = np.zeros((n, 3), np.float64)
+        rgb_weight = np.zeros(n, np.float64)
+        # (voxel, class) pairs of labelled points only -- a few per cent of
+        # them, so this stays small enough to hold and count in one go.
+        votes_key = np.zeros(0, np.int64)
+        votes_count = np.zeros(0, np.int32)
+        batch = []
         for i, index in enumerate(self.frames()):
             xyz, inten = self._frame_points(index)
             if not len(xyz):
@@ -157,14 +200,62 @@ class SceneAggregator:
             slot = np.searchsorted(kept_keys, key)
             np.clip(slot, 0, max(n - 1, 0), out=slot)
             hit = kept_keys[slot] == key
-            slot = slot[hit]
-            np.add.at(sums, slot, xyz[hit])
-            np.add.at(weight, slot, 1.0)
-            np.add.at(intensity, slot, inten[hit].astype(np.float64))
+            slot_hit = slot[hit]
+            np.add.at(sums, slot_hit, xyz[hit])
+            np.add.at(weight, slot_hit, 1.0)
+            np.add.at(intensity, slot_hit, inten[hit].astype(np.float64))
+            rgb = self._frame_rgb(index, xyz)
+            if rgb is not None:
+                # 90 is the neutral grey of a point no camera saw.
+                seen = (rgb[hit] != 90).any(axis=1)
+                if seen.any():
+                    np.add.at(rgb_sums, slot_hit[seen], rgb[hit][seen].astype(np.float64))
+                    np.add.at(rgb_weight, slot_hit[seen], 1.0)
+            classes = self._frame_classes(index, xyz)
+            if classes is not None:
+                labelled = classes[hit] != UNLABELLED
+                if labelled.any():
+                    batch.append(slot_hit[labelled].astype(np.int64) * 256
+                                 + classes[hit][labelled].astype(np.int64))
+            if len(batch) >= 32:
+                votes_key, votes_count = self._fold_votes(votes_key, votes_count, batch)
+                batch = []
             self.progress.update(state="gathering", done=i + 1)
+        votes_key, votes_count = self._fold_votes(votes_key, votes_count, batch)
         good = weight > 0
         centroid = sums[good] / weight[good, None]
-        return centroid, (intensity[good] / weight[good]).astype(np.float32)
+        classes = self._majority(votes_key, votes_count, n)[good]
+        colour = None
+        if rgb_weight.any():
+            safe = np.where(rgb_weight > 0, rgb_weight, 1.0)
+            averaged = np.where((rgb_weight > 0)[:, None], rgb_sums / safe[:, None], 90.0)
+            colour = np.clip(averaged[good] + 0.5, 0, 255).astype(np.uint8)
+        return (centroid, (intensity[good] / weight[good]).astype(np.float32),
+                classes, colour)
+
+    @staticmethod
+    def _fold_votes(keys, counts, batch):
+        if not batch:
+            return keys, counts
+        merged = np.concatenate(batch)
+        uniq, inverse = np.unique(merged, return_inverse=True)
+        return merge_counts(keys, counts, uniq,
+                            np.bincount(inverse, minlength=len(uniq)).astype(np.int32))
+
+    @staticmethod
+    def _majority(votes_key, votes_count, n):
+        """The class with most votes per voxel; UNLABELLED where there are none."""
+        from .mvd import UNLABELLED
+        out = np.full(n, UNLABELLED, np.uint8)
+        if not len(votes_key):
+            return out
+        slots = (votes_key >> 8).astype(np.int64)
+        labels = (votes_key & 0xFF).astype(np.uint8)
+        # Sorting by (slot, count) puts each voxel's winner last.
+        order = np.lexsort((votes_count, slots))
+        slots, labels = slots[order], labels[order]
+        out[slots] = labels
+        return out
 
     def build(self):
         """Run both passes. Returns (xyz (N,3), intensity (N,), stats dict)."""
@@ -179,7 +270,7 @@ class SceneAggregator:
                  % (total, occupied, len(kept_keys),
                     100.0 * len(kept_keys) / max(occupied, 1), t_scan))
         self.progress.update(state="gathering", done=0)
-        xyz, intensity = self._accumulate(kept_keys)
+        xyz, intensity, classes, colour = self._accumulate(kept_keys)
         stats = {
             "frames": total,
             "voxels": int(occupied),
@@ -193,7 +284,7 @@ class SceneAggregator:
         self.progress.update(state="ready", points=int(len(xyz)))
         self.log("scene: aggregate %d points in %.0f s (%s)"
                  % (len(xyz), stats["seconds"], describe(stats)))
-        return xyz, intensity, stats
+        return xyz, intensity, classes, colour, stats
 
 
     # -- disk cache --------------------------------------------------------
@@ -203,8 +294,8 @@ class SceneAggregator:
             return None
         # The rule is in the name, so a different one builds a new file
         # instead of serving an aggregate filtered some other way.
-        name = ("aggregate-v%.3f-c%d-r%.0f-s%d.npz"
-                % (self.voxel, self.min_run, self.max_range_m, self.step))
+        name = ("aggregate-v%.3f-c%d-r%.0f-s%d-f%d.npz"
+                % (self.voxel, self.min_run, self.max_range_m, self.step, AGGREGATE_FORMAT))
         return self.disk.dir / name
 
     def load_cached(self):
@@ -215,21 +306,27 @@ class SceneAggregator:
             with np.load(path, allow_pickle=False) as data:
                 xyz = data["xyz"].astype(np.float64)
                 intensity = data["intensity"]
+                classes = data["classes"] if "classes" in data else None
+                colour = data["rgb"] if "rgb" in data else None
                 stats = {k: v.item() for k, v in data.items() if k.startswith("stat_")}
             stats = {k[len("stat_"):]: v for k, v in stats.items()}
             self.progress.update(state="ready", points=int(len(xyz)),
                                  done=len(self.frames()), total=len(self.frames()))
-            return xyz, intensity, stats
+            return xyz, intensity, classes, colour, stats
         except Exception as exc:
             self.log("scene: ignoring unreadable aggregate cache (%r)" % exc)
             return None
 
-    def save_cached(self, xyz, intensity, stats):
+    def save_cached(self, xyz, intensity, classes, colour, stats):
         path = self.cache_path()
         if not path:
             return
         try:
             payload = {"xyz": xyz.astype(np.float32), "intensity": intensity}
+            if classes is not None:
+                payload["classes"] = np.asarray(classes, np.uint8)
+            if colour is not None:
+                payload["rgb"] = np.asarray(colour, np.uint8)
             payload.update({"stat_" + k: np.array(v) for k, v in stats.items()})
             # np.savez appends ".npz" to a *name* but not to an open file, and
             # the rename has to find exactly what was written.
@@ -246,7 +343,8 @@ def describe(stats):
             % (stats["voxel_m"], stats["min_run"], stats["max_range_m"]))
 
 
-def chunk_by_tile(xyz, intensity, tile_m=128.0, max_points=400_000):
+def chunk_by_tile(xyz, intensity, classes=None, colour=None, tile_m=128.0,
+                  max_points=400_000):
     """Split an aggregate into spatial chunks the browser can stream and cull.
 
     Tiles keep what is drawn together close together, so the viewer can drop
@@ -260,14 +358,23 @@ def chunk_by_tile(xyz, intensity, tile_m=128.0, max_points=400_000):
     key = key[order]
     xyz = xyz[order]
     intensity = intensity[order]
+    classes = classes[order] if classes is not None else None
+    colour = colour[order] if colour is not None else None
     bounds = np.flatnonzero(np.diff(key)) + 1
+    split_classes = np.split(classes, bounds) if classes is not None else None
+    split_colour = np.split(colour, bounds) if colour is not None else None
     chunks = []
-    for part_xyz, part_i in zip(np.split(xyz, bounds), np.split(intensity, bounds)):
+    for index, (part_xyz, part_i) in enumerate(zip(np.split(xyz, bounds),
+                                                   np.split(intensity, bounds))):
+        part_c = split_classes[index] if split_classes is not None else None
+        part_rgb = split_colour[index] if split_colour is not None else None
         for start in range(0, len(part_xyz), max_points):
             piece = part_xyz[start:start + max_points]
             chunks.append({
                 "xyz": piece,
                 "intensity": part_i[start:start + max_points],
+                "classes": part_c[start:start + max_points] if part_c is not None else None,
+                "rgb": part_rgb[start:start + max_points] if part_rgb is not None else None,
                 "centre": piece.mean(axis=0).tolist(),
                 "radius": float(np.linalg.norm(piece - piece.mean(axis=0), axis=1).max())
                 if len(piece) else 0.0,

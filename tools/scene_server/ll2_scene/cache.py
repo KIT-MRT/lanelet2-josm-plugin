@@ -55,13 +55,13 @@ class FrameDiskCache:
             self.enabled = False
             self.dir = None
 
-    def _path(self, index):
-        return self.dir / ("frame-%06d.bin" % index)
+    def _path(self, index, kind="frame"):
+        return self.dir / ("%s-%06d.bin" % (kind, index))
 
-    def get(self, index):
+    def get(self, index, kind="frame"):
         if not self.enabled:
             return None
-        path = self._path(index)
+        path = self._path(index, kind)
         try:
             blob = path.read_bytes()
         except OSError:
@@ -75,16 +75,16 @@ class FrameDiskCache:
         self.hits += 1
         return blob
 
-    def put(self, index, blob):
+    def put(self, index, blob, kind="frame"):
         if not self.enabled:
             return
-        path = self._path(index)
+        path = self._path(index, kind)
         tmp = path.with_suffix(".part")
         try:
             tmp.write_bytes(blob)
             tmp.replace(path)  # atomic, so a killed server leaves no half frame
         except OSError as exc:
-            self.log("scene: could not cache frame %d (%s)" % (index, exc))
+            self.log("scene: could not cache %s %d (%s)" % (kind, index, exc))
             try:
                 tmp.unlink()
             except OSError:
@@ -98,7 +98,7 @@ class FrameDiskCache:
             return
         try:
             files = [(p.stat().st_atime, p.stat().st_size, p)
-                     for p in self.dir.parent.glob("*/frame-*.bin")]
+                     for p in self.dir.parent.glob("*/*-[0-9]*.bin")]
         except OSError:
             return
         total = sum(size for _, size, _ in files)
@@ -118,7 +118,7 @@ class FrameDiskCache:
         if not self.enabled:
             return 0
         try:
-            return sum(p.stat().st_size for p in self.dir.glob("frame-*.bin"))
+            return sum(p.stat().st_size for p in self.dir.glob("*-[0-9]*.bin"))
         except OSError:
             return 0
 

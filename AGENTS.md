@@ -418,6 +418,17 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   parent silently took the aggregate with it while its own `visible` stayed
   true -- the test asserted the flag and passed. `pointLayer.stats()` reports
   effective visibility now.
+- **Vistas classes** (`ll2_scene/mvd.py`, `masks.py`): the scene's
+  `processed/seamseg_instances/` masks are seamseg trained on Mapillary
+  Vistas v1.2, and their `class` is a **trainId** in the 65-class taxonomy
+  ordered stuff (0-27) then things (28-64) -- verified against the example
+  scene, where the ids decode to Poles, Traffic Signs, Cars, a Bus and a
+  Person. Masks are COCO compressed RLE at `image_info.original_size`, runs
+  going **down columns**; decoded here rather than depending on
+  pycocotools. The palette is generated from the upstream category list
+  (`mvd_classes.py`) and travels to the browser inside `scene.json`, so
+  there is one source of truth. Only front and rear have masks, so ~4 % of a
+  frame is labelled; the rest is `UNLABELLED` (255), never guessed.
 - **The dataset is read-only.** Decoded frames cache under
   `$XDG_CACHE_HOME/josm-lanelet2/scene-server/`, never beside the data, and
   they hold the frame in the *scene's* metric frame so adopting JOSM's anchor

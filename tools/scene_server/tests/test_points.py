@@ -19,7 +19,7 @@ class EncodeTest(unittest.TestCase):
 
     def test_round_trip(self):
         blob = encode_points(self.xyz, self.intensity, self.sensor)
-        xyz, intensity, sensor, origin = decode_points(blob)
+        xyz, intensity, sensor, origin, _c, _r = decode_points(blob)
         np.testing.assert_allclose(xyz, self.xyz, atol=1e-4)
         np.testing.assert_array_equal(sensor, self.sensor)
         # 0, 1 and 2 of the 0..2 reflectivity range land on 0, half and full.
@@ -38,7 +38,7 @@ class EncodeTest(unittest.TestCase):
 
     def test_optional_channels(self):
         blob = encode_points(self.xyz)
-        _, intensity, sensor, _ = decode_points(blob)
+        _, intensity, sensor, _, _, _ = decode_points(blob)
         self.assertIsNone(intensity)
         self.assertIsNone(sensor)
         self.assertEqual(HEADER_SIZE + 3 * 12, len(blob))
@@ -46,17 +46,17 @@ class EncodeTest(unittest.TestCase):
     def test_positions_keep_millimetres_far_from_the_origin(self):
         """float32 relative to the cloud origin, which is the point of it."""
         far = self.xyz + np.array([6_000.0, 6_000.0, 0.0])  # ENU metres get this big
-        xyz, _, _, _ = decode_points(encode_points(far))
+        xyz, *_ = decode_points(encode_points(far))
         self.assertLess(np.abs(xyz - far).max(), 1e-4)
 
     def test_empty_cloud(self):
         blob = encode_points(np.zeros((0, 3)))
-        xyz, _, _, _ = decode_points(blob)
+        xyz, *_ = decode_points(blob)
         self.assertEqual(0, len(xyz))
 
     def test_explicit_origin_is_kept(self):
         blob = encode_points(self.xyz, origin=[1000.0, -2000.0, 140.0])
-        xyz, _, _, origin = decode_points(blob)
+        xyz, _, _, origin, _, _ = decode_points(blob)
         np.testing.assert_allclose(origin, [1000.0, -2000.0, 140.0])
         np.testing.assert_allclose(xyz, self.xyz, atol=1e-4)
 

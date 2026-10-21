@@ -98,7 +98,22 @@ try {
       + " el.value = '1'; el.dispatchEvent(new Event('input')); })()");
     await sleep(800);
     await v.shot("live_aggregate_car_fine.png");
+    const setMode = async (mode) => {
+      await v.evaluate(`(() => { const el = document.getElementById('sceneMode');`
+        + ` el.value = '${mode}'; el.dispatchEvent(new Event('change')); })()`);
+      await sleep(900);
+    };
+    const classes = await v.evaluate("window.__ll2scene.classes()");
+    console.log(`classes: available=${classes.available} inData=${classes.inData} rgb=${classes.rgb}`);
+    // The live frame is tinted orange while the aggregate is up; hide it so
+    // these shots show the aggregate's own colouring.
     await v.key("p");
+    await sleep(400);
+    await setMode("class");
+    await v.shot("live_aggregate_class.png");
+    await setMode("rgb");
+    await v.shot("live_aggregate_rgb.png");
+    await setMode("intensity");
   }
 
   await v.key("k");

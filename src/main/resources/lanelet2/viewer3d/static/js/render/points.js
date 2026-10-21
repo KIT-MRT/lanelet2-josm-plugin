@@ -13,13 +13,15 @@ import * as THREE from "three";
 // "solid" is not offered in the colour menu: it is what the single frame is
 // painted when it is shown on top of the aggregate, so the two can be told
 // apart at a glance.
-export const COLOR_MODES = ["intensity", "height", "sensor", "solid"];
+export const COLOR_MODES = ["intensity", "height", "sensor", "solid", "class", "rgb"];
 export const MENU_MODES = ["intensity", "height", "sensor"];
 const FRAME_TINT = 0xff6b35; // warm orange: nothing in viridis comes near it
 const MAGIC = "LL2PC1\0\0";
 const HEADER_SIZE = 40;
 const FLAG_INTENSITY = 1;
 const FLAG_SENSOR = 2;
+const FLAG_CLASS = 4;
+const FLAG_RGB = 8;
 
 // lidar_top, corner left/right, left, right, front, rear — the dataset's own
 // sensor_id order.
@@ -30,6 +32,8 @@ const SENSOR_COLORS = [
 const VERTEX = /* glsl */`
 attribute float aIntensity;
 attribute float aSensor;
+attribute float aClass;
+attribute vec3 aRGB;
 uniform float uSize;
 uniform int uMode;
 uniform float uGain;
@@ -37,6 +41,7 @@ uniform float uZMin;
 uniform float uZRange;
 uniform vec3 uSensorColors[7];
 uniform vec3 uSolid;
+uniform sampler2D uPalette;
 varying vec3 vColor;
 #include <common>
 #include <logdepthbuf_pars_vertex>
@@ -63,6 +68,12 @@ void main() {
     vColor = uSensorColors[int(clamp(aSensor, 0.0, 6.0))];
   } else if (uMode == 3) {
     vColor = uSolid;
+  } else if (uMode == 4) {
+    // aClass is a normalised byte, so * 255 is the Vistas class id; the
+    // palette is one texel per id.
+    vColor = texture2D(uPalette, vec2((aClass * 255.0 + 0.5) / 256.0, 0.5)).rgb;
+  } else if (uMode == 5) {
+    vColor = aRGB;
   } else {
     vColor = viridis(clamp(aIntensity * uGain, 0.0, 1.0));
   }
@@ -97,8 +108,36 @@ export function parseCloud(buffer) {
     intensity = new Uint8Array(buffer, offset, count);
     offset += count;
   }
-  if (flags & FLAG_SENSOR) sensor = new Uint8Array(buffer, offset, count);
-  return { count, origin, positions, intensity, sensor };
+  if (flags & FLAG_SENSOR) {
+    sensor = new Uint8Array(buffer, offset, count);
+    offset += count;
+  }
+  let classes = null;
+  if (flags & FLAG_CLASS) {
+    classes = new Uint8Array(buffer, offset, count);
+    offset += count;
+  }
+  let rgb = null;
+  if (flags & FLAG_RGB) rgb = new Uint8Array(buffer, offset, count * 3);
+  return { count, origin, positions, intensity, sensor, classes, rgb };
+}
+
+// One texel per class id, filled from the palette the scene server sends.
+const paletteTexture = new THREE.DataTexture(
+  new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
+paletteTexture.needsUpdate = true;
+
+/** Install the Vistas colours: `rows` is 256 [r, g, b] entries. */
+export function setClassPalette(rows) {
+  const data = paletteTexture.image.data;
+  for (let i = 0; i < 256; i++) {
+    const rgb = (rows && rows[i]) || [90, 90, 90];
+    data[i * 4] = rgb[0];
+    data[i * 4 + 1] = rgb[1];
+    data[i * 4 + 2] = rgb[2];
+    data[i * 4 + 3] = 255;
+  }
+  paletteTexture.needsUpdate = true;
 }
 
 function makeMaterial(size, gain) {
@@ -111,6 +150,7 @@ function makeMaterial(size, gain) {
       uZRange: { value: 10 },
       uSensorColors: { value: SENSOR_COLORS.map((c) => new THREE.Color(c)) },
       uSolid: { value: new THREE.Color(FRAME_TINT) },
+      uPalette: { value: paletteTexture },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
@@ -133,6 +173,8 @@ class PointLayer {
     this.aggregateVisible = true;
     this.aggregateBounds = null; // { min, max } z over every chunk loaded
     this.aggregateCount = 0;
+    this.aggregateHasClasses = false;
+    this.aggregateHasRgb = false;
     this.mode = "intensity";
     // Tell the live frame from the aggregate by colour. Only takes effect
     // while both are on screen: a lone frame painted one flat colour would
@@ -153,12 +195,18 @@ class PointLayer {
     geometry.setAttribute("aIntensity", new THREE.BufferAttribute(
       cloud.intensity || new Uint8Array(cloud.count), 1, true));
     geometry.setAttribute("aSensor", new THREE.BufferAttribute(new Uint8Array(cloud.count), 1, false));
+    geometry.setAttribute("aClass", new THREE.BufferAttribute(
+      cloud.classes || new Uint8Array(cloud.count).fill(255), 1, true));
+    geometry.setAttribute("aRGB", new THREE.BufferAttribute(
+      cloud.rgb || new Uint8Array(cloud.count * 3).fill(90), 3, true));
     geometry.computeBoundingSphere();
     const points = new THREE.Points(geometry, this.aggregateMaterial);
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
     points.renderOrder = 2;
     this.aggregateGroup.add(points);
     this.aggregateCount += cloud.count;
+    if (cloud.classes) this.aggregateHasClasses = true;
+    if (cloud.rgb) this.aggregateHasRgb = true;
     let min = Infinity;
     let max = -Infinity;
     for (let i = 2; i < cloud.positions.length; i += 3) {
@@ -184,6 +232,8 @@ class PointLayer {
     }
     this.aggregateCount = 0;
     this.aggregateBounds = null;
+    this.aggregateHasClasses = false;
+    this.aggregateHasRgb = false;
   }
 
   setAggregateVisible(on) {
@@ -222,6 +272,10 @@ class PointLayer {
     }
     const sensor = cloud.sensor || new Uint8Array(cloud.count);
     geometry.setAttribute("aSensor", new THREE.BufferAttribute(sensor, 1, false));
+    geometry.setAttribute("aClass", new THREE.BufferAttribute(
+      cloud.classes || new Uint8Array(cloud.count).fill(255), 1, true));
+    geometry.setAttribute("aRGB", new THREE.BufferAttribute(
+      cloud.rgb || new Uint8Array(cloud.count * 3).fill(90), 3, true));
     geometry.computeBoundingSphere();
     const points = new THREE.Points(geometry, this.material);
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
@@ -263,8 +317,18 @@ class PointLayer {
   }
 
   setMode(mode) {
-    this.mode = MENU_MODES.includes(mode) ? mode : "intensity";
+    this.mode = COLOR_MODES.includes(mode) && mode !== "solid" ? mode : "intensity";
     this._applyModes();
+  }
+
+  /** Does the loaded data carry Vistas classes at all? */
+  hasClasses() {
+    return Boolean((this.cloud && this.cloud.classes) || this.aggregateHasClasses);
+  }
+
+  /** Does it carry camera colour? */
+  hasRgb() {
+    return Boolean((this.cloud && this.cloud.rgb) || this.aggregateHasRgb);
   }
 
   setSize(px) {
@@ -275,6 +339,18 @@ class PointLayer {
   setGain(gain) {
     this.gain = Math.max(0.25, Math.min(16, gain));
     for (const m of this.materials) m.uniforms.uGain.value = this.gain;
+  }
+
+  /** {class id: points} over the loaded frame cloud, for the HUD and tests. */
+  classHistogram() {
+    const cloud = this.cloud;
+    if (!cloud || !cloud.classes) return null;
+    const counts = {};
+    for (let i = 0; i < cloud.count; i++) {
+      const id = cloud.classes[i];
+      counts[id] = (counts[id] || 0) + 1;
+    }
+    return counts;
   }
 
   stats() {

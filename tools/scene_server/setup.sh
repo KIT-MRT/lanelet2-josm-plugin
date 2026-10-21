@@ -15,7 +15,7 @@ wheel="$kitscenes/res/ml_converter_wheels/lanelet2-1.2.2-cp312-cp312-manylinux_2
 
 uv python install 3.12
 uv venv --python 3.12 "$here/.venv"
-VIRTUAL_ENV="$here/.venv" uv pip install "numpy<2" "pyarrow==17.0.0" "scipy<1.15" pyproj tqdm "$wheel"
+VIRTUAL_ENV="$here/.venv" uv pip install "numpy<2" "pyarrow==17.0.0" "scipy<1.15" pyproj tqdm pillow "$wheel"
 echo
 echo "done. run it with:"
 echo "  KITSCENES_API_PATH=$kitscenes $here/.venv/bin/python -m ll2_scene --scene <scene dir>"

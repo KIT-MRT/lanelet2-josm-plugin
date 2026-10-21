@@ -168,8 +168,21 @@ cloud's switch toggled the *parent* group of both. The test had asserted the
 child's own `visible` flag, which stays true under a hidden parent, so it
 passed while the viewer was wrong; the hook now reports effective visibility.
 
-### M4 — remaining colourings
-- [ ] Height colormap, per-sensor colour, camera-projected RGB.
+### M4 — remaining colourings  [x]
+- [x] Height and per-sensor landed with M1.
+- [x] **class**: Mapillary Vistas colours from the scene's seamseg masks.
+      The ids are Vistas **trainIds** (stuff 0-27, things 28-64), confirmed
+      against the example scene, where they decode to Poles, Traffic Signs,
+      Street Lights, Cars, a Bus and a Person. COCO RLE is decoded here (no
+      pycocotools); the official palette is generated from the upstream
+      category list rather than typed in. ~4 % of a frame gets a class --
+      only the front and rear cameras have masks, and only *things* are
+      detected -- and the rest stays "unlabelled" grey rather than guessed.
+- [x] **rgb**: colour sampled from all six ring cameras, ~90 % of a frame,
+      decoded at half resolution through the JPEG's own DCT scaling.
+- [x] Both cached per frame beside the points, so neither invalidated the
+      2.2 GB of decoded frames already on disk. In the aggregate a voxel
+      keeps its majority class and the mean of its camera colours.
 
 ## Measured facts (example scene `c34c778f…`, Frankfurt, val split)
 
