@@ -151,6 +151,20 @@ culling.
   (e.g. `one_way:bicycle=no` on a one-way road).
 - **Street view:** the viewer's button and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
+- **Ortho (V)** is an orthographic map view: straight down, no perspective,
+  north up to start. A drag turns it about the point under the cursor, `B`
+  puts north up again, the wheel zooms about the cursor. The camera lock
+  switches it off (the recorded camera has a perspective).
+- **Tiles** lays a web map under everything: OpenStreetMap by default, or
+  your own XYZ / TMS template or WMS endpoint (GeoServer and the like) from
+  the ▾ panel, with an opacity slider. Tiles are drawn in the scene, each
+  corner placed through the same lat/lon → ENU as the map, so they line up
+  in ortho and in perspective. They are off on every start, since turning
+  them on sends the viewed area to the tile server. WebGL can only use tiles
+  from servers that allow cross-origin use (CORS); for one that does not,
+  start the viewer with `--tile-proxy-host <host>` (or set
+  `LL2_TILE_PROXY_HOSTS`) to fetch through the viewer server, for that host
+  only.
 
 ### Recorded sensor data (point clouds, no JOSM needed)
 
@@ -167,8 +181,16 @@ checked against everything the car saw rather than one frame at a time. It
 replaces the single frame on screen; `P` puts that back on top of it in a
 distinct colour (`U` toggles the tint) so the two can be told apart.
 Points colour by intensity, height, sensor, **Mapillary Vistas class** (from
-the scene's seamseg masks: cars blue, people crimson, bicycles dark red) or
-**camera rgb**.
+the scene's seamseg masks: cars blue, people crimson, bicycles dark red),
+**camera rgb** or, for one frame, **instance** (each detected object its own
+colour). **Filter** hides classes — or, switched to *Only*, shows nothing but
+the ticked ones (Only + Vehicles: just the cars) — and points above a height
+over the ground or below an intensity, and fades the cloud so the map shows
+through.
+
+**A whole city:** `--city $KITSCENES_ROOT` serves every scene of a city on the
+city-wide map, as clickable trajectories; picking one makes it the scene, and
+the static clouds of the scenes around the camera load on demand.
 
 **Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
 ring cameras was, with that camera's own intrinsics, and blends the recorded

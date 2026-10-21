@@ -38,7 +38,9 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+import urllib.error
+import urllib.request
+from urllib.parse import parse_qs, unquote, urlparse
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 VIEWER_DIR = Path(__file__).resolve().parent
@@ -385,6 +387,48 @@ def _shutdown_soon():
     os._exit(0)
 
 
+# --- tile proxy -------------------------------------------------------------------
+# WebGL can only texture with images whose server allows cross-origin use
+# (CORS). OpenStreetMap does; many in-house GeoServers do not. For those the
+# page can fetch tiles through this server instead -- but only from hosts the
+# user named (--tile-proxy-host, or LL2_TILE_PROXY_HOSTS for a server JOSM
+# starts), never anything else, and without following redirects elsewhere.
+TILE_PROXY_HOSTS = set()
+TILE_PROXY_MAX_BYTES = 16 * 1024 * 1024
+TILE_PROXY_TIMEOUT_S = 20
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # a redirect could lead off the allowed host
+
+
+_TILE_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def tile_proxy_allowed(url):
+    """True only for http(s) URLs on a host the user allowed (host or host:port)."""
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    return host in TILE_PROXY_HOSTS or ("%s:%d" % (host, port) if port else host) in TILE_PROXY_HOSTS
+
+
+def parse_proxy_hosts(values):
+    hosts = set()
+    for value in values:
+        for part in (value or "").replace(";", ",").split(","):
+            part = part.strip().lower()
+            if part:
+                hosts.add(part)
+    return hosts
+
+
 class HttpHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -411,8 +455,45 @@ class HttpHandler(BaseHTTPRequestHandler):
         elif path.startswith("/style_images/"):
             name = unquote(path[len("/style_images/"):])
             self._serve_icon(name)
+        elif path == "/tileproxy/hosts":
+            self._serve_json({"hosts": sorted(TILE_PROXY_HOSTS)})
+        elif path == "/tileproxy":
+            self._serve_tile_proxy()
         else:
             self.send_error(404, "Not found")
+
+    def _serve_tile_proxy(self):
+        query = parse_qs(urlparse(self.path).query)
+        url = (query.get("url") or [""])[0]
+        if not tile_proxy_allowed(url):
+            self.send_error(403, "Host not allowed for the tile proxy (see --tile-proxy-host)")
+            return
+        request = urllib.request.Request(url, headers={"User-Agent": "lanelet2-josm-viewer3d"})
+        try:
+            with _TILE_OPENER.open(request, timeout=TILE_PROXY_TIMEOUT_S) as response:
+                ctype = response.headers.get("Content-Type", "")
+                body = response.read(TILE_PROXY_MAX_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            self.send_error(502 if exc.code < 400 else exc.code, "Tile server: %s" % exc.reason)
+            return
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            self.send_error(502, "Tile server unreachable: %s" % exc)
+            return
+        if len(body) > TILE_PROXY_MAX_BYTES:
+            self.send_error(502, "Tile too large")
+            return
+        if not ctype.lower().startswith("image/"):
+            # A WMS answers errors with an XML ServiceException; pass its text
+            # on so the browser console says what the server objected to.
+            self.send_error(502, "Not an image: %s %s" % (
+                ctype, body[:300].decode("utf-8", "replace").replace("\n", " ")))
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):
         if self.path == "/command":
@@ -599,9 +680,16 @@ def main(argv=None):
     parser.add_argument("--icons-dir", default=None,
                         help="directory of style_images to serve at /style_images/ "
                              "(auto-detected from the tooling root if omitted)")
+    parser.add_argument("--tile-proxy-host", action="append", default=[],
+                        help="let the page fetch map tiles from this host (host or "
+                             "host:port) through this server, for tile servers that do "
+                             "not allow cross-origin use. Repeatable; also read from "
+                             "LL2_TILE_PROXY_HOSTS (comma separated)")
     args = parser.parse_args(argv)
 
-    global PROFILE, ICONS_DIR, BUILD_ID
+    global PROFILE, ICONS_DIR, BUILD_ID, TILE_PROXY_HOSTS
+    TILE_PROXY_HOSTS = parse_proxy_hosts(
+        list(args.tile_proxy_host) + [os.environ.get("LL2_TILE_PROXY_HOSTS", "")])
     PROFILE = PROFILE or args.profile
     try:
         BUILD_ID = BUILD_FILE.read_text(encoding="utf-8").strip() or None
@@ -628,6 +716,8 @@ def main(argv=None):
     print("[viewer] HTTP/SSE : %s" % url, flush=True)
     print("[viewer] ingest   : tcp://%s:%d (JOSM bridge connects here)"
           % (args.host, args.ingest_port), flush=True)
+    if TILE_PROXY_HOSTS:
+        print("[viewer] tiles    : proxying %s" % ", ".join(sorted(TILE_PROXY_HOSTS)), flush=True)
     if ICONS_DIR is not None:
         print("[viewer] icons    : %s" % ICONS_DIR, flush=True)
     else:

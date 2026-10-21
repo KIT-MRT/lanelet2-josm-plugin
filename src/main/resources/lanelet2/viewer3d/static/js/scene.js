@@ -15,7 +15,7 @@ export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x11151c);
 
 // Ground grid + axes for spatial reference.
-const grid = new THREE.GridHelper(400, 40, 0x2a3340, 0x20262f);
+export const grid = new THREE.GridHelper(400, 40, 0x2a3340, 0x20262f);
 grid.rotation.x = Math.PI / 2; // GridHelper is XZ by default; rotate to XY
 scene.add(grid);
 scene.add(new THREE.AxesHelper(5));

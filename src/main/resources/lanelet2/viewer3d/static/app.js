@@ -15,7 +15,7 @@
 import * as THREE from "three";
 import { PROFILE, TEST_HOOKS, now, plog } from "./js/util.js";
 import { renderer, scene, mapRoot } from "./js/scene.js";
-import { camera, view } from "./js/camera.js";
+import { camera, view, syncProjection } from "./js/camera.js";
 import { store, nodeToken } from "./js/store.js";
 import { lineLayer } from "./js/render/lines.js";
 import { iconLayer } from "./js/render/icons.js";
@@ -26,6 +26,7 @@ import { updateHover, hoverItem } from "./js/hover.js";
 import { pointLayer } from "./js/render/points.js";
 import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
 import { installCity, onCityMessage, update as updateCity } from "./js/sensors/city.js";
+import { installBasemap, update as updateBasemap } from "./js/basemap.js";
 import { rigActive, update as updateRig } from "./js/sensors/camrig.js";
 import { selection } from "./js/selection.js";
 import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
@@ -48,6 +49,7 @@ installImagery();
 installHudToggle();
 installScene();
 installCity();
+installBasemap();
 pointLayer.attach(mapRoot);
 
 // A clicked button must not keep keyboard focus, or Enter clicks it again
@@ -106,6 +108,10 @@ function tick() {
   iconLayer.update(camera);
   updateScreenSizedMarkers();
   updateCity();
+  // Ortho sizes its frustum from the camera height, which held keys and the
+  // wheel change between frames.
+  syncProjection();
+  updateBasemap();
   refreshCameraHud(nav);
   const tr = PROFILE ? now() : 0;
   renderer.render(scene, camera);

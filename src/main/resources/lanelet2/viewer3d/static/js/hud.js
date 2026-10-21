@@ -1,6 +1,6 @@
 // HUD panels: connection, counts, camera readout, frame debug, profiling.
 import { PROFILE } from "./util.js";
-import { camera, view, headingDeg } from "./camera.js";
+import { camera, view, headingDeg, ortho, metresPerPixel } from "./camera.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -74,7 +74,8 @@ export function refreshCameraHud(nav) {
   if (!hud.camPos) return;
   hud.camPos.textContent = fmtVec3(camera.position);
   hud.camAng.textContent =
-    `heading ${fmt1(headingDeg())}° pitch ${fmt1((view.pitch * 180) / Math.PI)}° fov ${fmt1(camera.fov)}°`;
+    `heading ${fmt1(headingDeg())}° pitch ${fmt1((view.pitch * 180) / Math.PI)}° `
+    + (ortho.on ? `ortho ${fmt1(metresPerPixel() * 100)} cm/px` : `fov ${fmt1(camera.fov)}°`);
   if (hud.zoomTarget) {
     const z = nav.zoomTarget;
     hud.zoomTarget.textContent = z

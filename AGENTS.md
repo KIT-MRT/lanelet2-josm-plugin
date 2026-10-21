@@ -488,6 +488,28 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   gate. `Auto` never starts a build (a cold one is minutes); only `Load` does.
   Scenes switch via `resetScene()` -- before the city there was only ever one
   scene per page, so switching had never had to drop anything.
+- **Orthographic is a mode of the one camera, not a second camera.** Every
+  module imports the same `camera`, and the camera lock already writes its
+  own projection into it. In ortho the frustum is sized to show what the
+  perspective would show at the ground from the camera's height, so height
+  stays "zoom": the wheel, Space/C, icon culling and every distance-based
+  size keep working. The camera flips `isPerspectiveCamera` /
+  `isOrthographicCamera` and fills `top/bottom/left/right`, which is what
+  three's Raycaster and TransformControls branch on. Pitch is pinned straight
+  down. The CPU picking does its own projection maths (`screenX/screenY` in
+  `picking.js`), as does the trajectory pick; the trajectory line shader
+  trims at the near plane only in perspective. The near plane sits *behind*
+  an ortho camera so tall geometry above a low camera still draws.
+- **Tiles are opaque.** three draws every opaque object before any
+  transparent one regardless of `renderOrder`, so translucent tiles drew over
+  the whole map (the synthetic test missed it -- the line showed faintly
+  through; real OSM under Frankfurt did not). Opacity is a blend toward the
+  background in the tile shader. `e2e_mapview.mjs` now reads real screen
+  pixels (`harness.pixel`) to check the map draws over the tiles. Tile
+  corners go Mercator -> lat/lon -> the viewer's ENU, never a Mercator plane.
+  The viewer server's `/tileproxy` fetches only from hosts named on its
+  command line or in `LL2_TILE_PROXY_HOSTS`, follows no redirects and passes
+  on images only.
 - **Trajectory lines are quads, not `linewidth`.** WebGL ignores line width,
   so each segment is an instanced quad widened in screen space after being
   trimmed to the near plane (otherwise a segment passing behind the camera

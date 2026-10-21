@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { store } from "./store.js";
 import { canvas } from "./scene.js";
-import { camera, camRefs } from "./camera.js";
+import { camera, camRefs, ortho, syncProjection } from "./camera.js";
 import { laneletLayer } from "./render/lanelets.js";
 
 export const PICK_RADIUS_PX = 10;    // a line / node this close counts as under the cursor
@@ -24,14 +24,22 @@ const _segHit = { px: 0, depth: 0, x: 0, y: 0, z: 0 };
 
 export function screenProjector() {
   camera.updateMatrixWorld();
+  syncProjection();
   const rect = canvas.getBoundingClientRect();
   return {
     e: camera.matrixWorldInverse.elements,
     f: rect.height / 2 / Math.tan((camera.fov * Math.PI) / 360), // pixels per unit at depth 1
+    // Orthographic: pixels per metre, the same at every depth.
+    ortho: ortho.on,
+    k: ortho.on ? rect.height / 2 / camera.top : 0,
     cx: rect.left + rect.width / 2,
     cy: rect.top + rect.height / 2,
   };
 }
+
+/** Page x / y of a view-space point at depth d. */
+const screenX = (pr, vx, d) => pr.cx + (pr.ortho ? pr.k * vx : (pr.f * vx) / d);
+const screenY = (pr, vy, d) => pr.cy - (pr.ortho ? pr.k * vy : (pr.f * vy) / d);
 
 export function toViewSpace(e, x, y, z, out) {
   out[0] = x; out[1] = y; out[2] = z;
@@ -45,7 +53,7 @@ export function projectToPage(pr, x, y, z) {
   toViewSpace(pr.e, x, y, z, _tmp);
   const d = _tmp[5];
   if (d < camera.near) return null;
-  return [pr.cx + (pr.f * _tmp[3]) / d, pr.cy - (pr.f * _tmp[4]) / d, d];
+  return [screenX(pr, _tmp[3], d), screenY(pr, _tmp[4], d), d];
 }
 
 // Conservative test: can any point of sphere {x,y,z,r} land within `radiusPx`
@@ -59,6 +67,10 @@ export function projectToPage(pr, x, y, z) {
 function sphereMayBeNear(s, pr, mx, my, radiusPx) {
   toViewSpace(pr.e, s.x, s.y, s.z, _tmp);
   const vx = _tmp[3], vy = _tmp[4], d = _tmp[5]; // centre in view space, d along the view axis
+  if (pr.ortho) {
+    // No perspective: the sphere is a disc of radius r * k pixels.
+    return Math.hypot(screenX(pr, vx, d) - mx, screenY(pr, vy, d) - my) <= radiusPx + s.r * pr.k;
+  }
   const len = Math.hypot(vx, vy, d);
   if (len <= s.r) return true; // the camera is inside
   const ax = (mx - pr.cx) / pr.f;
@@ -94,17 +106,18 @@ function segmentUnderCursor(pr, mx, my, A, B) {
   const t1 = db < near ? (near - da) / (db - da) : 1;
   const d0 = da + (db - da) * t0;
   const d1 = da + (db - da) * t1;
-  const sx0 = pr.cx + (pr.f * (A[3] + (B[3] - A[3]) * t0)) / d0;
-  const sy0 = pr.cy - (pr.f * (A[4] + (B[4] - A[4]) * t0)) / d0;
-  const sx1 = pr.cx + (pr.f * (A[3] + (B[3] - A[3]) * t1)) / d1;
-  const sy1 = pr.cy - (pr.f * (A[4] + (B[4] - A[4]) * t1)) / d1;
+  const sx0 = screenX(pr, A[3] + (B[3] - A[3]) * t0, d0);
+  const sy0 = screenY(pr, A[4] + (B[4] - A[4]) * t0, d0);
+  const sx1 = screenX(pr, A[3] + (B[3] - A[3]) * t1, d1);
+  const sy1 = screenY(pr, A[4] + (B[4] - A[4]) * t1, d1);
   const ex = sx1 - sx0;
   const ey = sy1 - sy0;
   const len2 = ex * ex + ey * ey;
   let s = len2 > 1e-12 ? ((mx - sx0) * ex + (my - sy0) * ey) / len2 : 0;
   s = s < 0 ? 0 : s > 1 ? 1 : s;
-  // Screen fraction s -> fraction u of the clipped 3D segment, then back to A-B.
-  const u = (s * d0) / ((1 - s) * d1 + s * d0);
+  // Screen fraction s -> fraction u of the clipped 3D segment, then back to A-B
+  // (linear in ortho, where depth does not divide).
+  const u = pr.ortho ? s : (s * d0) / ((1 - s) * d1 + s * d0);
   const t = t0 + (t1 - t0) * u;
   _segHit.px = Math.hypot(sx0 + ex * s - mx, sy0 + ey * s - my);
   _segHit.depth = d0 + (d1 - d0) * u;
@@ -147,9 +160,18 @@ export function cursorRay(clientX, clientY) {
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   camera.updateMatrixWorld();
+  syncProjection();
   raycaster.setFromCamera(_ndc, camera);
+  if (ortho.on) {
+    // three starts an orthographic ray on the near plane, which sits behind
+    // the camera here; start it level with the camera instead, so distances
+    // along it mean what they mean in perspective.
+    const back = _rayTmp.subVectors(raycaster.ray.origin, camera.position).dot(raycaster.ray.direction);
+    raycaster.ray.origin.addScaledVector(raycaster.ray.direction, -back);
+  }
   return raycaster.ray;
 }
+const _rayTmp = new THREE.Vector3();
 
 // The map point under the cursor: the nearest line within PICK_RADIUS_PX;
 // else the lanelet surface under it; else the cursor ray on a level plane at
@@ -216,7 +238,7 @@ export function nodesUnderCursor(clientX, clientY, radiusPx = PICK_RADIUS_PX) {
       toViewSpace(pr.e, p[i * 3], p[i * 3 + 1], p[i * 3 + 2], _tmp);
       const d = _tmp[5];
       if (d < camera.near) continue;
-      const px = Math.hypot(pr.cx + (pr.f * _tmp[3]) / d - clientX, pr.cy - (pr.f * _tmp[4]) / d - clientY);
+      const px = Math.hypot(screenX(pr, _tmp[3], d) - clientX, screenY(pr, _tmp[4], d) - clientY);
       if (px > radiusPx) continue;
       const id = f.nodes[i];
       const prev = byId.get(id);

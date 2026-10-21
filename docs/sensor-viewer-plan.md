@@ -279,6 +279,25 @@ Open:
       crops would need to know they share ids, which one scene cannot show.
 - [ ] Not yet run on more than one real scene -- only one is on disk here.
 
+### M7 — inverted class filter, map view, web tiles  [x]
+- [x] Class filter `Hide` / `Only`: the ticked classes are hidden, or the only
+      ones drawn. *Only* with nothing ticked filters nothing.
+- [x] Orthographic map view (`V`): the same camera with an orthographic
+      matrix sized from its height, so zoom is still height; straight down,
+      north up to start, turns about the vertical only.
+- [x] Web tiles under the map: XYZ, TMS, WMS (EPSG:3857), OSM by default,
+      opacity, attribution, per-browser memory of the source. Drawn in the
+      scene, not by Leaflet: a DOM map under the canvas could not turn or
+      tilt with the view and would drift against the viewer's equirectangular
+      ENU -- metres across a city. Tile corners are exact; a 4x4 grid per tile
+      takes care of Mercator being non-linear in y.
+- [x] `/tileproxy` on the viewer server for tile servers without CORS, for
+      named hosts only.
+- [x] Checked over real OSM tiles in Frankfurt: lanelet lines lie on the OSM
+      roads. That run caught translucent tiles drawing over the whole map
+      (three's transparent pass), which the synthetic test had missed; the
+      suite now checks real screen pixels.
+
 ## Measured facts (example scene `c34c778f…`, Frankfurt, val split)
 
 | | |

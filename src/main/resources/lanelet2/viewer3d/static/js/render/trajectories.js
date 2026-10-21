@@ -33,15 +33,18 @@ varying vec3 vColor;
 void main() {
   vec4 s = modelViewMatrix * vec4(aStart, 1.0);
   vec4 e = modelViewMatrix * vec4(aEnd, 1.0);
-  // The near plane in view space, read off the projection matrix.
-  float nearZ = -0.5 * projectionMatrix[3][2] / projectionMatrix[2][2];
-  if (s.z > nearZ && e.z > nearZ) {
-    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
-    vColor = vec3(0.0);
-    return;
+  // Perspective only: nothing is behind an orthographic camera that matters.
+  if (projectionMatrix[2][3] < -0.5) {
+    // The near plane in view space, read off the projection matrix.
+    float nearZ = -0.5 * projectionMatrix[3][2] / projectionMatrix[2][2];
+    if (s.z > nearZ && e.z > nearZ) {
+      gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+      vColor = vec3(0.0);
+      return;
+    }
+    if (s.z > nearZ) s.xyz = mix(e.xyz, s.xyz, (nearZ - e.z) / (s.z - e.z));
+    if (e.z > nearZ) e.xyz = mix(s.xyz, e.xyz, (nearZ - s.z) / (e.z - s.z));
   }
-  if (s.z > nearZ) s.xyz = mix(e.xyz, s.xyz, (nearZ - e.z) / (s.z - e.z));
-  if (e.z > nearZ) e.xyz = mix(s.xyz, e.xyz, (nearZ - s.z) / (e.z - s.z));
   vec4 cs = projectionMatrix * s;
   vec4 ce = projectionMatrix * e;
   vec2 dir = (ce.xy / ce.w - cs.xy / cs.w) * uResolution;

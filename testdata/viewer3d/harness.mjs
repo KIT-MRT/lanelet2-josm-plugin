@@ -3,6 +3,7 @@
 // DevTools Protocol. Node 22+ (built-in WebSocket), no npm dependencies.
 import { spawn } from "node:child_process";
 import net from "node:net";
+import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,13 +52,15 @@ export class Checks {
  * Start server + fake bridge + Chrome, load the viewer with `?test=1`.
  * Returns a session with input helpers and `close()`.
  */
-export async function openViewer({ width = 1280, height = 800, shotsDir = null, query = "" } = {}) {
+export async function openViewer({ width = 1280, height = 800, shotsDir = null, query = "",
+                                   serverArgs = [] } = {}) {
   const http = await freePort();
   const ingest = await freePort();
   const cdpPort = await freePort();
   const server = spawn("python3", [path.join(VIEWER_DIR, "server.py"), "--host", "127.0.0.1",
     "--http-port", String(http), "--ingest-port", String(ingest), "--no-browser",
-    "--icons-dir", path.join(VIEWER_DIR, "..", "style_images")], { stdio: ["ignore", "pipe", "pipe"] });
+    "--icons-dir", path.join(VIEWER_DIR, "..", "style_images"), ...serverArgs],
+    { stdio: ["ignore", "pipe", "pipe"] });
   let serverLog = "";
   server.stdout.on("data", (d) => { serverLog += d; });
   server.stderr.on("data", (d) => { serverLog += d; });
@@ -259,6 +262,12 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
       await s.keyUp(key, code, modifiers);
       await sleep(30);
     },
+    /** [r, g, b] of one page pixel, as the screen shows it. */
+    async pixel(x, y) {
+      const { data } = await cdp("Page.captureScreenshot",
+        { format: "png", clip: { x: Math.round(x), y: Math.round(y), width: 1, height: 1, scale: 1 } });
+      return decodeOnePixelPng(Buffer.from(data, "base64"));
+    },
     async shot(name) {
       if (!shotsDir) return;
       fs.mkdirSync(shotsDir, { recursive: true });
@@ -275,6 +284,27 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
     },
   };
   return s;
+}
+
+/**
+ * The first pixel of a PNG. One pixel needs no unfiltering: with no left or
+ * upper neighbour every PNG filter leaves the bytes as they are.
+ */
+function decodeOnePixelPng(buf) {
+  let at = 8;
+  let colourType = 6;
+  const idat = [];
+  while (at < buf.length) {
+    const len = buf.readUInt32BE(at);
+    const type = buf.toString("ascii", at + 4, at + 8);
+    const body = buf.subarray(at + 8, at + 8 + len);
+    if (type === "IHDR") colourType = body[9];
+    if (type === "IDAT") idat.push(body);
+    at += 12 + len;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  if (colourType !== 2 && colourType !== 6) throw new Error(`PNG colour type ${colourType}`);
+  return [raw[1], raw[2], raw[3]];
 }
 
 export const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);

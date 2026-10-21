@@ -22,6 +22,7 @@ import { edit } from "../edit.js";
 import { rigActive } from "./camrig.js";
 import { trajectoryLayer } from "../render/trajectories.js";
 import { pointLayer } from "../render/points.js";
+import { tileLayer } from "../render/tiles.js";
 import { onSceneMessage, clearScene, sceneState, showFrame, setCityActive, setClassTable,
          refreshPointUi } from "./scene.js";
 
@@ -112,6 +113,7 @@ export function onCityMessage(msg) {
       cityState.name = city.city || cityState.name;
       cityState.error = null;
       if (city.classes) setClassTable(city.classes);
+      if (city.anchor) tileLayer.fallbackAnchor = city.anchor;
       trajectoryLayer.setScenes(cityState.scenes);
       // With a map there is already something framed; without one the
       // trajectories are all there is to look at.

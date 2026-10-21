@@ -157,7 +157,8 @@ slider re-renders but uploads nothing and refetches nothing.
 | | |
 |---|---|
 | class chips | one per class actually present, commonest first; click to hide |
-| `Vehicles` | preset: hides cars, trucks, buses, bikes, motorcycles, trailers, caravans and their riders |
+| `Hide` / `Only` | what a ticked class means: hidden, or the only classes drawn. *Only* with nothing ticked filters nothing |
+| `Vehicles` | preset: ticks cars, trucks, buses, bikes, motorcycles, trailers, caravans and their riders — hidden, or with *Only* the only thing left |
 | `Above ground` | drop everything higher than *n* m over the ground under it |
 | `Intensity` | drop everything below a reflectivity floor — markings and signs survive it |
 | opacity | fade the points so map lines, nodes and icons behind them stay readable |

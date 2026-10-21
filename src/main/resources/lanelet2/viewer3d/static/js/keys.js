@@ -231,6 +231,10 @@ export function installKeys() {
       bevNorth();
       return;
     }
+    if ((e.key === "v" || e.key === "V") && !e.repeat && !e.ctrlKey && !e.metaKey) {
+      document.getElementById("orthoBtn")?.click();
+      return;
+    }
     if ((e.key === "l" || e.key === "L") && !e.repeat && !e.ctrlKey && !e.metaKey) {
       document.getElementById("lanesBtn")?.click();
       return;

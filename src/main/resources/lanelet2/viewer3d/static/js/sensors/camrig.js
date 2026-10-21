@@ -14,7 +14,7 @@
 // KITScenes ring images are already rectified (the calibration carries no
 // distortion coefficients at all), so a pinhole is the whole truth here.
 import * as THREE from "three";
-import { camera, view, lookAtPoint, setCameraView, CAM_NEAR_M, CAM_FAR_M } from "../camera.js";
+import { camera, view, lookAtPoint, setCameraView, CAM_NEAR_M, CAM_FAR_M, ortho, setOrtho } from "../camera.js";
 import { renderer, canvas } from "../scene.js";
 
 export const rig = {
@@ -99,6 +99,8 @@ export function setLocked(on, frame) {
     if (next) update(frame);
     return rig.on;
   }
+  // The lock is the recorded camera's own perspective; a map view has none.
+  if (next && ortho.on) setOrtho(false);
   rig.on = next;
   if (els.lock) els.lock.classList.toggle("on", rig.on);
   if (rig.on) {

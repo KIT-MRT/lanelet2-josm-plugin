@@ -488,6 +488,29 @@ try {
   await v.evaluate("document.getElementById('classShowAll').click()");
   t.check("Show all clears the class filter", (await filtersOf()).hidden.length === 0);
 
+  // Inverted: the ticked classes are the only ones drawn.
+  await clickElement("classMode");
+  filters = await filtersOf();
+  t.check("Only with nothing ticked filters nothing yet", filters.only && filters.hidden.length === 0,
+    JSON.stringify(filters));
+  t.check("the switch says Only", (await v.evaluate("document.getElementById('classMode').textContent")) === "Only");
+  await v.evaluate("document.getElementById('classPresetCars').click()");
+  filters = await filtersOf();
+  t.check("Only + Vehicles hides everything but vehicles",
+    !filters.hidden.includes(CLASS_CAR) && filters.hidden.includes(CLASS_POLE)
+    && filters.hidden.includes(CLASS_NONE), JSON.stringify(filters.hidden.length));
+  t.check("the car chip reads as shown, not hidden",
+    await v.evaluate("(() => { const l = document.querySelector('#classChips label[data-class-id=\"58\"]');"
+      + " return l.classList.contains('only') && !l.classList.contains('hidden'); })()"));
+  t.check("and the button says so", (await v.evaluate("document.getElementById('sceneFilterBtn').textContent"))
+    .startsWith("Filter · only"), await v.evaluate("document.getElementById('sceneFilterBtn').textContent"));
+  await v.shot("scene_only_cars.png");
+  await clickElement("classMode");
+  filters = await filtersOf();
+  t.check("back to Hide, the same ticks hide the vehicles again",
+    !filters.only && filters.hidden.includes(CLASS_CAR) && !filters.hidden.includes(CLASS_POLE));
+  await v.evaluate("document.getElementById('classShowAll').click()");
+
   await setRange("pointAlpha", 40);
   t.check("the opacity slider fades the points", Math.abs((await points()).alpha - 0.4) < 1e-9,
     JSON.stringify(await points()));
@@ -512,7 +535,12 @@ try {
   await v.evaluate("window.__ll2scene.show(2)");
   await waitLoaded(2);
   const rigOf = () => v.evaluate("window.__ll2scene.rig()");
+  // The lock is the recorded camera's perspective: a map view gives way to it.
+  await v.key("v");
+  t.check("(ortho on before locking)", (await v.evaluate("window.__ll2map.ortho()")).on);
   await clickElement("sceneLock");
+  t.check("locking the camera leaves the ortho view", !(await v.evaluate("window.__ll2map.ortho()")).on
+    && !(await v.evaluate("document.getElementById('orthoBtn').classList.contains('on')")));
   await sleep(200);
   let rigNow = await rigOf();
   t.check("the lock turns on with the front camera", rigNow.on && rigNow.camera === "camera_ring_front",

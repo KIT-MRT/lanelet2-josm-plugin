@@ -63,6 +63,36 @@
     #toolbar button:hover { background: rgba(36, 46, 62, 0.95); border-color: #3d4d63; }
     #toolbar button:active { background: rgba(52, 68, 90, 0.95); }
     #toolbar button.on { border-color: #46c46a; color: #9dffc0; }
+    #tilePanel {
+      position: fixed; top: 52px; right: 12px; z-index: 12; pointer-events: auto;
+      display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center;
+      width: 430px; padding: 9px 11px;
+      background: rgba(18, 24, 33, 0.97); border: 1px solid #3d4d63; border-radius: 8px;
+      font: 12px/1.3 ui-monospace, Menlo, monospace; color: #cdd6e4;
+    }
+    #tilePanel[hidden], #tileWms[hidden] { display: none; }
+    #tileWms { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; }
+    #tilePanel input[type=text], #tilePanel input[type=number], #tilePanel select {
+      font: 12px/1.2 ui-monospace, Menlo, monospace; color: #e8edf5; min-width: 0;
+      background: rgba(10, 14, 20, 0.9); border: 1px solid #3d4d63; border-radius: 5px; padding: 4px 6px;
+    }
+    #tilePanel input:disabled, #tilePanel select:disabled { opacity: 0.5; }
+    #tilePanel input[type=range] { accent-color: #ffd23f; }
+    #tilePanel .full { grid-column: 1 / -1; }
+    #tilePanel .hint { color: #8b99ae; font-size: 11px; }
+    #tilePanel button {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #e8edf5; cursor: pointer;
+      background: rgba(34, 46, 62, 0.95); border: 1px solid #4a5a73; border-radius: 5px; padding: 5px 10px;
+    }
+    #tileStatus { color: #9fb0c7; }
+    #tileStatus.bad { color: #ff9b85; }
+    #tileAttribution {
+      position: fixed; right: 6px; bottom: 4px; z-index: 11; pointer-events: auto;
+      font: 11px/1.3 system-ui, sans-serif; color: #2b2b2b;
+      background: rgba(255, 255, 255, 0.82); padding: 1px 6px; border-radius: 3px;
+    }
+    #tileAttribution[hidden] { display: none; }
+    #tileAttribution a { color: #0b57a8; text-decoration: none; }
     #camPad {
       position: fixed; top: 52px; right: 12px; z-index: 10;
       display: flex; gap: 10px; pointer-events: auto;
@@ -189,6 +219,8 @@
       border: 1px solid #4a5a73; border-radius: 9px; cursor: pointer;
     }
     #classChips label.hidden { border-color: #ff6b35; color: #ffb599; }
+    #classChips label.only { border-color: #46c46a; color: #9dffc0; }
+    #classChips label.only input { accent-color: #46c46a; }
     #classChips input { accent-color: #ff6b35; }
     #sceneBar select:disabled, #sceneBar button:disabled { opacity: 0.45; cursor: default; }
     /* The recorded camera frame, blended over the render. Sized to the
@@ -230,6 +262,41 @@
   <div id="app"></div>
   <img id="sceneImage" hidden alt="">
   <div id="cityHover" hidden></div>
+  <div id="tileAttribution" hidden></div>
+  <div id="tilePanel" hidden>
+    <label for="tilePreset">Source</label>
+    <select id="tilePreset">
+      <option value="osm">OpenStreetMap</option>
+      <option value="xyz">Custom XYZ</option>
+      <option value="tms">Custom TMS</option>
+      <option value="wms">Custom WMS</option>
+    </select>
+    <label for="tileUrl">URL</label>
+    <input type="text" id="tileUrl" spellcheck="false" autocomplete="off" placeholder="https://host/{z}/{x}/{y}.png">
+    <div class="hint full">XYZ / TMS: {z} {x} {y}, {-y} for flipped rows, {s} for a, b, c. WMS: the service URL, e.g. https://host/geoserver/wms.</div>
+    <div id="tileWms" hidden>
+      <label for="tileLayers">Layers</label>
+      <input type="text" id="tileLayers" spellcheck="false" autocomplete="off" placeholder="workspace:layer,other">
+      <label for="tileStyles">Styles</label>
+      <input type="text" id="tileStyles" spellcheck="false" autocomplete="off" placeholder="(default)">
+      <label for="tileFormat">Format</label>
+      <select id="tileFormat"><option>image/png</option><option>image/jpeg</option><option>image/webp</option></select>
+      <label for="tileVersion">Version</label>
+      <select id="tileVersion"><option>1.3.0</option><option>1.1.1</option></select>
+      <label for="tileTransparent">Transparent</label>
+      <input type="checkbox" id="tileTransparent">
+      <div class="hint full">Requested in EPSG:3857, 256 px tiles.</div>
+    </div>
+    <label for="tileMaxZoom">Max zoom</label>
+    <input type="number" id="tileMaxZoom" min="0" max="22" step="1" value="19">
+    <label for="tileAttributionText">Credit</label>
+    <input type="text" id="tileAttributionText" spellcheck="false" autocomplete="off" placeholder="shown bottom right while tiles are on">
+    <label for="tileOpacity">Opacity</label>
+    <input type="range" id="tileOpacity" min="10" max="100" step="5" value="85">
+    <button type="button" id="tileApply">Use this source</button>
+    <span id="tileStatus">off</span>
+    <div class="hint full">A server that does not allow cross-origin use (CORS) cannot be drawn by WebGL; start the viewer with --tile-proxy-host &lt;host&gt; to fetch through it.</div>
+  </div>
   <div id="leftCol">
   <div id="hud">
     <div id="hudTitle" title="Show / hide the camera and debug rows"><span id="status"></span><b>Lanelet2 3D</b> <span id="conn">connecting...</span> <span id="hudToggle">▸ details</span></div>
@@ -304,7 +371,8 @@
       <label title="Hide points more than this far above the ground under them (0 = off). The ground is the lowest return in a 4 m cell.">Above ground <input type="range" id="aboveGround" min="0" max="30" step="0.5" value="0"><span id="aboveGroundLabel">off</span></label>
       <label title="Hide points dimmer than this (reflectivity)">Intensity ≥ <input type="range" id="intensityMin" min="0" max="100" step="1" value="0"><span id="intensityMinLabel">0</span></label>
       <span class="sep"></span>
-      <span class="slab">Hide class:</span>
+      <button type="button" id="classMode" title="What ticking a class does: Hide it, or show Only the ticked classes (e.g. Only + Vehicles: nothing but vehicles). With nothing ticked, Only filters nothing.">Hide</button>
+      <span class="slab">class:</span>
       <span id="classChips"></span>
       <button type="button" id="classPresetCars" title="The usual thing to hide: vehicles">Vehicles</button>
       <button type="button" id="classShowAll" title="Stop hiding every class">Show all</button>
@@ -318,6 +386,9 @@
     <button id="iconsBtn" type="button" title="Oriented traffic sign / light / marking icons (N)">Icons</button>
     <label id="iconAlphaLab" title="How solid the icons are: turn it down to see the point cloud through them">α <input type="range" id="iconAlpha" min="10" max="100" step="5" value="100"></label>
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
+    <button id="orthoBtn" type="button" title="Orthographic map view: straight down, no perspective, north up to start; turn it with a drag, B for north up again (V)">Ortho</button>
+    <button id="tilesBtn" type="button" title="Web map tiles under the map (OpenStreetMap, or your own XYZ / TMS / WMS server). Sends the viewed area to that server.">Tiles</button>
+    <button id="tilesMenuBtn" type="button" title="Tile source, opacity">▾</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
     <button id="fpsBtn" type="button" title="FPS mouse look: click the view to capture the cursor, Esc to release">FPS look</button>
     <button id="recenterJosmBtn" type="button" title="Centre JOSM now on the map point the 3D camera looks at (set_view). JOSM also follows by itself once that point moved 30 m.">Recenter JOSM</button>
@@ -359,7 +430,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>City: click a pose arrow or a track to open that scene at that frame · Load / Auto: clouds around the camera · Deselect: back to the city<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>City: click a pose arrow or a track to open that scene at that frame · Load / Auto: clouds around the camera · Deselect: back to the city<br/>V: orthographic map view (drag turns it, B north up) · Tiles: web map under the map<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {

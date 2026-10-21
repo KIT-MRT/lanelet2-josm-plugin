@@ -70,6 +70,7 @@ export function installScene() {
     chips: document.getElementById("classChips"),
     presetCars: document.getElementById("classPresetCars"),
     showAll: document.getElementById("classShowAll"),
+    classMode: document.getElementById("classMode"),
   };
   if (!els.bar) return;
   installFilters();
@@ -91,7 +92,9 @@ export function installScene() {
 // ---- filters -------------------------------------------------------------------
 // Everything here is a shader uniform, so dragging a slider never refetches
 // or re-uploads a point: filtered points are pushed outside the clip volume.
-export const filterState = { hidden: new Set(), aboveGround: 0, intensityMin: 0, alpha: 1 };
+// `ticked` are the class chips that are ticked; `only` says what that means:
+// hide those classes, or show nothing else.
+export const filterState = { ticked: new Set(), only: false, aboveGround: 0, intensityMin: 0, alpha: 1 };
 
 // What "Vehicles" hides: the Vistas thing classes that are traffic.
 const VEHICLE_CLASSES = [55, 57, 58, 59, 60, 61, 62, 63, 64, 32, 33];
@@ -122,19 +125,47 @@ function installFilters() {
   });
   els.presetCars.addEventListener("click", () => hideClasses(VEHICLE_CLASSES));
   els.showAll.addEventListener("click", () => hideClasses([]));
+  els.classMode.addEventListener("click", () => setClassMode(!filterState.only));
 }
 
-/** Hide exactly these class ids. */
-export function hideClasses(ids) {
-  filterState.hidden = new Set(ids);
-  setHiddenClasses(filterState.hidden);
+/**
+ * The class ids that are not drawn. "Only" with nothing ticked filters
+ * nothing: an empty view on the way to ticking the first class helps nobody.
+ */
+export function hiddenClasses() {
+  if (!filterState.only) return new Set(filterState.ticked);
+  if (!filterState.ticked.size) return new Set();
+  const out = new Set();
+  for (let id = 0; id < 256; id++) if (!filterState.ticked.has(id)) out.add(id);
+  return out;
+}
+
+function applyClassFilter() {
+  setHiddenClasses(hiddenClasses());
   for (const label of els.chips ? els.chips.querySelectorAll("label") : []) {
     const id = Number(label.dataset.classId);
     const box = label.querySelector("input");
-    box.checked = filterState.hidden.has(id);
-    label.classList.toggle("hidden", box.checked);
+    box.checked = filterState.ticked.has(id);
+    label.classList.toggle("hidden", box.checked && !filterState.only);
+    label.classList.toggle("only", box.checked && filterState.only);
+  }
+  if (els.classMode) {
+    els.classMode.textContent = filterState.only ? "Only" : "Hide";
+    els.classMode.classList.toggle("on", filterState.only);
   }
   refreshFilterButton();
+}
+
+/** Tick exactly these class ids (hidden, or the only ones shown, per the mode). */
+export function hideClasses(ids) {
+  filterState.ticked = new Set(ids);
+  applyClassFilter();
+}
+
+/** Hide the ticked classes (false) or show only them (true). */
+export function setClassMode(only) {
+  filterState.only = !!only;
+  applyClassFilter();
 }
 
 /** A chip per class actually present, commonest first. */
@@ -155,26 +186,26 @@ function refreshClassChips() {
     label.title = `${className(Number(id))} (class ${id})`;
     const box = document.createElement("input");
     box.type = "checkbox";
-    box.checked = filterState.hidden.has(Number(id));
+    box.checked = filterState.ticked.has(Number(id));
     box.addEventListener("change", () => {
-      if (box.checked) filterState.hidden.add(Number(id));
-      else filterState.hidden.delete(Number(id));
-      setHiddenClasses(filterState.hidden);
-      label.classList.toggle("hidden", box.checked);
-      refreshFilterButton();
+      if (box.checked) filterState.ticked.add(Number(id));
+      else filterState.ticked.delete(Number(id));
+      applyClassFilter();
     });
     label.appendChild(box);
     label.appendChild(document.createTextNode(className(Number(id))));
-    label.classList.toggle("hidden", box.checked);
+    label.classList.toggle("hidden", box.checked && !filterState.only);
+    label.classList.toggle("only", box.checked && filterState.only);
     els.chips.appendChild(label);
   }
 }
 
 function refreshFilterButton() {
   if (!els.filterBtn) return;
-  const active = filterState.hidden.size + (filterState.aboveGround ? 1 : 0)
+  const active = filterState.ticked.size + (filterState.aboveGround ? 1 : 0)
     + (filterState.intensityMin > 0 ? 1 : 0) + (filterState.alpha < 1 ? 1 : 0);
-  els.filterBtn.textContent = active ? `Filter · ${active}` : "Filter";
+  els.filterBtn.textContent = active
+    ? `Filter · ${filterState.only && filterState.ticked.size ? "only " : ""}${active}` : "Filter";
   els.filterBtn.classList.toggle("on", active > 0 || !els.filters.hidden);
 }
 
@@ -691,8 +722,11 @@ if (TEST_HOOKS) {
     points: () => pointLayer.stats(),
     rig: () => rigState(),
     aggregate: () => ({ ...aggregateState }),
-    filters: () => ({ ...filterState, hidden: Array.from(filterState.hidden).sort((a, b) => a - b) }),
+    // `hidden` is what is not drawn, whatever the mode; `ticked` the chips.
+    filters: () => ({ ...filterState, ticked: Array.from(filterState.ticked).sort((a, b) => a - b),
+                      hidden: Array.from(hiddenClasses()).sort((a, b) => a - b) }),
     hideClasses: (ids) => hideClasses(ids),
+    setClassMode: (only) => setClassMode(only),
     classes: () => {
       const info = sceneState.info;
       return {
