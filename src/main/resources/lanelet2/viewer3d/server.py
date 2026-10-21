@@ -273,9 +273,11 @@ class SceneHub:
             self._selection = {"nodes": msg.get("nodes", []), "ways": msg.get("ways", [])}
         elif mtype == "scene":
             # Same reason: a reloaded tab must find the scene server again.
-            self._scene = msg.get("scene")
+            if isinstance(msg.get("scene"), dict):
+                self._scene = msg["scene"]
         elif mtype == "city":
-            self._city = msg.get("city")
+            if isinstance(msg.get("city"), dict):
+                self._city = msg["city"]
 
     def _snapshot_message_locked(self):
         msg = {
@@ -338,6 +340,17 @@ class _BridgeConn:
 # ---------------------------------------------------------------------------
 # TCP ingest: newline-delimited JSON from the JOSM bridge
 # ---------------------------------------------------------------------------
+# A browser can POST to the ingest port too (no-cors): its request line and
+# headers are not JSON, but the body would be. Bridges never speak HTTP.
+_HTTP_REQUEST_LINE = re.compile(rb"^[A-Z]+ \S+ HTTP/\d")
+
+
+def _reject_constant(name):
+    # NaN/Infinity: Python's json reads them, the browser's JSON.parse does
+    # not -- one stored in the bootstrap snapshot would blank every new tab.
+    raise ValueError("non-JSON number %s" % name)
+
+
 class IngestHandler(socketserver.StreamRequestHandler):
     def handle(self):
         peer = self.client_address
@@ -349,11 +362,17 @@ class IngestHandler(socketserver.StreamRequestHandler):
                 line = raw.strip()
                 if not line:
                     continue
+                if _HTTP_REQUEST_LINE.match(line):
+                    print("[ingest] an HTTP request on the ingest port; closing", flush=True)
+                    return
                 t0 = time.perf_counter() if PROFILE else 0.0
                 try:
-                    msg = json.loads(line.decode("utf-8"))
+                    msg = json.loads(line.decode("utf-8"), parse_constant=_reject_constant)
                 except (ValueError, UnicodeDecodeError) as exc:
                     print("[ingest] bad JSON line ignored: %s" % exc, flush=True)
+                    continue
+                if not isinstance(msg, dict):
+                    print("[ingest] non-object message ignored", flush=True)
                     continue
                 if PROFILE:
                     _plog("recv bytes=%d parse=%.2fms"
@@ -394,8 +413,14 @@ def _shutdown_soon():
 # user named (--tile-proxy-host, or LL2_TILE_PROXY_HOSTS for a server JOSM
 # starts), never anything else, and without following redirects elsewhere.
 TILE_PROXY_HOSTS = set()
-TILE_PROXY_MAX_BYTES = 16 * 1024 * 1024
-TILE_PROXY_TIMEOUT_S = 20
+TILE_PROXY_MAX_BYTES = 8 * 1024 * 1024
+TILE_PROXY_TIMEOUT_S = 20        # per socket read
+TILE_PROXY_DEADLINE_S = 45       # for the whole tile
+# Raster images only: SVG is an image/ type that can carry script, and the
+# proxy answers from this viewer's own origin.
+TILE_PROXY_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+# A page firing hundreds of proxy requests must not tie up every thread.
+_TILE_SLOTS = threading.BoundedSemaphore(8)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -407,7 +432,12 @@ _TILE_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def tile_proxy_allowed(url):
-    """True only for http(s) URLs on a host the user allowed (host or host:port)."""
+    """True only for http(s) URLs on a host the user allowed.
+
+    An entry `host:port` allows that port; a bare `host` only the scheme's
+    default port, so allowing a host does not open every service on it.
+    URLs with user info are refused outright.
+    """
     try:
         parsed = urlparse(url)
         port = parsed.port
@@ -415,8 +445,18 @@ def tile_proxy_allowed(url):
         return False
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return False
+    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+        return False
     host = parsed.hostname.lower()
-    return host in TILE_PROXY_HOSTS or ("%s:%d" % (host, port) if port else host) in TILE_PROXY_HOSTS
+    default = 80 if parsed.scheme == "http" else 443
+    if port is not None and "%s:%d" % (host, port) in TILE_PROXY_HOSTS:
+        return True
+    return host in TILE_PROXY_HOSTS and port in (None, default)
+
+
+def _clean(text, limit=300):
+    """Upstream text for an error body: printable, short."""
+    return "".join(c if c.isprintable() else " " for c in str(text))[:limit]
 
 
 def parse_proxy_hosts(values):
@@ -429,8 +469,54 @@ def parse_proxy_hosts(values):
     return hosts
 
 
+# Who may talk to this server. It listens on loopback, but any web page the
+# user opens can send it requests, and one that rebinds its own DNS name to
+# 127.0.0.1 could even read the answers. So: the Host must be a name this
+# server is reached by (DNS rebinding), and requests a browser marks as
+# cross-site may not act or read data (CSRF). JOSM's own HTTP client sends
+# neither header and is unaffected.
+LOCAL_NAMES = {"127.0.0.1", "localhost", "::1", "[::1]"}
+BIND_HOST = "127.0.0.1"
+_WILDCARD_HOSTS = {"", "0.0.0.0", "::", "[::]"}
+_GUARDED_PATHS = ("/state", "/events", "/tileproxy", "/command", "/shutdown")
+
+
+def host_header_ok(value):
+    if BIND_HOST in _WILDCARD_HOSTS:
+        return True  # deliberately exposed to the network; any name may reach it
+    if not value:
+        return True  # HTTP/1.0 clients
+    host = value.strip().lower()
+    if host.startswith("["):
+        host = host[:host.find("]") + 1]
+    else:
+        host = host.rsplit(":", 1)[0]
+    return host in LOCAL_NAMES or host == BIND_HOST.lower()
+
+
 class HttpHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+
+    def _allowed(self, path):
+        """Refuse foreign Host names everywhere, cross-site requests on data routes."""
+        if not host_header_ok(self.headers.get("Host")):
+            self.send_error(403, "Unknown host name")
+            return False
+        if path.startswith(_GUARDED_PATHS):
+            if (self.headers.get("Sec-Fetch-Site") or "").lower() == "cross-site":
+                self.send_error(403, "Cross-site request refused")
+                return False
+            origin = self.headers.get("Origin")
+            if origin and origin != "null":
+                try:
+                    o = urlparse(origin)
+                    same = host_header_ok(o.netloc) and (o.port or 80) == self.server.server_address[1]
+                except ValueError:
+                    same = False
+                if not same:
+                    self.send_error(403, "Cross-origin request refused")
+                    return False
+        return True
 
     def log_message(self, fmt, *args):  # quieter default logging
         if self.path != "/events":
@@ -438,6 +524,8 @@ class HttpHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if not self._allowed(path):
+            return
         if path == "/events":
             self._serve_sse()
         elif path in ("/", "/index.html"):
@@ -466,36 +554,67 @@ class HttpHandler(BaseHTTPRequestHandler):
         query = parse_qs(urlparse(self.path).query)
         url = (query.get("url") or [""])[0]
         if not tile_proxy_allowed(url):
-            self.send_error(403, "Host not allowed for the tile proxy (see --tile-proxy-host)")
+            self.send_error(403, "Host not allowed for the tile proxy",
+                            "Start the viewer with --tile-proxy-host <host> to allow one.")
             return
+        if not _TILE_SLOTS.acquire(timeout=TILE_PROXY_TIMEOUT_S):
+            self.send_error(503, "Tile proxy busy")
+            return
+        try:
+            self._fetch_tile(url)
+        finally:
+            _TILE_SLOTS.release()
+
+    def _fetch_tile(self, url):
         request = urllib.request.Request(url, headers={"User-Agent": "lanelet2-josm-viewer3d"})
+        deadline = time.monotonic() + TILE_PROXY_DEADLINE_S
         try:
             with _TILE_OPENER.open(request, timeout=TILE_PROXY_TIMEOUT_S) as response:
-                ctype = response.headers.get("Content-Type", "")
-                body = response.read(TILE_PROXY_MAX_BYTES + 1)
+                ctype = (response.headers.get("Content-Type", "").split(";")[0].strip().lower())
+                expected = response.headers.get("Content-Length")
+                parts = []
+                size = 0
+                while True:
+                    if time.monotonic() > deadline:
+                        self.send_error(504, "Tile server too slow")
+                        return
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > TILE_PROXY_MAX_BYTES:
+                        self.send_error(502, "Tile too large")
+                        return
+                    parts.append(chunk)
+                body = b"".join(parts)
         except urllib.error.HTTPError as exc:
-            self.send_error(502 if exc.code < 400 else exc.code, "Tile server: %s" % exc.reason)
+            self.send_error(502 if exc.code < 400 else exc.code, "Tile server error",
+                            _clean(exc.reason))
             return
         except (urllib.error.URLError, OSError, ValueError) as exc:
-            self.send_error(502, "Tile server unreachable: %s" % exc)
+            self.send_error(502, "Tile server unreachable", _clean(exc))
             return
-        if len(body) > TILE_PROXY_MAX_BYTES:
-            self.send_error(502, "Tile too large")
+        if expected is not None and expected.isdigit() and int(expected) != len(body):
+            self.send_error(502, "Tile cut short")  # not worth caching a broken tile
             return
-        if not ctype.lower().startswith("image/"):
-            # A WMS answers errors with an XML ServiceException; pass its text
-            # on so the browser console says what the server objected to.
-            self.send_error(502, "Not an image: %s %s" % (
-                ctype, body[:300].decode("utf-8", "replace").replace("\n", " ")))
+        if ctype not in TILE_PROXY_TYPES:
+            # A WMS answers errors with an XML ServiceException; its text goes
+            # into the error body so the browser console says what was wrong.
+            self.send_error(502, "Not a raster image",
+                            "%s: %s" % (_clean(ctype, 60), _clean(body[:300].decode("utf-8", "replace"))))
             return
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=3600")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self):
+        if not self._allowed(urlparse(self.path).path):
+            return
         if self.path == "/command":
             self._handle_command()
         elif self.path == "/shutdown":
@@ -687,7 +806,8 @@ def main(argv=None):
                              "LL2_TILE_PROXY_HOSTS (comma separated)")
     args = parser.parse_args(argv)
 
-    global PROFILE, ICONS_DIR, BUILD_ID, TILE_PROXY_HOSTS
+    global PROFILE, ICONS_DIR, BUILD_ID, TILE_PROXY_HOSTS, BIND_HOST
+    BIND_HOST = args.host
     TILE_PROXY_HOSTS = parse_proxy_hosts(
         list(args.tile_proxy_host) + [os.environ.get("LL2_TILE_PROXY_HOSTS", "")])
     PROFILE = PROFILE or args.profile
