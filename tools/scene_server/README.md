@@ -50,12 +50,13 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 
 | | |
 |---|---|
-| `Points` / `P` | show or hide the cloud |
+| `Points` / `P` | show or hide the single frame's cloud |
 | `Go to car` / `K` | camera behind the car at this frame |
 | `◀` `▶|` / `,` `.` | step frames |
 | `▶` | play |
 | Colour | intensity, height or sensor |
-| `Whole scene` / `Shift+P` | the whole scene as one static cloud |
+| `Whole scene` / `Shift+P` | the whole scene as one static cloud (hides the single frame) |
+| `Tint frame` / `U` | paint the single frame one bright colour against the aggregate |
 | `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
 | `[` `]` | walk the six ring cameras |
 | `Overlay` / `O`, `Blend` | blend the recorded image over the render |
@@ -156,6 +157,13 @@ Building costs one decode per frame (~250 s with the frame cache warm, far
 longer cold — use `--prewarm`), and is cached as a single `.npz` next to the
 frames, so later runs load it in 0.07 s. The settings are in the file name, so
 changing them builds a new one rather than serving a stale aggregate.
+
+Showing the whole scene puts the single frame away, since the point of it is
+to see the scene without one frame's clutter on top. `P` brings the frame
+back over it, painted one bright colour (`U` toggles that) so the live frame
+and the aggregate can be told apart at a glance — the aggregate keeps the
+intensity (or height, or sensor) colouring. Hiding the aggregate again
+restores whatever the frame was doing before.
 
 ### Prewarming
 

@@ -163,7 +163,9 @@ server.
 
 **Whole scene (Shift+P)** stacks every frame into one point cloud with the
 moving traffic filtered out (163 M points become 2.7 M), so the map can be
-checked against everything the car saw rather than one frame at a time.
+checked against everything the car saw rather than one frame at a time. It
+replaces the single frame on screen; `P` puts that back on top of it in a
+distinct colour (`U` toggles the tint) so the two can be told apart.
 
 **Camera lock (Shift+L)** puts the viewer camera exactly where one of the six
 ring cameras was, with that camera's own intrinsics, and blends the recorded

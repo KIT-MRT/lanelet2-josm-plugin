@@ -10,7 +10,12 @@
 // the GPU, so switching between intensity / height / sensor costs no upload.
 import * as THREE from "three";
 
-export const COLOR_MODES = ["intensity", "height", "sensor"];
+// "solid" is not offered in the colour menu: it is what the single frame is
+// painted when it is shown on top of the aggregate, so the two can be told
+// apart at a glance.
+export const COLOR_MODES = ["intensity", "height", "sensor", "solid"];
+export const MENU_MODES = ["intensity", "height", "sensor"];
+const FRAME_TINT = 0xff6b35; // warm orange: nothing in viridis comes near it
 const MAGIC = "LL2PC1\0\0";
 const HEADER_SIZE = 40;
 const FLAG_INTENSITY = 1;
@@ -31,6 +36,7 @@ uniform float uGain;
 uniform float uZMin;
 uniform float uZRange;
 uniform vec3 uSensorColors[7];
+uniform vec3 uSolid;
 varying vec3 vColor;
 #include <common>
 #include <logdepthbuf_pars_vertex>
@@ -55,6 +61,8 @@ void main() {
     vColor = viridis((position.z + uZMin) / uZRange);
   } else if (uMode == 2) {
     vColor = uSensorColors[int(clamp(aSensor, 0.0, 6.0))];
+  } else if (uMode == 3) {
+    vColor = uSolid;
   } else {
     vColor = viridis(clamp(aIntensity * uGain, 0.0, 1.0));
   }
@@ -102,6 +110,7 @@ function makeMaterial(size, gain) {
       uZMin: { value: 0 },
       uZRange: { value: 10 },
       uSensorColors: { value: SENSOR_COLORS.map((c) => new THREE.Color(c)) },
+      uSolid: { value: new THREE.Color(FRAME_TINT) },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
@@ -125,6 +134,10 @@ class PointLayer {
     this.aggregateBounds = null; // { min, max } z over every chunk loaded
     this.aggregateCount = 0;
     this.mode = "intensity";
+    // Tell the live frame from the aggregate by colour. Only takes effect
+    // while both are on screen: a lone frame painted one flat colour would
+    // throw away the intensity that makes markings readable.
+    this.tintFrame = true;
     this.size = 2;
     this.gain = 3; // most returns sit well below the retro-reflector ceiling
     this.material = makeMaterial(this.size, this.gain);
@@ -176,6 +189,20 @@ class PointLayer {
   setAggregateVisible(on) {
     this.aggregateVisible = !!on;
     this.aggregateGroup.visible = this.aggregateVisible;
+    this._applyModes();
+  }
+
+  setTintFrame(on) {
+    this.tintFrame = !!on;
+    this._applyModes();
+  }
+
+  /** The aggregate always shows the chosen colouring; the frame may be tinted. */
+  _applyModes() {
+    const chosen = COLOR_MODES.indexOf(this.mode);
+    this.aggregateMaterial.uniforms.uMode.value = chosen;
+    const tinted = this.aggregateGroup.visible && this.tintFrame;
+    this.material.uniforms.uMode.value = tinted ? COLOR_MODES.indexOf("solid") : chosen;
   }
 
   attach(parent) {
@@ -236,8 +263,8 @@ class PointLayer {
   }
 
   setMode(mode) {
-    this.mode = COLOR_MODES.includes(mode) ? mode : "intensity";
-    for (const m of this.materials) m.uniforms.uMode.value = COLOR_MODES.indexOf(this.mode);
+    this.mode = MENU_MODES.includes(mode) ? mode : "intensity";
+    this._applyModes();
   }
 
   setSize(px) {
@@ -259,6 +286,8 @@ class PointLayer {
       // aggregate with it.
       visible: this.group.visible && this.frameGroup.visible,
       mode: this.mode,
+      frameMode: COLOR_MODES[this.material.uniforms.uMode.value],
+      tintFrame: this.tintFrame,
       size: this.size,
       origin: cloud ? cloud.origin : null,
       aggregate: this.aggregateCount,

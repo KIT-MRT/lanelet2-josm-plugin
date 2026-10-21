@@ -328,34 +328,56 @@ try {
   t.check("chunks are fetched one at a time, in order",
     aggregateChunksServed.join() === "0,1,2", aggregateChunksServed.join());
   let stats = await points();
-  t.check("the aggregate is drawn beside the single frame",
-    stats.aggregate === AGG_CHUNKS * AGG_PER_CHUNK && stats.aggregateChunks === AGG_CHUNKS
-    && stats.count === POINTS_PER_FRAME, JSON.stringify(stats));
+  t.check("the aggregate is on screen", stats.aggregate === AGG_CHUNKS * AGG_PER_CHUNK
+    && stats.aggregateChunks === AGG_CHUNKS && stats.aggregateVisible, JSON.stringify(stats));
+  t.check("and the single frame steps out of the way", !stats.visible, JSON.stringify(stats));
   await v.key("b");
   await v.shot("scene_aggregate.png");
 
+  // ---- putting the frame back, told apart by colour --------------------------------
+  await v.key("p");
+  await sleep(150);
+  stats = await points();
+  t.check("P puts the single frame back on top of the aggregate",
+    stats.visible && stats.aggregateVisible, JSON.stringify(stats));
+  t.check("painted one colour so it is not mistaken for the aggregate",
+    stats.frameMode === "solid" && stats.mode !== "solid", JSON.stringify(stats));
+  await v.shot("scene_aggregate_frame.png");
+  await v.key("u");
+  await sleep(150);
+  stats = await points();
+  t.check("U turns the tint off and the frame is coloured like the aggregate",
+    !stats.tintFrame && stats.frameMode === stats.mode, JSON.stringify(stats));
+  await v.key("u");
+
   await v.key("P", { modifiers: ["shift"] });
   await sleep(200);
+  stats = await points();
   t.check("Shift+P again hides it without throwing it away",
-    !(await points()).aggregateVisible && (await aggOf()).points > 0);
+    !stats.aggregateVisible && (await aggOf()).points > 0);
+  t.check("the frame goes back to its own colouring once it is alone",
+    stats.visible && stats.frameMode === stats.mode, JSON.stringify(stats));
   await v.key("P", { modifiers: ["shift"] });
   await sleep(200);
   t.check("and shows it again without refetching",
     (await points()).aggregateVisible && aggregateChunksServed.length === AGG_CHUNKS,
     aggregateChunksServed.join());
+  // Showing the aggregate put the frame away again, so P brings it back.
+  await v.key("p");
+  await sleep(150);
+  let vis = await points();
+  t.check("P puts the frame back over the aggregate", vis.visible && vis.aggregateVisible,
+    JSON.stringify(vis));
   await v.key("p");
   await sleep(150);
   // Both live under one parent group; hiding the frame cloud by hiding that
   // parent took the aggregate with it, while the child's own flag still said
   // "visible". The hook reports effective visibility for that reason.
-  let vis = await points();
+  vis = await points();
   t.check("P hides the frame cloud but leaves the aggregate",
     !vis.visible && vis.aggregateVisible, JSON.stringify(vis));
   t.check("and the aggregate is still actually drawn",
     (await v.evaluate("window.__ll2test.stats().drawCalls")) > 0);
-  await v.key("p");
-  vis = await points();
-  t.check("P brings the frame cloud back", vis.visible && vis.aggregateVisible);
 
   // ---- camera lock ---------------------------------------------------------------
   await v.evaluate("window.__ll2scene.show(2)");

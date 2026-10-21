@@ -17,6 +17,7 @@ import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handle
 /** The whole-scene aggregate: built on the server, streamed in chunks. */
 export const aggregateState = {
   on: false, building: false, chunks: 0, loaded: 0, points: 0, error: null, stats: null,
+  framesWere: undefined,
 };
 
 export const sceneState = {
@@ -58,9 +59,11 @@ export function installScene() {
     mode: document.getElementById("sceneMode"),
     size: document.getElementById("sceneSize"),
     aggregate: document.getElementById("sceneAggregate"),
+    tint: document.getElementById("sceneTint"),
   };
   if (!els.bar) return;
   els.aggregate.addEventListener("click", () => toggleAggregate());
+  els.tint.addEventListener("click", () => toggleTint());
   els.points.classList.add("on");
   els.points.addEventListener("click", () => togglePoints());
   els.car.addEventListener("click", () => goToCar());
@@ -105,10 +108,29 @@ let aggregateTimer = null;
 
 export function toggleAggregate(on) {
   const next = on === undefined ? !aggregateState.on : !!on;
+  if (next === aggregateState.on) return;
   aggregateState.on = next;
   pointLayer.setAggregateVisible(next);
+  // The point of the aggregate is to look at the scene without one frame's
+  // clutter on top, so showing it puts the frame away -- P brings it back,
+  // tinted, when the two are worth comparing. Turning the aggregate off
+  // restores whatever the frame was doing before.
+  if (next) {
+    aggregateState.framesWere = pointLayer.visible;
+    togglePoints(false);
+  } else if (aggregateState.framesWere !== undefined) {
+    togglePoints(aggregateState.framesWere);
+    aggregateState.framesWere = undefined;
+  }
   refreshAggregateButton();
   if (next && !aggregateState.loaded && !aggregateState.building) loadAggregate();
+}
+
+/** Paint the single frame one bright colour while the aggregate is shown. */
+export function toggleTint(on) {
+  const next = on === undefined ? !pointLayer.tintFrame : !!on;
+  pointLayer.setTintFrame(next);
+  if (els.tint) els.tint.classList.toggle("on", next);
 }
 
 function loadAggregate() {
@@ -167,6 +189,9 @@ function fetchChunks(chunks) {
   return next(0);
 }
 
+const countLabel = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
+  : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+
 function refreshAggregateButton() {
   if (!els.aggregate) return;
   els.aggregate.classList.toggle("on", aggregateState.on);
@@ -177,7 +202,7 @@ function refreshAggregateButton() {
   else if (s.building) {
     const p = s.stats || {};
     label = p.total ? `Building ${p.done || 0}/${p.total}` : "Building…";
-  } else if (s.points) label = `Whole scene ${(s.points / 1e6).toFixed(1)}M`;
+  } else if (s.points) label = `Whole scene ${countLabel(s.points)}`;
   els.aggregate.textContent = label;
 }
 
@@ -383,6 +408,10 @@ export function handleSceneKey(event) {
   }
   if (event.key === "k" || event.key === "K") {
     goToCar();
+    return true;
+  }
+  if (event.key === "u" || event.key === "U") {
+    toggleTint();
     return true;
   }
   return handleRigKey(event);

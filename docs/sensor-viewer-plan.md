@@ -159,6 +159,10 @@ to learn about the viewport rectangle.
 - [ ] Draw-distance LOD: not needed at 2.7 M points / 12 draw calls. The
       chunks carry centre and radius for when it is.
 
+- [x] Showing the aggregate hides the single frame (it was drawn on top of
+      it, which is the opposite of useful); `P` puts the frame back, tinted
+      one solid colour against the aggregate's intensity, `U` toggles that.
+
 **Fixed while testing it:** `P` hid the aggregate too, because the frame
 cloud's switch toggled the *parent* group of both. The test had asserted the
 child's own `visible` flag, which stays true under a hidden parent, so it
