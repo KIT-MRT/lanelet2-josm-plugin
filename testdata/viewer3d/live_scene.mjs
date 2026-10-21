@@ -70,8 +70,15 @@ try {
   }
 
   await v.key("k");
-  await sleep(600);
+  await sleep(1200);
+  console.log(`icons: ${JSON.stringify(await v.evaluate("window.__ll2test.icons()"))}`);
   await v.shot("live_car.png");
+  await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"
+    + " el.value = '45'; el.dispatchEvent(new Event('input')); })()");
+  await sleep(400);
+  await v.shot("live_car_icons_faded.png");
+  await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"
+    + " el.value = '100'; el.dispatchEvent(new Event('input')); })()");
 
   // Camera lock + overlay: the alignment check this whole thing is for.
   await v.evaluate("document.getElementById('sceneLock').click()");

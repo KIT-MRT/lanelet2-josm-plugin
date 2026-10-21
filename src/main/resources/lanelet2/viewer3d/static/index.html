@@ -47,6 +47,13 @@
       position: fixed; top: 10px; right: 12px; z-index: 10;
       display: flex; gap: 6px; pointer-events: auto;
     }
+    #toolbar { flex-wrap: wrap; justify-content: flex-end; }
+    #toolbar label {
+      display: flex; align-items: center; gap: 4px; pointer-events: auto;
+      font: 12px/1.2 ui-monospace, Menlo, monospace; color: #cdd6e4;
+    }
+    #toolbar input[type=range] { width: 76px; accent-color: #ffd23f; }
+    #toolbar button.on { border-color: #ffd23f; color: #ffe38a; }
     #toolbar button {
       font: 12px/1 ui-monospace, Menlo, monospace;
       color: #e8edf5; background: rgba(20, 26, 36, 0.88);
@@ -114,6 +121,9 @@
     }
     #editBar input:disabled { opacity: 0.45; }
     #sceneBar {
+      /* #leftCol is pointer-events:none so the map stays grabbable around the
+         panels; every interactive child has to opt back in. */
+      pointer-events: auto;
       margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
       background: rgba(18, 24, 33, 0.92); border: 1px solid #3d4d63; border-radius: 6px;
       padding: 5px 7px; max-width: 760px;
@@ -234,6 +244,8 @@
     <button id="editBtn" type="button" title="Edit mode: select and move nodes / ways (E)">Edit</button>
     <button id="imageryBtn" type="button" title="Open the selection (or the middle of the view) in Mapillary, Google Street View or Apple Maps">Street view ▾</button>
     <button id="lanesBtn" type="button" title="Lanelet surfaces and direction arrows (L). Yellow double arrows: two-way (one_way=no/false/0)">Lanelets</button>
+    <button id="iconsBtn" type="button" title="Oriented traffic sign / light / marking icons (N)">Icons</button>
+    <label id="iconAlphaLab" title="How solid the icons are: turn it down to see the point cloud through them">α <input type="range" id="iconAlpha" min="10" max="100" step="5" value="100"></label>
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
     <button id="fpsBtn" type="button" title="FPS mouse look: click the view to capture the cursor, Esc to release">FPS look</button>
@@ -276,7 +288,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P points · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {

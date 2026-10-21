@@ -118,6 +118,15 @@ async function waitFor(pred, ms = 5000) {
   }
   return false;
 }
+/** Click an element the way a user does: a real mouse press at its centre.
+ *  `#leftCol` is pointer-events:none, so a panel that forgets to opt back in
+ *  looks fine and reacts only to Tab+Enter. */
+async function clickElement(id) {
+  const box = await v.evaluate(`(() => { const b = document.getElementById(${JSON.stringify(id)})`
+    + `.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`);
+  await v.click(box[0], box[1]);
+  await sleep(120);
+}
 const waitLoaded = (frame) => waitFor(async () => {
   const s = await sceneState();
   return s.frame === frame && !s.loading;
@@ -138,6 +147,16 @@ try {
   t.check("the frame label counts from 0", (await label()).startsWith("0 / 5"), await label());
   await v.key("b");
   await v.shot("scene_points.png");
+
+  // ---- the bar reacts to the mouse, not just to the keyboard -----------------------
+  await clickElement("scenePoints");
+  t.check("a real mouse click on the scene bar hides the cloud", !(await points()).visible);
+  await clickElement("scenePoints");
+  t.check("and shows it again", (await points()).visible);
+  await clickElement("sceneNext");
+  t.check("the step button works with the mouse too", await waitLoaded(1));
+  await clickElement("scenePrev");
+  await waitLoaded(0);
 
   // ---- stepping ------------------------------------------------------------------
   await v.evaluate("document.getElementById('sceneNext').click()");
@@ -198,7 +217,7 @@ try {
   await v.evaluate("window.__ll2scene.show(2)");
   await waitLoaded(2);
   const rigOf = () => v.evaluate("window.__ll2scene.rig()");
-  await v.evaluate("document.getElementById('sceneLock').click()");
+  await clickElement("sceneLock");
   await sleep(200);
   let rigNow = await rigOf();
   t.check("the lock turns on with the front camera", rigNow.on && rigNow.camera === "camera_ring_front",

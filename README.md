@@ -140,6 +140,10 @@ culling.
 - **JOSM follows** the point the camera looks at (once it moved 30 m, or at
   once with *Recenter JOSM*), so turning the view at street level pans JOSM
   and its cull box too.
+- **Icons (N)** are the oriented traffic sign / light / marking images, on by
+  default, with an α slider to fade them when they sit in front of a point
+  cloud. The viewer finds the shipped `style_images` by itself now, so they
+  also appear when the server is started by hand without JOSM.
 - **Lanelets (L)** show as surfaces with a direction arrow at 35 % of the
   lanelet2 centerline, double-headed where a car may drive both ways
   (lanelet2's rules, including `one_way:<participant>` overrides), violet

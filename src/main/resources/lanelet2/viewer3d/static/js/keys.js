@@ -17,6 +17,7 @@ import { frameAll, bevNorth, defaultBevView } from "./framing.js";
 import { requestJosmRecenter } from "./josmview.js";
 import { setLookHud } from "./hud.js";
 import { laneletLayer } from "./render/lanelets.js";
+import { iconLayer } from "./render/icons.js";
 import { handleSceneKey } from "./sensors/scene.js";
 
 const CAM_PAN_STEP_M = 1;    // metres per pan / height tick (walk)
@@ -192,6 +193,20 @@ export function installKeys() {
     lanesBtn.classList.toggle("on", laneletLayer.visible);
     lanesBtn.addEventListener("click", toggleLanes);
   }
+  const iconsBtn = document.getElementById("iconsBtn");
+  const iconAlpha = document.getElementById("iconAlpha");
+  if (iconsBtn) {
+    iconsBtn.classList.toggle("on", iconLayer.visible);
+    iconsBtn.addEventListener("click", () => {
+      iconLayer.setVisible(!iconLayer.visible);
+      iconsBtn.classList.toggle("on", iconLayer.visible);
+      if (iconAlpha) iconAlpha.disabled = !iconLayer.visible;
+    });
+  }
+  if (iconAlpha) {
+    iconLayer.setOpacity(Number(iconAlpha.value) / 100);
+    iconAlpha.addEventListener("input", () => iconLayer.setOpacity(Number(iconAlpha.value) / 100));
+  }
   refreshLookHud();
 
   // Modifier state comes from every key event, not only from the modifier's
@@ -218,6 +233,10 @@ export function installKeys() {
     }
     if ((e.key === "l" || e.key === "L") && !e.repeat && !e.ctrlKey && !e.metaKey) {
       document.getElementById("lanesBtn")?.click();
+      return;
+    }
+    if ((e.key === "n" || e.key === "N") && !e.repeat && !e.ctrlKey && !e.metaKey) {
+      document.getElementById("iconsBtn")?.click();
       return;
     }
     if ((e.key === "e" || e.key === "E") && !e.repeat && !e.ctrlKey && !e.metaKey) {

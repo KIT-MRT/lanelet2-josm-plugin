@@ -109,6 +109,15 @@ projection and the full canvas, so it is wrong under the lock; that is why
 hover is disabled there. Selecting while locked would need `screenProjector`
 to learn about the viewport rectangle.
 
+### Fixes found by using it
+- [x] The scene bar reacted only to Tab+Enter: `#leftCol` is
+      `pointer-events: none` and the new panel never opted back in.
+- [x] Traffic sign / light / marking icons were missing whenever the viewer
+      ran without JOSM: `resolve_icons_dir` never looked in the plugin's own
+      `style_images`. Now found, and covered by a test.
+- [x] Icons got a toggle (`N`, on by default) and an α slider, so they can be
+      faded instead of hiding the cloud behind them.
+
 ### M3 — aggregated scene cloud
 - [ ] Voxel downsample + chunking + draw-distance LOD.
       220 frames x 740 k = 163 M points raw, so this is a downsampling problem,

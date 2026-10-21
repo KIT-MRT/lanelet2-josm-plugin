@@ -172,6 +172,7 @@ if (TEST_HOOKS) {
       frames: sceneState.info ? sceneState.info.frames : 0,
       points: pointLayer.stats(),
     }),
+    icons: () => iconLayer.stats(),
     lanelets: () => ({
       count: laneletLayer.lanelets.size,
       surfaceTiles: laneletLayer.chunks.size,

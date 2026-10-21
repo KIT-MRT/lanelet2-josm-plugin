@@ -1,6 +1,6 @@
 // End-to-end checks of the 3D viewer in headless Chrome. See README.md.
 //   node testdata/viewer3d/e2e_viewer.mjs [--shots DIR]
-import { openViewer, Checks, dist2, dist3 } from "./harness.mjs";
+import { openViewer, Checks, dist2, dist3, sleep } from "./harness.mjs";
 
 const shotsIdx = process.argv.indexOf("--shots");
 const shotsDir = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -24,13 +24,26 @@ const features = [
 // which the browser still reads.
 features.push({ id: "way/5", kind: "line", tags: { type: "virtual" },
   points: [[-30, 90, 0], [-30, 100, 0]], nodes: ["node/501", "node/502"] });
+// Icon features: a sign panel (4 corners, faced) and a road arrow.
+features.push({ id: "way/6", kind: "line", tags: { type: "traffic_sign", subtype: "de274-30" },
+  pts: [3, 40, 2, 3, 40, 2.6, 3.6, 40, 2.6, 3.6, 40, 2], nodes: [601, 602, 603, 604] });
+features.push({ id: "way/7", kind: "line", tags: { type: "arrow", subtype: "straight" },
+  pts: [-1, 60, 0, -1, 63, 0, 1, 63, 0, 1, 60, 0], nodes: [701, 702, 703, 704] });
 const N1 = [5, 20, 0];
 const N2 = [5.3, 20, 0];
 
 const v = await openViewer({ shotsDir });
+async function waitFor(pred, ms = 4000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (await pred()) return true;
+    await sleep(60);
+  }
+  return false;
+}
 try {
   v.sendScene({ type: "snapshot", anchor: { lat: 49, lon: 8.4 }, features });
-  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(5));
+  t.check("scene streamed (v2 and v1 features)", await v.waitForFeatures(7));
 
   // ---- camera ---------------------------------------------------------------
   await v.key("b");
@@ -164,6 +177,32 @@ try {
   t.check("gizmo drag sends one move_node for node/401", moves.length === 1 && moves[0].id === "node/401",
     JSON.stringify(moves));
   await v.shot("after_gizmo.png");
+
+  // ---- traffic icons --------------------------------------------------------
+  // The server has to find lanelet2/style_images by itself: a viewer started
+  // by hand (no JOSM, no --icons-dir) used to serve no icons at all.
+  const iconResponse = await v.evaluate(
+    "fetch('/style_images/274-30.png').then(r => r.status)");
+  t.check("the server serves the shipped sign images", iconResponse === 200, String(iconResponse));
+  const icons = () => v.evaluate("window.__ll2test.icons()");
+  t.check("sign and arrow icons are built",
+    await waitFor(async () => (await icons()).icons >= 2), JSON.stringify(await icons()));
+  await v.key("f");
+  t.check("and shown near the camera", (await icons()).shown >= 1, JSON.stringify(await icons()));
+
+  const iconBtn = await v.evaluate("(() => { const b = document.getElementById('iconsBtn')"
+    + ".getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()");
+  await v.click(iconBtn[0], iconBtn[1]);
+  t.check("the Icons button (real mouse click) hides them",
+    !(await icons()).visible && (await icons()).shown === 0, JSON.stringify(await icons()));
+  await v.key("n");
+  t.check("N brings them back", (await icons()).visible);
+
+  await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"
+    + " el.value = '40'; el.dispatchEvent(new Event('input')); })()");
+  t.check("the alpha slider fades them so the cloud shows through",
+    Math.abs((await icons()).opacity - 0.4) < 1e-9, JSON.stringify(await icons()));
+  await v.shot("icons_faded.png");
 
   t.check("no page errors", v.errors.length === 0, v.errors.join(" | "));
 } finally {

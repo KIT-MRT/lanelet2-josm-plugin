@@ -522,6 +522,15 @@ loss. Keep them, and keep this note.
   `unicode()`, `Thread.isAlive()`. `round()` is Python 2
   round-half-away-from-zero and is applied to ENU millimetres.
 - `ele` is formatted with `%g`, which can emit `1e-05`.
+- **`#leftCol` is `pointer-events: none`** so the map stays grabbable around
+  the HUD; every interactive panel inside it (`#hudTitle`, `#editBar`,
+  `#sceneBar`) has to set `pointer-events: auto` itself. A panel that forgets
+  looks perfectly normal and responds only to Tab+Enter. `e2e_scene` clicks
+  the scene bar with a real mouse press to catch that.
+- **`resolve_icons_dir` searches `<viewer parent>/style_images` first**, which
+  is where the plugin's own resources live in both the source tree and the jar
+  extract. Before that, a viewer started by hand (no JOSM, no `--icons-dir`)
+  served no icons at all and nothing noticed, because no test covered them.
 - `git_helpers.run_git` decodes stdout **without** the `AttributeError` fallback
   its siblings have, so a decode failure is reported as the git call failing.
 - Filter-broken picks its binary with `sorted(...)[-1]`, which is

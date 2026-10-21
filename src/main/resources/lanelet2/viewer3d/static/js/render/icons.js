@@ -12,6 +12,11 @@ const ICON_MIN_EXTENT_M = 0.08;
 const ICON_BACK_COLOR = 0x808080; // 50% grey multiply on the reverse face
 const ICON_MAX_DIST_M = 400;
 
+// How solid the icons are. Point clouds sit behind and through them, so the
+// user can fade them without losing the map. Materials are made per mesh and
+// asynchronously (after the texture loads), so new ones read this too.
+let iconOpacity = 1;
+
 const textureLoader = new THREE.TextureLoader();
 // url -> { tex, ready, pending: [{onLoad, onError}] }
 const textureCache = new Map();
@@ -168,10 +173,11 @@ function addFacedSignIcon(group, p1, p2, p3, p4, tex) {
   const lift = front.multiplyScalar(ICON_LIFT_M);
   const geom = signQuadGeometry(p1.clone().add(lift), p2.clone().add(lift), p3.clone().add(lift), p4.clone().add(lift));
   const frontMat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, side: THREE.FrontSide, depthWrite: false,
+    map: tex, transparent: true, opacity: iconOpacity, side: THREE.FrontSide, depthWrite: false,
   });
   const backMat = new THREE.MeshBasicMaterial({
-    map: tex, color: ICON_BACK_COLOR, transparent: true, side: THREE.BackSide, depthWrite: false,
+    map: tex, color: ICON_BACK_COLOR, transparent: true, opacity: iconOpacity,
+    side: THREE.BackSide, depthWrite: false,
   });
   const frontMesh = new THREE.Mesh(geom, frontMat);
   const backMesh = new THREE.Mesh(geom.clone(), backMat);
@@ -198,7 +204,7 @@ function buildIcon(group, feature, spec) {
     if (!frame) return;
     const geom = new THREE.PlaneGeometry(frame.width, frame.height);
     const mat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false,
+      map: tex, transparent: true, opacity: iconOpacity, side: THREE.DoubleSide, depthWrite: false,
     });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.copy(frame.center);
@@ -221,6 +227,7 @@ function disposeGroup(group) {
 
 class IconLayer {
   constructor() {
+    this.visible = true;
     this.groups = new Map(); // feature id -> THREE.Group
     store.on("upsert", (f, old) => {
       if (old) this._remove(old.id);
@@ -248,11 +255,35 @@ class IconLayer {
 
   /** Per frame: hide icons too far away to read. */
   update(camera) {
+    if (!this.visible) {
+      for (const g of this.groups.values()) g.visible = false;
+      return;
+    }
     const max2 = ICON_MAX_DIST_M * ICON_MAX_DIST_M;
     const cp = camera.position;
     for (const g of this.groups.values()) {
       g.visible = g.userData.center.distanceToSquared(cp) < max2;
     }
+  }
+
+  setVisible(on) {
+    this.visible = !!on;
+  }
+
+  /** 0..1; also applies to icons whose texture has not arrived yet. */
+  setOpacity(value) {
+    iconOpacity = Math.max(0, Math.min(1, value));
+    for (const g of this.groups.values()) {
+      g.traverse((child) => {
+        if (child.material) child.material.opacity = iconOpacity;
+      });
+    }
+  }
+
+  stats() {
+    let shown = 0;
+    for (const g of this.groups.values()) if (g.visible) shown++;
+    return { icons: this.groups.size, shown, visible: this.visible, opacity: iconOpacity };
   }
 }
 

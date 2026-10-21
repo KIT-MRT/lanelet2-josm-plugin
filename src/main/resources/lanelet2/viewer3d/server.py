@@ -84,6 +84,10 @@ def resolve_icons_dir(explicit=None):
         return None
     root = _tooling_root()
     candidates = (
+        # Next to the viewer: where the plugin's own resources sit, both in
+        # the source tree and in the jar extract. Without this, a server
+        # started by hand (no JOSM, no --icons-dir) silently had no icons.
+        root / "style_images",
         root / "JOSM_lanelet2_editing_scripts" / "core" / "presets" / "style_images",
         root / "Lanelet2" / "lanelet2_maps" / "josm" / "style_images",
     )
