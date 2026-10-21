@@ -152,7 +152,7 @@ culling.
 - **Street view:** the viewer's button and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
 - **Ortho (V)** is an orthographic map view: straight down, no perspective,
-  north up to start. A drag turns it about the point under the cursor, `B`
+  north up to start. Left-drag pans like any map, right-drag turns it, `B`
   puts north up again, the wheel zooms about the cursor. The camera lock
   switches it off (the recorded camera has a perspective).
 - **Tiles** lays a web map under everything: OpenStreetMap by default, or

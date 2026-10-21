@@ -131,11 +131,20 @@ try {
     `${before.map((n) => n.toFixed(1))} -> ${after.map((n) => n.toFixed(1))}`);
   t.check("and stays straight down", Math.abs((await cam()).pitch + Math.PI / 2) < 1e-9);
 
-  // A drag turns the map about the grabbed point; it never tilts it.
-  const grab = await v.project([0, 60, Z]);
+  // Left-drag pans like a map: the grabbed point follows the cursor.
+  const grabbed = [0, 60, Z];
+  const grab = await v.project(grabbed);
+  const yawBefore = (await cam()).yaw;
   await v.drag("left", grab[0], grab[1], 120, 80);
+  await frame();
+  const dropped = await v.project(grabbed);
+  t.check("a left-drag pans the map with the cursor",
+    px(dropped, [grab[0] + 120, grab[1] + 80]) < 1.5, `${dropped.map((n) => n.toFixed(1))}`);
+  t.check("without turning it", Math.abs((await cam()).yaw - yawBefore) < 1e-9);
+  // Right-drag turns it; it never tilts.
+  await v.drag("right", 640, 400, 120, 80);
   c = await cam();
-  t.check("a drag turns the map", Math.abs(c.yaw) > 0.1, c.yaw.toFixed(3));
+  t.check("a right-drag turns the map", Math.abs(c.yaw) > 0.1, c.yaw.toFixed(3));
   t.check("but never tilts it", Math.abs(c.pitch + Math.PI / 2) < 1e-9, c.pitch.toFixed(6));
   await v.key("b");
   await frame();

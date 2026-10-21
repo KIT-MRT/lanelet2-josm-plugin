@@ -386,7 +386,7 @@
     <button id="iconsBtn" type="button" title="Oriented traffic sign / light / marking icons (N)">Icons</button>
     <label id="iconAlphaLab" title="How solid the icons are: turn it down to see the point cloud through them">α <input type="range" id="iconAlpha" min="10" max="100" step="5" value="100"></label>
     <button id="bevBtn" type="button" title="Top-down view, north up (B)">BEV north</button>
-    <button id="orthoBtn" type="button" title="Orthographic map view: straight down, no perspective, north up to start; turn it with a drag, B for north up again (V)">Ortho</button>
+    <button id="orthoBtn" type="button" title="Orthographic map view: straight down, no perspective, north up to start; left-drag pans, right-drag turns it, B for north up again (V)">Ortho</button>
     <button id="tilesBtn" type="button" title="Web map tiles under the map (OpenStreetMap, or your own XYZ / TMS / WMS server). Sends the viewed area to that server.">Tiles</button>
     <button id="tilesMenuBtn" type="button" title="Tile source, opacity">▾</button>
     <button id="defaultBevBtn" type="button" title="Sanity view: BEV at (0,0,100 m)">Default BEV</button>
@@ -430,7 +430,7 @@
     <div><b>frame debug</b></div>
     <div class="row" id="frameDebug">press F / B / Default BEV</div>
   </div>
-  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>City: click a pose arrow or a track to open that scene at that frame · Load / Auto: clouds around the camera · Deselect: back to the city<br/>V: orthographic map view (drag turns it, B north up) · Tiles: web map under the map<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
+  <div id="help">left-drag: orbit point under cursor (sky: turn) &nbsp;|&nbsp; right-drag: look &nbsp;|&nbsp; middle/shift+drag: pan &nbsp;|&nbsp; wheel: zoom to cursor<br/>WASD / arrows: walk · space / c: up / down · alt+←→: turn · shift: fast &nbsp;|&nbsp; ctrl+arrows: look &nbsp;|&nbsp; F: frame &nbsp;|&nbsp; B: BEV &nbsp;|&nbsp; L: lanelets &nbsp;|&nbsp; N: icons<br/>E: edit · click select · shift add · ctrl+drag box · middle-click cycle · G/R/H · I: interpolate · Z: type height · M: snap · T: keys · Del · ctrl+Z/Y<br/>Scene: P frame points · shift+P whole scene · U tint frame · , . frames · K go to car · shift+L camera lock · [ ] ring camera · O image<br/>City: click a pose arrow or a track to open that scene at that frame · Load / Auto: clouds around the camera · Deselect: back to the city<br/>V: orthographic map view (left-drag pans, right-drag turns, B north up) · Tiles: web map under the map<br/>FPS look: button, then click the view &nbsp;|&nbsp; Esc: release mouse / deselect &nbsp;|&nbsp; Recenter JOSM: pan map to what the camera looks at</div>
 
   <script type="importmap">
   {

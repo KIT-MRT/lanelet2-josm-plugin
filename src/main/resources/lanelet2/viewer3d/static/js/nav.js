@@ -11,7 +11,7 @@
 import * as THREE from "three";
 import { now } from "./util.js";
 import { canvas } from "./scene.js";
-import { camera, view, camRefs, orbitCamera, look, pixelsToMetres } from "./camera.js";
+import { camera, view, camRefs, orbitCamera, look, pixelsToMetres, ortho } from "./camera.js";
 import { pickMapPoint, cursorRay } from "./picking.js";
 import { pivotMarker, zoomMarker } from "./render/overlays.js";
 
@@ -53,7 +53,9 @@ export function installNav({ gizmoBusy, pointerLocked }) {
   canvas.addEventListener("pointerdown", (e) => {
     if (nav.pointerId !== null || pointerLocked() || gizmoBusy()) return;
     let mode = null;
-    if (e.button === 0) mode = e.shiftKey ? "pan" : "orbit";
+    // In the orthographic map view a left-drag pans, as in any map; turning
+    // it is the right-drag.
+    if (e.button === 0) mode = e.shiftKey || ortho.on ? "pan" : "orbit";
     else if (e.button === 1) mode = "pan";
     else if (e.button === 2) mode = "look";
     if (!mode) return;
