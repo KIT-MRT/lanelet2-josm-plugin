@@ -441,6 +441,24 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   (`mvd_classes.py`) and travels to the browser inside `scene.json`, so
   there is one source of truth. Only front and rear have masks, so ~4 % of a
   frame is labelled; the rest is `UNLABELLED` (255), never guessed.
+- **Instance numbers are per frame and nothing more.** seamseg numbers the
+  objects it finds inside one image; nothing links them to the next frame or
+  to the other camera. So the `instance` colouring is a frame-only mode: the
+  aggregate carries no instance channel at all and stays on intensity while
+  it is selected, and the rear camera's numbers are offset by 1000 so the two
+  cameras cannot collide. Classes and instances come out of **one** pass over
+  the masks (decoding them twice would double the cost of every frame) and
+  cache separately (`class-*.bin`, `inst-*.bin`). The channel is uint16: the
+  offset alone overflows a byte.
+- **Point filters are shader state, not data.** A filtered point is pushed
+  outside the clip volume in the vertex shader, so class chips, the height
+  ceiling, the intensity floor and the opacity slider refetch nothing and
+  re-upload nothing -- the e2e suite asserts that. The height filter measures
+  against the ground *under the point*: a 4 m pillar grid of minimum z,
+  written as a per-point attribute because each aggregate chunk has its own
+  origin and a uniform could not express it. Opacity below 1 also turns depth
+  writing off, or the translucent points hide the map lines the slider exists
+  to reveal.
 - **The dataset is read-only.** Decoded frames cache under
   `$XDG_CACHE_HOME/josm-lanelet2/scene-server/`, never beside the data, and
   they hold the frame in the *scene's* metric frame so adopting JOSM's anchor

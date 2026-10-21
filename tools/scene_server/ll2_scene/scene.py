@@ -290,19 +290,23 @@ class SceneSource:
         path = self.dir / "processed" / "seamseg_instances" / camera / ("%010d.json" % int(index))
         return path if path.is_file() else None
 
-    def frame_classes(self, index, xyz, cameras=SEGMENTED_CAMERAS):
-        """Vistas class per point, `UNLABELLED` where no mask covers it.
+    def frame_labels(self, index, xyz, cameras=SEGMENTED_CAMERAS):
+        """(Vistas class, instance number) per point.
 
         Points are projected into each segmented camera and read out of that
-        camera's class image. The front and rear cameras barely overlap, so
-        first label wins and there is nothing to arbitrate.
+        camera's mask images. The front and rear cameras barely overlap, so
+        the first label wins and there is nothing to arbitrate. Instance
+        numbers are per frame, not tracked across frames: seamseg does not
+        track, so they only separate one car from another within a frame.
+        Each camera's numbers are offset so the two cannot collide.
         """
-        from .masks import label_image
+        from .masks import label_images
         from .mvd import UNLABELLED
-        out = np.full(len(xyz), UNLABELLED, np.uint8)
+        classes = np.full(len(xyz), UNLABELLED, np.uint8)
+        instances = np.zeros(len(xyz), np.uint16)
         if not len(xyz):
-            return out
-        for camera in cameras:
+            return classes, instances
+        for camera_index, camera in enumerate(cameras):
             path = self.segmentation_path(camera, index)
             if path is None:
                 continue
@@ -310,17 +314,22 @@ class SceneSource:
             if projected is None:
                 continue
             u, v, visible = projected
-            todo = visible & (out == UNLABELLED)
+            todo = visible & (classes == UNLABELLED)
             if not todo.any():
                 continue
             try:
-                labels = label_image(path)
+                labels, ids = label_images(path, first_instance=1 + camera_index * 1000)
             except (OSError, ValueError):
                 continue
             rows = np.clip(v[todo].astype(np.int32), 0, labels.shape[0] - 1)
             cols = np.clip(u[todo].astype(np.int32), 0, labels.shape[1] - 1)
-            out[todo] = labels[rows, cols]
-        return out
+            classes[todo] = labels[rows, cols]
+            instances[todo] = ids[rows, cols]
+        return classes, instances
+
+    def frame_classes(self, index, xyz, cameras=SEGMENTED_CAMERAS):
+        """Just the classes; see `frame_labels`."""
+        return self.frame_labels(index, xyz, cameras)[0]
 
     def frame_rgb(self, index, xyz, cameras=None):
         """Camera colour per point; neutral grey where no camera saw it.

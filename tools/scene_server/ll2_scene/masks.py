@@ -62,11 +62,15 @@ def decode_rle(counts, height, width):
     return flat.reshape((height, width), order="F").astype(bool)
 
 
-def label_image(path):
-    """Build an (H, W) uint8 class image from one seamseg JSON.
+def label_images(path, first_instance=1):
+    """(class image uint8, instance image uint16) from one seamseg JSON.
 
     Instances are painted least-confident first, so where two overlap the
-    more confident one wins. Pixels no instance covers stay `UNLABELLED`.
+    more confident one wins. Pixels no instance covers stay `UNLABELLED` in
+    the class image and 0 in the instance image.
+
+    Instance numbers are local to one frame of one camera -- seamseg does no
+    tracking -- so `first_instance` offsets them to keep two cameras apart.
     """
     with open(path) as handle:
         data = json.load(handle)
@@ -75,7 +79,9 @@ def label_image(path):
         raise ValueError("no original_size in %s" % path)
     height, width = int(size[0]), int(size[1])
     labels = np.full((height, width), UNLABELLED, np.uint8)
+    ids = np.zeros((height, width), np.uint16)
     instances = sorted(data.get("instances", []), key=lambda i: i.get("objectness", 0.0))
+    number = int(first_instance)
     for inst in instances:
         rle = inst.get("mask_rle")
         if not rle:
@@ -88,7 +94,14 @@ def label_image(path):
         except (ValueError, IndexError):
             continue
         labels[mask] = train_id
-    return labels
+        ids[mask] = number
+        number += 1
+    return labels, ids
+
+
+def label_image(path):
+    """Just the class image; see `label_images`."""
+    return label_images(path)[0]
 
 
 def label_counts(labels):

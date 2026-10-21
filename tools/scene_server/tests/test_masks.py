@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from ll2_scene import mvd
-from ll2_scene.masks import decode_rle, label_counts, label_image
+from ll2_scene.masks import decode_rle, label_counts, label_image, label_images
 
 
 def encode_rle(mask):
@@ -128,6 +128,47 @@ class LabelImageTest(unittest.TestCase):
             good,
         ]))
         self.assertEqual(58, labels[3, 5])
+
+
+class InstanceNumberTest(LabelImageTest):
+    """Numbers that separate one car from the next inside a single frame."""
+
+    def test_each_instance_gets_its_own_number(self):
+        _labels, ids = label_images(self._write([
+            self._instance(58, 0.9, (2, 6, 3, 9)),
+            self._instance(58, 0.8, (10, 14, 20, 26)),
+        ]))
+        self.assertEqual(np.uint16, ids.dtype)
+        first, second = ids[3, 5], ids[12, 22]
+        self.assertNotEqual(first, second, "two cars came out as one instance")
+        self.assertTrue(first and second)
+        self.assertEqual(0, ids[0, 0], "nothing detected here")
+
+    def test_the_offset_keeps_two_cameras_apart(self):
+        _l, front = label_images(self._write([self._instance(58, 0.9, (2, 6, 3, 9))]),
+                                 first_instance=1)
+        _l, rear = label_images(self._write([self._instance(58, 0.9, (2, 6, 3, 9))]),
+                                first_instance=1001)
+        self.assertEqual(1, front[3, 5])
+        self.assertEqual(1001, rear[3, 5])
+
+    def test_the_confident_instance_owns_the_overlap_in_both_images(self):
+        labels, ids = label_images(self._write([
+            self._instance(58, 0.4, (2, 10, 2, 10)),
+            self._instance(58, 0.95, (4, 8, 4, 8)),
+        ]))
+        self.assertEqual(58, labels[5, 5])
+        self.assertEqual(ids[5, 5], ids[6, 6], "one object, one number")
+        self.assertNotEqual(ids[5, 5], ids[3, 3], "the overlap went to the unsure one")
+
+    def test_a_skipped_instance_does_not_consume_a_number(self):
+        """Otherwise a frame's numbers would depend on undecodable masks."""
+        good = self._instance(58, 0.9, (2, 6, 3, 9))
+        _l, ids = label_images(self._write([
+            {"class": 58, "objectness": 0.5, "mask_rle": "!!!!"},
+            good,
+        ]), first_instance=7)
+        self.assertEqual(7, ids[3, 5])
 
 
 class VistasTableTest(unittest.TestCase):

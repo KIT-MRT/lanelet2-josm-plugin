@@ -176,7 +176,7 @@ class SceneAggregator:
         """Scene-frame points of one frame, ego and far returns removed."""
         blob = self.disk.get(index) if self.disk else None
         if blob is not None:
-            xyz, intensity, _sensor, _origin, _classes, _rgb = decode_points(blob)
+            xyz, intensity, _sensor, _origin, _classes, _rgb, _inst = decode_points(blob)
             intensity = (intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
                          if intensity is not None else np.zeros(len(xyz), np.float32))
         else:

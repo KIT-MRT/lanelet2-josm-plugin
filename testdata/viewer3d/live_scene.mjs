@@ -113,11 +113,34 @@ try {
     await v.shot("live_aggregate_class.png");
     await setMode("rgb");
     await v.shot("live_aggregate_rgb.png");
+    // Instances live on the frame, so bring it back and sit in the car.
+    await v.key("p");
+    await sleep(400);
+    await v.key("k");
+    await sleep(1200);
+    const inst = await v.evaluate("window.__ll2scene.classes()");
+    console.log(`instances in this frame: ${inst.instances}`);
+    await setMode("instance");
+    await v.shot("live_frame_instances.png");
     await setMode("intensity");
   }
 
   await v.key("k");
   await sleep(1200);
+  await v.evaluate("document.getElementById('sceneFilterBtn').click()");
+  await v.evaluate("document.getElementById('classPresetCars').click()");
+  await sleep(500);
+  console.log(`filter: ${await v.evaluate("document.getElementById('sceneFilterBtn').textContent")}`);
+  await v.shot("live_no_vehicles.png");
+  await v.evaluate("document.getElementById('classShowAll').click()");
+  await v.evaluate("(() => { const el = document.getElementById('pointAlpha');"
+    + " el.value = '35'; el.dispatchEvent(new Event('input')); })()");
+  await sleep(400);
+  await v.shot("live_points_faded.png");
+  await v.evaluate("(() => { const el = document.getElementById('pointAlpha');"
+    + " el.value = '100'; el.dispatchEvent(new Event('input')); })()");
+  await v.evaluate("document.getElementById('sceneFilterBtn').click()");
+  await sleep(300);
   console.log(`icons: ${JSON.stringify(await v.evaluate("window.__ll2test.icons()"))}`);
   await v.shot("live_car.png");
   await v.evaluate("(() => { const el = document.getElementById('iconAlpha');"

@@ -54,7 +54,8 @@ Then open <http://127.0.0.1:8765/>. The scene bar appears by itself:
 | `Go to car` / `K` | camera behind the car at this frame |
 | `◀` `▶|` / `,` `.` | step frames |
 | `▶` | play |
-| Colour | intensity, height, sensor, class, rgb |
+| Colour | intensity, height, sensor, class, rgb, instance |
+| `Filter` | class chips, a height ceiling, an intensity floor and point opacity |
 | `Whole scene` / `Shift+P` | the whole scene as one static cloud (hides the single frame) |
 | `Tint frame` / `U` | paint the single frame one bright colour against the aggregate |
 | `Camera lock` / `Shift+L` | put the view exactly where a ring camera was |
@@ -104,9 +105,9 @@ hit, about 10x faster.
 any time, and it is trimmed to `--cache-limit-gb` (10 GB) by dropping the
 least recently used frames. A full 220-frame scene is about 2.3 GB.
 
-### Colouring by class and by camera
+### Colouring by class, by camera, by object
 
-Two more colour modes appear in the menu once the data carries them:
+Three more colour modes appear in the menu once the data carries them:
 
 **class** paints each point with its Mapillary Vistas colour, taken from the
 scene's own `processed/seamseg_instances/` masks
@@ -130,10 +131,45 @@ neutral grey). Images are decoded at half resolution, which a JPEG can do
 from its DCT coefficients at about four times the speed, and a point needs
 only one pixel.
 
-Both are computed once per frame and cached beside the decoded points
-(`class-NNNNNN.bin`, `rgb-NNNNNN.bin`), which is why they did not invalidate
-the frames already on disk. In the aggregate each voxel keeps the class most
-of its points voted for and the mean of their camera colours.
+**instance** gives every detected object its own colour, so three cars
+parked in a row are three colours instead of one blue mass. seamseg numbers
+the objects it finds *within one image* and nothing links them between
+frames, so this is a **single-frame** mode: the numbers are per frame (the
+rear camera's are offset so the two cameras cannot collide), and the
+aggregate keeps its intensity colouring underneath rather than going flat
+grey. The colour is a hash of the number — the golden ratio on the hue, with
+saturation and value jittered so neighbours that land on a similar hue still
+separate.
+
+All three are computed once per frame and cached beside the decoded points
+(`class-NNNNNN.bin`, `rgb-NNNNNN.bin`, `inst-NNNNNN.bin`), which is why they
+did not invalidate the frames already on disk; classes and instances come out
+of a single pass over the masks. In the aggregate each voxel keeps the class
+most of its points voted for and the mean of their camera colours — and no
+instance number, since there is nothing to carry over.
+
+### Filters and opacity
+
+`Filter` opens a small panel over the scene bar. Everything in it is a shader
+uniform: a filtered point is pushed outside the clip volume, so dragging a
+slider re-renders but uploads nothing and refetches nothing.
+
+| | |
+|---|---|
+| class chips | one per class actually present, commonest first; click to hide |
+| `Vehicles` | preset: hides cars, trucks, buses, bikes, motorcycles, trailers, caravans and their riders |
+| `Above ground` | drop everything higher than *n* m over the ground under it |
+| `Intensity` | drop everything below a reflectivity floor — markings and signs survive it |
+| opacity | fade the points so map lines, nodes and icons behind them stay readable |
+
+The height filter needs a ground, which is computed once from the loaded
+clouds: a 4 m grid holding the lowest point in each pillar, written into the
+geometry as a per-point attribute (each aggregate chunk has its own origin,
+so a uniform could not express it). It follows a slope, unlike a flat z cut.
+
+Point opacity below 1 also turns depth writing off, since translucent points
+that write depth hide whatever is behind them, which is the whole point of
+turning the opacity down.
 
 ### Why one decode at a time
 

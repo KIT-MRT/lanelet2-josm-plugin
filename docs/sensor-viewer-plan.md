@@ -199,6 +199,31 @@ passed while the viewer was wrong; the hook now reports effective visibility.
 - [x] Both cached per frame beside the points, so neither invalidated the
       2.2 GB of decoded frames already on disk. In the aggregate a voxel
       keeps its majority class and the mean of its camera colours.
+- [x] **instance**: a colour per detected object, so several cars in one
+      frame can be told apart. seamseg numbers objects *within one image*
+      and nothing tracks them between frames, so this is a frame-only mode:
+      the aggregate carries no instance channel and keeps its intensity
+      colouring underneath. The rear camera's numbers are offset by 1000 so
+      the two cameras cannot collide. Classes and instances come out of one
+      pass over the masks; the instance channel is a uint16 (a byte would
+      not hold the offset) cached as `inst-NNNNNN.bin`.
+
+### M5 — filters and opacity  [x]
+- [x] Class chips, built from the classes actually present in the loaded
+      data, commonest first, capped at 14 so the panel stays a panel.
+- [x] A `Vehicles` preset (cars, trucks, buses, bikes, motorcycles,
+      trailers, caravans, riders). Offered as one click rather than applied
+      on load: parked cars are a large part of what makes the aggregate
+      recognisable, so hiding them by default would be a surprise.
+- [x] Height above *the ground under the point*, not a flat z cut: a 4 m
+      pillar grid of minimum z over every loaded cloud, written as a
+      per-point attribute because each aggregate chunk has its own origin.
+- [x] An intensity floor, which leaves markings and sign faces standing.
+- [x] Point opacity, with depth writing turned off below 1 -- translucent
+      points that write depth hide the map lines the slider exists to show.
+- [x] All of it is shader uniforms plus one texture: a filtered point is
+      pushed outside the clip volume. Dragging a slider refetches nothing
+      and re-uploads nothing, which the e2e suite asserts.
 
 ## Measured facts (example scene `c34c778f…`, Frankfurt, val split)
 

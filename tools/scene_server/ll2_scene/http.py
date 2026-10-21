@@ -249,26 +249,34 @@ class SceneHttpServer:
                     self._inflight.pop(key, None)
                 event.set()
 
-    def _classes_for(self, index, xyz):
-        """Vistas class per point, cached beside the frame.
+    def _labels_for(self, index, xyz):
+        """(Vistas class, instance number) per point, cached beside the frame.
 
-        Decoding the two mask images costs ~0.9 s, so it is kept in its own
-        cache entry: adding it to the frame blob would have invalidated every
-        decoded frame already on disk.
+        Decoding the two mask images costs ~0.9 s, so both come out of one
+        decode and are kept in their own cache entries: adding them to the
+        frame blob would have invalidated every decoded frame already on disk.
         """
         if not getattr(self.source, "segmentation_path", None):
-            return None
-        cached = self.disk.get(index, "class") if self.disk else None
-        if cached is not None and len(cached) == len(xyz):
-            return np.frombuffer(cached, np.uint8)
+            return None, None
+        classes = instances = None
+        if self.disk:
+            cached = self.disk.get(index, "class")
+            if cached is not None and len(cached) == len(xyz):
+                classes = np.frombuffer(cached, np.uint8)
+            cached = self.disk.get(index, "inst")
+            if cached is not None and len(cached) == len(xyz) * 2:
+                instances = np.frombuffer(cached, "<u2")
+        if classes is not None and instances is not None:
+            return classes, instances
         try:
-            classes = self.source.frame_classes(index, xyz)
+            classes, instances = self.source.frame_labels(index, xyz)
         except Exception as exc:
             self.log("scene: no classes for frame %d (%r)" % (index, exc))
-            return None
+            return None, None
         if self.disk:
             self.disk.put(index, classes.tobytes(), "class")
-        return classes
+            self.disk.put(index, instances.tobytes(), "inst")
+        return classes, instances
 
     def _rgb_for(self, index, xyz):
         """Camera colour per point, cached beside the frame like the classes."""
@@ -298,7 +306,7 @@ class SceneHttpServer:
             t0 = time.perf_counter()
             cached = self.disk.get(index) if self.disk else None
             if cached is not None:
-                xyz, intensity, sensor, _origin, _c, _r = decode_points(cached)
+                xyz, intensity, sensor, _origin, _c, _r, _i = decode_points(cached)
                 if intensity is not None:
                     # Came back quantised to a byte; give the encoder the
                     # 0..2 reflectivity it expects.
@@ -309,10 +317,10 @@ class SceneHttpServer:
                 if self.disk:
                     self.disk.put(index, encode_points(xyz, intensity, sensor))
                 where = "dataset"
-            classes = self._classes_for(index, xyz)
+            classes, instances = self._labels_for(index, xyz)
             rgb = self._rgb_for(index, xyz)
             blob = encode_points(self.source.to_enu(xyz), intensity, sensor,
-                                 classes=classes, rgb=rgb)
+                                 classes=classes, rgb=rgb, instances=instances)
             self.cache.put(key, blob)
             self.log("scene: frame %d -> %d points, %.1f MB in %.2fs (%s)"
                      % (index, len(xyz), len(blob) / 1e6, time.perf_counter() - t0, where))

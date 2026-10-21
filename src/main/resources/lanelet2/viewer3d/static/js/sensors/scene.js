@@ -8,7 +8,7 @@
 import * as THREE from "three";
 import { TEST_HOOKS } from "../util.js";
 import { camera, view, setCameraView, lookAtPoint } from "../camera.js";
-import { pointLayer, setClassPalette } from "../render/points.js";
+import { pointLayer, setClassPalette, setHiddenClasses } from "../render/points.js";
 import { toast } from "../hud.js";
 import { store } from "../store.js";
 import { installCamRig, setSceneInfo, update as updateRig, rig, rigState, handleRigKey,
@@ -60,8 +60,19 @@ export function installScene() {
     size: document.getElementById("sceneSize"),
     aggregate: document.getElementById("sceneAggregate"),
     tint: document.getElementById("sceneTint"),
+    filterBtn: document.getElementById("sceneFilterBtn"),
+    filters: document.getElementById("sceneFilters"),
+    alpha: document.getElementById("pointAlpha"),
+    aboveGround: document.getElementById("aboveGround"),
+    aboveGroundLabel: document.getElementById("aboveGroundLabel"),
+    intensityMin: document.getElementById("intensityMin"),
+    intensityMinLabel: document.getElementById("intensityMinLabel"),
+    chips: document.getElementById("classChips"),
+    presetCars: document.getElementById("classPresetCars"),
+    showAll: document.getElementById("classShowAll"),
   };
   if (!els.bar) return;
+  installFilters();
   els.aggregate.addEventListener("click", () => toggleAggregate());
   els.tint.addEventListener("click", () => toggleTint());
   els.points.classList.add("on");
@@ -75,6 +86,96 @@ export function installScene() {
   els.size.addEventListener("input", () => pointLayer.setSize(Number(els.size.value)));
   pointLayer.setSize(Number(els.size.value));
   installCamRig({ urlFor: imageUrl, currentFrame: () => sceneState.frame });
+}
+
+// ---- filters -------------------------------------------------------------------
+// Everything here is a shader uniform, so dragging a slider never refetches
+// or re-uploads a point: filtered points are pushed outside the clip volume.
+export const filterState = { hidden: new Set(), aboveGround: 0, intensityMin: 0, alpha: 1 };
+
+// What "Vehicles" hides: the Vistas thing classes that are traffic.
+const VEHICLE_CLASSES = [55, 57, 58, 59, 60, 61, 62, 63, 64, 32, 33];
+
+function installFilters() {
+  if (!els.filters) return;
+  els.filterBtn.addEventListener("click", () => {
+    els.filters.hidden = !els.filters.hidden;
+    els.filterBtn.classList.toggle("on", !els.filters.hidden);
+  });
+  els.alpha.addEventListener("input", () => {
+    filterState.alpha = Number(els.alpha.value) / 100;
+    pointLayer.setAlpha(filterState.alpha);
+    refreshFilterButton();
+  });
+  els.aboveGround.addEventListener("input", () => {
+    filterState.aboveGround = Number(els.aboveGround.value);
+    els.aboveGroundLabel.textContent = filterState.aboveGround
+      ? `${filterState.aboveGround.toFixed(1)} m` : "off";
+    pointLayer.setAboveGround(filterState.aboveGround);
+    refreshFilterButton();
+  });
+  els.intensityMin.addEventListener("input", () => {
+    filterState.intensityMin = Number(els.intensityMin.value) / 100;
+    els.intensityMinLabel.textContent = filterState.intensityMin.toFixed(2);
+    pointLayer.setIntensityRange(filterState.intensityMin, 1);
+    refreshFilterButton();
+  });
+  els.presetCars.addEventListener("click", () => hideClasses(VEHICLE_CLASSES));
+  els.showAll.addEventListener("click", () => hideClasses([]));
+}
+
+/** Hide exactly these class ids. */
+export function hideClasses(ids) {
+  filterState.hidden = new Set(ids);
+  setHiddenClasses(filterState.hidden);
+  for (const label of els.chips ? els.chips.querySelectorAll("label") : []) {
+    const id = Number(label.dataset.classId);
+    const box = label.querySelector("input");
+    box.checked = filterState.hidden.has(id);
+    label.classList.toggle("hidden", box.checked);
+  }
+  refreshFilterButton();
+}
+
+/** A chip per class actually present, commonest first. */
+function refreshClassChips() {
+  if (!els.chips) return;
+  const histogram = pointLayer.classHistogram(true);
+  if (!histogram) return;
+  const present = Object.entries(histogram)
+    .filter(([id]) => Number(id) !== 255)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 14);
+  if (!present.length) return;
+  const have = new Set(Array.from(els.chips.children).map((n) => n.dataset.classId));
+  for (const [id] of present) {
+    if (have.has(id)) continue;
+    const label = document.createElement("label");
+    label.dataset.classId = id;
+    label.title = `${className(Number(id))} (class ${id})`;
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = filterState.hidden.has(Number(id));
+    box.addEventListener("change", () => {
+      if (box.checked) filterState.hidden.add(Number(id));
+      else filterState.hidden.delete(Number(id));
+      setHiddenClasses(filterState.hidden);
+      label.classList.toggle("hidden", box.checked);
+      refreshFilterButton();
+    });
+    label.appendChild(box);
+    label.appendChild(document.createTextNode(className(Number(id))));
+    label.classList.toggle("hidden", box.checked);
+    els.chips.appendChild(label);
+  }
+}
+
+function refreshFilterButton() {
+  if (!els.filterBtn) return;
+  const active = filterState.hidden.size + (filterState.aboveGround ? 1 : 0)
+    + (filterState.intensityMin > 0 ? 1 : 0) + (filterState.alpha < 1 ? 1 : 0);
+  els.filterBtn.textContent = active ? `Filter · ${active}` : "Filter";
+  els.filterBtn.classList.toggle("on", active > 0 || !els.filters.hidden);
 }
 
 /** A `scene` message from the server. */
@@ -120,6 +221,11 @@ function addClassOption(classes) {
 function refreshColourOptions() {
   if (pointLayer.hasRgb()) {
     addColourOption("rgb", "Colour sampled from the ring camera images");
+  }
+  if (pointLayer.hasInstances()) {
+    addColourOption("instance", "A colour per detected object in this frame. "
+      + "Nothing tracks an object between frames, so the numbers are good only "
+      + "within one frame and the aggregate keeps its intensity colouring.");
   }
 }
 
@@ -218,6 +324,7 @@ function fetchChunks(chunks) {
         if (buf) {
           aggregateState.points += pointLayer.addAggregateChunk(buf);
           refreshColourOptions();
+          refreshClassChips();
           aggregateState.loaded++;
           refreshAggregateButton();
         }
@@ -332,6 +439,7 @@ function apply(index, buffer) {
   try {
     pointLayer.setCloud(buffer);
     refreshColourOptions();
+    refreshClassChips();
   } catch (err) {
     sceneState.error = String(err.message || err);
     toast(`Point cloud: ${sceneState.error}`, "error");
@@ -502,6 +610,8 @@ if (TEST_HOOKS) {
     points: () => pointLayer.stats(),
     rig: () => rigState(),
     aggregate: () => ({ ...aggregateState }),
+    filters: () => ({ ...filterState, hidden: Array.from(filterState.hidden).sort((a, b) => a - b) }),
+    hideClasses: (ids) => hideClasses(ids),
     classes: () => {
       const info = sceneState.info;
       return {
@@ -509,6 +619,7 @@ if (TEST_HOOKS) {
         cameras: (info && info.classes && info.classes.cameras) || [],
         inData: pointLayer.hasClasses(),
         rgb: pointLayer.hasRgb(),
+        instances: pointLayer.hasInstances() ? pointLayer.instanceCount() : 0,
         car: className(58),
         histogram: pointLayer.classHistogram(),
       };

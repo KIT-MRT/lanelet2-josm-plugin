@@ -34,13 +34,15 @@ const classPalette = () => {
   return rows;
 };
 
-function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
+// `instances` is what a single frame carries and the aggregate does not:
+// seamseg numbers objects within one image and nothing tracks them onward.
+function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10, instanced = true) {
   const origin = [spacing * index, 0, Z];
   const header = new ArrayBuffer(40);
   const view = new DataView(header);
   for (const [k, ch] of [..."LL2PC1"].entries()) view.setUint8(k, ch.charCodeAt(0));
   view.setUint32(8, count, true);
-  view.setUint32(12, 1 | 2 | 4 | 8, true); // intensity + sensor + class + rgb
+  view.setUint32(12, 1 | 2 | 4 | 8 | (instanced ? 16 : 0), true); // intensity, sensor, class, rgb, instance
   view.setFloat64(16, origin[0], true);
   view.setFloat64(24, origin[1], true);
   view.setFloat64(32, origin[2], true);
@@ -49,6 +51,7 @@ function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
   const sensor = new Uint8Array(count);
   const classes = new Uint8Array(count);
   const rgb = new Uint8Array(count * 3);
+  const instances = new Uint16Array(count);
   for (let p = 0; p < count; p++) {
     const a = (p / count) * Math.PI * 2;
     xyz[p * 3] = Math.cos(a) * 6;
@@ -60,10 +63,14 @@ function encodeCloud(index, count = POINTS_PER_FRAME, spacing = 10) {
     rgb[p * 3] = p % 256;
     rgb[p * 3 + 1] = 255 - (p % 256);
     rgb[p * 3 + 2] = 128;
+    // Three cars and nothing else numbered, as the real masks come out.
+    instances[p] = classes[p] === CLASS_CAR ? 1 + (p % 3) : 0;
   }
-  return Buffer.concat([Buffer.from(header), Buffer.from(xyz.buffer),
-                        Buffer.from(intensity), Buffer.from(sensor),
-                        Buffer.from(classes), Buffer.from(rgb)]);
+  const parts = [Buffer.from(header), Buffer.from(xyz.buffer),
+                 Buffer.from(intensity), Buffer.from(sensor),
+                 Buffer.from(classes), Buffer.from(rgb)];
+  if (instanced) parts.push(Buffer.from(instances.buffer));
+  return Buffer.concat(parts);
 }
 
 const ego = {
@@ -101,7 +108,7 @@ const data = http.createServer((req, res) => {
     const index = Number(aggChunk[1]);
     aggregateChunksServed.push(index);
     res.writeHead(200, { ...cors, "Content-Type": "application/octet-stream" });
-    res.end(encodeCloud(index, AGG_PER_CHUNK, 40));
+    res.end(encodeCloud(index, AGG_PER_CHUNK, 40, false));
     return;
   }
   if (req.url === "/scene.json") {
@@ -429,8 +436,77 @@ try {
     + " el.value = 'rgb'; el.dispatchEvent(new Event('change')); })()");
   await sleep(150);
   t.check("and selecting it colours from the cameras", (await points()).mode === "rgb");
+
+  // ---- one colour per object in the frame -------------------------------------------
+  await v.key("p");  // the frame cloud was hidden above; instances live on it
+  t.check("the frame carries three distinct instance numbers",
+    (await classesOf()).instances === 3, JSON.stringify(await classesOf()));
+  t.check("the colour menu offers instance",
+    await v.evaluate("!!document.querySelector('#sceneMode option[value=\"instance\"]')"));
+  await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
+    + " el.value = 'instance'; el.dispatchEvent(new Event('change')); })()");
+  await sleep(150);
+  let inst = await points();
+  t.check("selecting it colours the frame by instance", inst.frameMode === "instance",
+    JSON.stringify(inst));
+  // The frame is normally painted one flat colour while the aggregate shows,
+  // which would defeat the whole mode.
+  t.check("the tint steps aside for it", inst.tintFrame && inst.frameMode !== "solid");
+  // Nothing numbers an object across frames, so the aggregate has no
+  // instances; grey would be the honest colour but a useless picture.
+  t.check("and the aggregate stays on intensity", inst.aggregateMode === "intensity",
+    JSON.stringify(inst));
+  await v.shot("scene_instances.png");
   await v.evaluate("(() => { const el = document.getElementById('sceneMode');"
     + " el.value = 'intensity'; el.dispatchEvent(new Event('change')); })()");
+
+  // ---- filters ---------------------------------------------------------------------
+  const filtersOf = () => v.evaluate("window.__ll2scene.filters()");
+  const setRange = (id, value) => v.evaluate(
+    `(() => { const el = document.getElementById('${id}');`
+    + ` el.value = '${value}'; el.dispatchEvent(new Event('input')); })()`);
+  await v.evaluate("document.getElementById('sceneFilterBtn').click()");
+  t.check("the Filter button opens the panel",
+    await v.evaluate("!document.getElementById('sceneFilters').hidden"));
+  t.check("a chip per class present in the data",
+    (await v.evaluate("document.querySelectorAll('#classChips label').length")) === 2,
+    await v.evaluate("document.getElementById('classChips').textContent"));
+
+  await v.evaluate("document.getElementById('classPresetCars').click()");
+  let filters = await filtersOf();
+  t.check("the vehicles preset hides the car class", filters.hidden.includes(CLASS_CAR),
+    JSON.stringify(filters.hidden));
+  t.check("and leaves other classes alone", !filters.hidden.includes(CLASS_POLE));
+  t.check("the button says how much is filtered",
+    (await v.evaluate("document.getElementById('sceneFilterBtn').textContent")).startsWith("Filter ·"));
+  await v.shot("scene_filtered.png");
+  // Filtering is a shader uniform: nothing is refetched or re-uploaded.
+  t.check("filtering does not refetch anything",
+    aggregateChunksServed.length === AGG_CHUNKS, aggregateChunksServed.join());
+  t.check("and the points are all still loaded", (await points()).count === POINTS_PER_FRAME);
+
+  await v.evaluate("document.getElementById('classShowAll').click()");
+  t.check("Show all clears the class filter", (await filtersOf()).hidden.length === 0);
+
+  await setRange("pointAlpha", 40);
+  t.check("the opacity slider fades the points", Math.abs((await points()).alpha - 0.4) < 1e-9,
+    JSON.stringify(await points()));
+  await setRange("pointAlpha", 100);
+
+  await setRange("aboveGround", 2);
+  t.check("the above-ground filter takes a height", (await filtersOf()).aboveGround === 2
+    && (await points()).aboveGround === 2);
+  t.check("and labels it in metres",
+    (await v.evaluate("document.getElementById('aboveGroundLabel').textContent")) === "2.0 m");
+  await setRange("aboveGround", 0);
+  t.check("zero turns it off again",
+    (await v.evaluate("document.getElementById('aboveGroundLabel').textContent")) === "off");
+
+  await setRange("intensityMin", 50);
+  t.check("the intensity floor is applied",
+    Math.abs((await points()).intensityRange[0] - 0.5) < 1e-9, JSON.stringify(await points()));
+  await setRange("intensityMin", 0);
+  await v.evaluate("document.getElementById('sceneFilterBtn').click()");
 
   // ---- camera lock ---------------------------------------------------------------
   await v.evaluate("window.__ll2scene.show(2)");

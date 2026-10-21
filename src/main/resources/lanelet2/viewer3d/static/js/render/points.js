@@ -13,7 +13,7 @@ import * as THREE from "three";
 // "solid" is not offered in the colour menu: it is what the single frame is
 // painted when it is shown on top of the aggregate, so the two can be told
 // apart at a glance.
-export const COLOR_MODES = ["intensity", "height", "sensor", "solid", "class", "rgb"];
+export const COLOR_MODES = ["intensity", "height", "sensor", "solid", "class", "rgb", "instance"];
 export const MENU_MODES = ["intensity", "height", "sensor"];
 const FRAME_TINT = 0xff6b35; // warm orange: nothing in viridis comes near it
 const MAGIC = "LL2PC1\0\0";
@@ -22,6 +22,7 @@ const FLAG_INTENSITY = 1;
 const FLAG_SENSOR = 2;
 const FLAG_CLASS = 4;
 const FLAG_RGB = 8;
+const FLAG_INSTANCE = 16;
 
 // lidar_top, corner left/right, left, right, front, rear — the dataset's own
 // sensor_id order.
@@ -34,6 +35,9 @@ attribute float aIntensity;
 attribute float aSensor;
 attribute float aClass;
 attribute vec3 aRGB;
+// seamseg's instance number for the point, as a normalised uint16; 0 means no
+// instance. Per frame only -- nothing tracks an object between frames.
+attribute float aInstance;
 uniform float uSize;
 uniform int uMode;
 uniform float uGain;
@@ -42,9 +46,32 @@ uniform float uZRange;
 uniform vec3 uSensorColors[7];
 uniform vec3 uSolid;
 uniform sampler2D uPalette;
+uniform sampler2D uClassFilter;   // one texel per class: red 0 hides it
+uniform float uAboveGround;       // hide points higher than this over the ground
+uniform vec2 uIntensityRange;     // keep reflectivity inside this
+// Ground height under the point, in the same local frame as the position
+// attribute: the chunks of an aggregate share one material but each has its
+// own origin, so an absolute height could not come from a uniform.
+attribute float aGround;
 varying vec3 vColor;
 #include <common>
 #include <logdepthbuf_pars_vertex>
+
+vec3 hsv2rgb(vec3 c) {
+  vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+// Instance numbers carry no meaning beyond "a different object", so they are
+// hashed to a colour. The golden ratio keeps consecutive numbers far apart in
+// hue, and jittering saturation and value separates neighbours that happen to
+// land on a similar hue.
+vec3 instanceColor(float id) {
+  if (id < 0.5) return vec3(0.32);
+  return hsv2rgb(vec3(fract(id * 0.6180339887),
+                      0.55 + 0.35 * fract(id * 0.2454),
+                      0.70 + 0.30 * fract(id * 0.7548)));
+}
 
 vec3 viridis(float t) {
   t = clamp(t, 0.0, 1.0);
@@ -59,6 +86,23 @@ vec3 viridis(float t) {
 }
 
 void main() {
+  // Filters first: a dropped point is pushed outside the clip volume, which
+  // costs nothing and keeps the buffers untouched so a slider can be dragged
+  // without re-uploading anything.
+  float intensity = aIntensity;
+  bool keep = intensity >= uIntensityRange.x && intensity <= uIntensityRange.y;
+  if (texture2D(uClassFilter, vec2((aClass * 255.0 + 0.5) / 256.0, 0.5)).r < 0.5) {
+    keep = false;
+  }
+  if (uAboveGround > 0.0 && position.z - aGround > uAboveGround) {
+    keep = false;
+  }
+  if (!keep) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);  // behind the far plane
+    gl_PointSize = 0.0;
+    vColor = vec3(0.0);
+    return;
+  }
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   gl_PointSize = uSize;
@@ -74,6 +118,8 @@ void main() {
     vColor = texture2D(uPalette, vec2((aClass * 255.0 + 0.5) / 256.0, 0.5)).rgb;
   } else if (uMode == 5) {
     vColor = aRGB;
+  } else if (uMode == 6) {
+    vColor = instanceColor(floor(aInstance * 65535.0 + 0.5));
   } else {
     vColor = viridis(clamp(aIntensity * uGain, 0.0, 1.0));
   }
@@ -83,11 +129,12 @@ void main() {
 
 const FRAGMENT = /* glsl */`
 varying vec3 vColor;
+uniform float uAlpha;
 #include <common>
 #include <logdepthbuf_pars_fragment>
 void main() {
   #include <logdepthbuf_fragment>
-  gl_FragColor = vec4(vColor, 1.0);
+  gl_FragColor = vec4(vColor, uAlpha);
 }
 `;
 
@@ -118,14 +165,35 @@ export function parseCloud(buffer) {
     offset += count;
   }
   let rgb = null;
-  if (flags & FLAG_RGB) rgb = new Uint8Array(buffer, offset, count * 3);
-  return { count, origin, positions, intensity, sensor, classes, rgb };
+  if (flags & FLAG_RGB) {
+    rgb = new Uint8Array(buffer, offset, count * 3);
+    offset += count * 3;
+  }
+  let instances = null;
+  if (flags & FLAG_INSTANCE) instances = new Uint16Array(buffer, offset, count);
+  return { count, origin, positions, intensity, sensor, classes, rgb, instances };
 }
 
 // One texel per class id, filled from the palette the scene server sends.
 const paletteTexture = new THREE.DataTexture(
   new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat);
 paletteTexture.needsUpdate = true;
+
+// Same shape, but it carries "show this class" rather than a colour.
+const classFilterTexture = new THREE.DataTexture(
+  new Uint8Array(256 * 4).fill(255), 256, 1, THREE.RGBAFormat);
+classFilterTexture.needsUpdate = true;
+
+/** Hide the given class ids (a Set of numbers); everything else shows. */
+export function setHiddenClasses(hidden) {
+  const data = classFilterTexture.image.data;
+  for (let i = 0; i < 256; i++) {
+    const show = !hidden || !hidden.has(i);
+    data[i * 4] = show ? 255 : 0;
+    data[i * 4 + 3] = 255;
+  }
+  classFilterTexture.needsUpdate = true;
+}
 
 /** Install the Vistas colours: `rows` is 256 [r, g, b] entries. */
 export function setClassPalette(rows) {
@@ -151,7 +219,13 @@ function makeMaterial(size, gain) {
       uSensorColors: { value: SENSOR_COLORS.map((c) => new THREE.Color(c)) },
       uSolid: { value: new THREE.Color(FRAME_TINT) },
       uPalette: { value: paletteTexture },
+      uClassFilter: { value: classFilterTexture },
+      uAboveGround: { value: 0 },
+      uIntensityRange: { value: new THREE.Vector2(0, 1) },
+      uAlpha: { value: 1 },
     },
+    transparent: false,
+    depthWrite: true,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
   });
@@ -180,6 +254,10 @@ class PointLayer {
     // while both are on screen: a lone frame painted one flat colour would
     // throw away the intensity that makes markings readable.
     this.tintFrame = true;
+    this.alpha = 1;
+    this.aboveGround = 0;
+    this.intensityRange = [0, 1];
+    this.groundReady = false;
     this.size = 2;
     this.gain = 3; // most returns sit well below the retro-reflector ceiling
     this.material = makeMaterial(this.size, this.gain);
@@ -199,11 +277,19 @@ class PointLayer {
       cloud.classes || new Uint8Array(cloud.count).fill(255), 1, true));
     geometry.setAttribute("aRGB", new THREE.BufferAttribute(
       cloud.rgb || new Uint8Array(cloud.count * 3).fill(90), 3, true));
+    // The aggregate never carries instances; the attribute is still declared
+    // so one material can be shared with the frame.
+    geometry.setAttribute("aInstance", new THREE.BufferAttribute(
+      new Uint16Array(cloud.count), 1, true));
+    geometry.setAttribute("aGround", new THREE.BufferAttribute(
+      new Float32Array(cloud.count).fill(-1e6), 1, false));
     geometry.computeBoundingSphere();
     const points = new THREE.Points(geometry, this.aggregateMaterial);
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
     points.renderOrder = 2;
+    points.userData.cloud = { ...cloud, object: points };
     this.aggregateGroup.add(points);
+    this.groundReady = false;
     this.aggregateCount += cloud.count;
     if (cloud.classes) this.aggregateHasClasses = true;
     if (cloud.rgb) this.aggregateHasRgb = true;
@@ -250,8 +336,15 @@ class PointLayer {
   /** The aggregate always shows the chosen colouring; the frame may be tinted. */
   _applyModes() {
     const chosen = COLOR_MODES.indexOf(this.mode);
-    this.aggregateMaterial.uniforms.uMode.value = chosen;
-    const tinted = this.aggregateGroup.visible && this.tintFrame;
+    const instance = this.mode === "instance";
+    // The aggregate has no instance numbers -- seamseg does not track objects
+    // between frames -- so it stays on intensity rather than going flat grey,
+    // which also makes the frame's instances stand out against it.
+    this.aggregateMaterial.uniforms.uMode.value =
+      instance ? COLOR_MODES.indexOf("intensity") : chosen;
+    // Instance colours are the whole point of that mode, so they beat the
+    // tint that otherwise marks the frame out from the aggregate.
+    const tinted = this.aggregateGroup.visible && this.tintFrame && !instance;
     this.material.uniforms.uMode.value = tinted ? COLOR_MODES.indexOf("solid") : chosen;
   }
 
@@ -276,6 +369,10 @@ class PointLayer {
       cloud.classes || new Uint8Array(cloud.count).fill(255), 1, true));
     geometry.setAttribute("aRGB", new THREE.BufferAttribute(
       cloud.rgb || new Uint8Array(cloud.count * 3).fill(90), 3, true));
+    geometry.setAttribute("aInstance", new THREE.BufferAttribute(
+      cloud.instances || new Uint16Array(cloud.count), 1, true));
+    geometry.setAttribute("aGround", new THREE.BufferAttribute(
+      new Float32Array(cloud.count).fill(-1e6), 1, false));
     geometry.computeBoundingSphere();
     const points = new THREE.Points(geometry, this.material);
     points.position.set(cloud.origin[0], cloud.origin[1], cloud.origin[2]);
@@ -331,6 +428,19 @@ class PointLayer {
     return Boolean((this.cloud && this.cloud.rgb) || this.aggregateHasRgb);
   }
 
+  /** Does the loaded *frame* carry instance numbers? The aggregate never does. */
+  hasInstances() {
+    return Boolean(this.cloud && this.cloud.instances);
+  }
+
+  /** How many distinct instances the loaded frame holds, 0 aside. */
+  instanceCount() {
+    if (!this.cloud || !this.cloud.instances) return 0;
+    const seen = new Set();
+    for (const id of this.cloud.instances) if (id) seen.add(id);
+    return seen.size;
+  }
+
   setSize(px) {
     this.size = Math.max(1, Math.min(12, px));
     for (const m of this.materials) m.uniforms.uSize.value = this.size;
@@ -341,14 +451,101 @@ class PointLayer {
     for (const m of this.materials) m.uniforms.uGain.value = this.gain;
   }
 
-  /** {class id: points} over the loaded frame cloud, for the HUD and tests. */
-  classHistogram() {
-    const cloud = this.cloud;
-    if (!cloud || !cloud.classes) return null;
+  /** Point opacity, so map lines and icons behind the cloud stay readable. */
+  setAlpha(alpha) {
+    this.alpha = Math.max(0.05, Math.min(1, alpha));
+    for (const m of this.materials) {
+      m.uniforms.uAlpha.value = this.alpha;
+      // Writing depth from translucent points would hide whatever is behind
+      // them, which is the whole reason for turning the alpha down.
+      m.transparent = this.alpha < 1;
+      m.depthWrite = this.alpha >= 1;
+      m.needsUpdate = true;
+    }
+  }
+
+  setIntensityRange(low, high) {
+    this.intensityRange = [Math.max(0, low), Math.min(1, high)];
+    for (const m of this.materials) m.uniforms.uIntensityRange.value.set(...this.intensityRange);
+  }
+
+  /** Hide points more than `metres` above the local ground; 0 turns it off. */
+  setAboveGround(metres) {
+    this.aboveGround = Math.max(0, metres || 0);
+    if (this.aboveGround > 0) this.ensureGround();
+    for (const m of this.materials) m.uniforms.uAboveGround.value = this.aboveGround;
+  }
+
+  /**
+   * Fill every cloud's `aGround` from a coarse pillar grid over all of them.
+   *
+   * The lowest return in a cell is the ground as far as this filter is
+   * concerned: a percentile would be tidier but needs a sort per cell, and
+   * the lowest point only ever makes the filter more generous.
+   */
+  ensureGround(cell = 4.0) {
+    const clouds = this._allClouds();
+    if (!clouds.length) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const { positions, origin, count } of clouds) {
+      for (let i = 0; i < count; i++) {
+        const x = origin[0] + positions[i * 3];
+        const y = origin[1] + positions[i * 3 + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    const nx = Math.max(1, Math.ceil((maxX - minX) / cell) + 1);
+    const ny = Math.max(1, Math.ceil((maxY - minY) / cell) + 1);
+    const grid = new Float32Array(nx * ny).fill(Infinity);
+    const cellOf = (x, y) => Math.min(nx - 1, Math.floor((x - minX) / cell))
+      + Math.min(ny - 1, Math.floor((y - minY) / cell)) * nx;
+    for (const { positions, origin, count } of clouds) {
+      for (let i = 0; i < count; i++) {
+        const at = cellOf(origin[0] + positions[i * 3], origin[1] + positions[i * 3 + 1]);
+        const z = origin[2] + positions[i * 3 + 2];
+        if (z < grid[at]) grid[at] = z;
+      }
+    }
+    for (const cloud of clouds) {
+      const { positions, origin, count, object } = cloud;
+      const attr = object.geometry.getAttribute("aGround");
+      for (let i = 0; i < count; i++) {
+        const at = cellOf(origin[0] + positions[i * 3], origin[1] + positions[i * 3 + 1]);
+        const ground = grid[at];
+        // Stored in the cloud's own frame, like `position`.
+        attr.array[i] = (Number.isFinite(ground) ? ground : -1e6) - origin[2];
+      }
+      attr.needsUpdate = true;
+    }
+    this.groundReady = true;
+  }
+
+  _allClouds() {
+    const out = [];
+    if (this.cloud) out.push(this.cloud);
+    for (const child of this.aggregateGroup.children) {
+      if (child.userData.cloud) out.push(child.userData.cloud);
+    }
+    return out;
+  }
+
+  /** {class id: points}; `everything` includes the aggregate's chunks. */
+  classHistogram(everything = false) {
+    const clouds = everything ? this._allClouds() : (this.cloud ? [this.cloud] : []);
+    const withClasses = clouds.filter((c) => c.classes);
+    if (!withClasses.length) return null;
     const counts = {};
-    for (let i = 0; i < cloud.count; i++) {
-      const id = cloud.classes[i];
-      counts[id] = (counts[id] || 0) + 1;
+    for (const cloud of withClasses) {
+      for (let i = 0; i < cloud.count; i++) {
+        const id = cloud.classes[i];
+        counts[id] = (counts[id] || 0) + 1;
+      }
     }
     return counts;
   }
@@ -363,8 +560,13 @@ class PointLayer {
       visible: this.group.visible && this.frameGroup.visible,
       mode: this.mode,
       frameMode: COLOR_MODES[this.material.uniforms.uMode.value],
+      aggregateMode: COLOR_MODES[this.aggregateMaterial.uniforms.uMode.value],
       tintFrame: this.tintFrame,
+      instances: this.instanceCount(),
       size: this.size,
+      alpha: this.alpha,
+      aboveGround: this.aboveGround,
+      intensityRange: this.intensityRange,
       origin: cloud ? cloud.origin : null,
       aggregate: this.aggregateCount,
       aggregateChunks: this.aggregateGroup.children.length,

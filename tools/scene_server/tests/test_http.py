@@ -8,6 +8,7 @@ including the frame the user was actually waiting for.
 
 import http.client
 import socket
+import tempfile
 import threading
 import time
 import unittest
@@ -227,6 +228,70 @@ class PrewarmTest(unittest.TestCase):
         self.stopped = True  # a closed server must not be started again
 
 
+class LabelledSource(StubSource):
+    """A stub whose frames come with masks, so classes and instances appear."""
+
+    def __init__(self):
+        super().__init__(decode_seconds=0.0)
+        self.label_calls = 0
+
+    def segmentation_path(self, camera, index):
+        return "/nowhere/%s/%06d.json" % (camera, index)
+
+    def frame_labels(self, index, xyz):
+        self.label_calls += 1
+        classes = np.full(len(xyz), 255, np.uint8)
+        classes[:2] = 58
+        instances = np.zeros(len(xyz), np.uint16)
+        instances[0] = 1
+        instances[1] = 1002  # the rear camera's numbering
+        return classes, instances
+
+
+class LabelsTest(unittest.TestCase):
+    def setUp(self):
+        self.source = LabelledSource()
+        self.server = SceneHttpServer(self.source, port=0, log=lambda _m: None)
+        self.server.start()
+
+    def tearDown(self):
+        self.server.stop()
+
+    def _frame(self, index):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=30)
+        try:
+            conn.request("GET", "/frame/%d/points.bin" % index)
+            return decode_points(conn.getresponse().read())
+        finally:
+            conn.close()
+
+    def test_a_frame_carries_classes_and_instances(self):
+        _xyz, _i, _s, _o, classes, _rgb, instances = self._frame(2)
+        np.testing.assert_array_equal(classes[:2], [58, 58])
+        np.testing.assert_array_equal(instances[:2], [1, 1002])
+        self.assertEqual(0, instances[2], "an unlabelled point has no instance")
+
+    def test_both_come_out_of_one_mask_decode(self):
+        """Decoding the masks twice would double the cost of every frame."""
+        self._frame(5)
+        self.assertEqual(1, self.source.label_calls)
+
+    def test_a_cached_frame_keeps_its_instances(self):
+        """The disk cache holds classes and instances in separate entries."""
+        from ll2_scene.cache import FrameDiskCache
+        with tempfile.TemporaryDirectory() as tmp:
+            source = LabelledSource()
+            server = SceneHttpServer(source, port=0, log=lambda _m: None,
+                                     disk_cache=FrameDiskCache("stub", tmp))
+            first = server.points_blob(3)
+            server.cache = type(server.cache)()
+            second = server.points_blob(3)
+            self.assertEqual(first, second)
+            self.assertEqual(1, source.label_calls, "the masks were decoded again")
+            self.assertEqual(2, len(decode_points(second)[6][:2].tolist()))
+            np.testing.assert_array_equal(decode_points(second)[6][:2], [1, 1002])
+
+
 class AggregateServingTest(unittest.TestCase):
     """The whole-scene cloud: progress while building, then chunks."""
 
@@ -277,8 +342,11 @@ class AggregateServingTest(unittest.TestCase):
         for chunk in meta["chunks"]:
             status, body = self._get("/aggregate/%d.bin" % chunk["index"])
             self.assertEqual(200, status)
-            xyz, *_ = decode_points(body)
+            xyz, _i, _s, _o, _c, _rgb, instances = decode_points(body)
             self.assertEqual(chunk["count"], len(xyz))
+            self.assertIsNone(instances,
+                              "the aggregate must not claim instances: nothing "
+                              "numbers an object across frames")
             total += len(xyz)
         self.assertEqual(meta["stats"]["points"], total)
 
