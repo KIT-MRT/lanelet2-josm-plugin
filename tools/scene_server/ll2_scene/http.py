@@ -9,12 +9,20 @@ these read-only routes exist:
     GET /frame/<i>/points.bin           all LiDARs of frame i, viewer ENU
     GET /frame/<i>/camera/<name>.jpg    one ring camera image, as stored
 
-Decoded frames are cached (small, and stepping back and forth is the normal
-way to look at a scene).
+**Decoding is serialised.** A frame costs seconds of CPU, and the
+thread-per-request behaviour of `ThreadingHTTPServer` turns a few taps on the
+step key into eight decodes fighting over the cores: measured, one frame alone
+is 3.4 s while eight at once are 20 s *each*, so even the frame the user is
+waiting for arrives last. One decode at a time makes the first answer arrive
+first; requests for the same frame share one decode, and work whose browser
+has already navigated away is dropped before it starts.
 """
 
 import json
 import re
+import select
+import socket
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -26,6 +34,7 @@ from .points import INTENSITY_FULL_SCALE, decode_points, encode_points
 
 FRAME_POINTS_RE = re.compile(r"^/frame/(\d+)/points\.bin$")
 FRAME_IMAGE_RE = re.compile(r"^/frame/(\d+)/camera/([A-Za-z0-9_]+)\.jpg$")
+GONE = object()  # the browser left before we got to its request
 
 
 class FrameCache:
@@ -36,31 +45,58 @@ class FrameCache:
         self._items = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, key, build):
+    def get(self, key):
         with self._lock:
             if key in self._items:
                 self._items.move_to_end(key)
                 return self._items[key]
-        value = build()
+        return None
+
+    def put(self, key, value):
         with self._lock:
             self._items[key] = value
             self._items.move_to_end(key)
             while len(self._items) > self.size:
                 self._items.popitem(last=False)
-        return value
+
+
+def client_gone(connection):
+    """True when the browser has closed this connection (an aborted fetch).
+
+    A readable socket that peeks nothing is a closed peer; a readable socket
+    with bytes waiting is just the next pipelined request.
+    """
+    try:
+        ready, _, _ = select.select([connection], [], [], 0)
+        if not ready:
+            return False
+        return connection.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b""
+    except (BlockingIOError, InterruptedError):
+        return False
+    except OSError:
+        return True
 
 
 class SceneHttpServer:
     def __init__(self, source, host="127.0.0.1", port=8767, allow_origin="*", log=print,
-                 disk_cache=None):
+                 disk_cache=None, decode_workers=1):
         self.source = source
         self.disk = disk_cache
         self.host = host
         self.allow_origin = allow_origin
         self.log = log
         self.cache = FrameCache()
+        # One decoder by default: the work is CPU-bound, so more of them only
+        # delay every answer (see the module docstring).
+        self._gate = threading.BoundedSemaphore(max(1, decode_workers))
+        self._inflight = {}
+        self._inflight_lock = threading.Lock()
+        self._waiting = 0          # browser requests currently queued or decoding
+        self._waiting_lock = threading.Lock()
+        self._prewarm = None
+        self._stopping = threading.Event()
         handler = _make_handler(self)
-        self._httpd = ThreadingHTTPServer((host, port), handler)
+        self._httpd = _QuietThreadingHTTPServer((host, port), handler)
         self.port = self._httpd.server_address[1]
         self._thread = None
 
@@ -74,7 +110,38 @@ class SceneHttpServer:
         self._thread.start()
         self.log("scene: serving data on %s" % self.base_url)
 
+    def prewarm(self):
+        """Fill the cache frame by frame in the background.
+
+        One frame at a time and only while no browser is waiting, so warming
+        never costs the user a step. Once through, every frame answers from
+        cache in ~0.15 s instead of seconds.
+        """
+        def run():
+            warmed = 0
+            t0 = time.perf_counter()
+            for index in range(self.source.frame_count):
+                if self._stopping.is_set():
+                    return
+                while self._waiting > 0 and not self._stopping.wait(0.2):
+                    pass  # a browser is waiting; it goes first
+                if self._stopping.is_set():
+                    return
+                if self.disk and self.disk.get(index) is not None:
+                    continue
+                try:
+                    self.points_blob(index)
+                    warmed += 1
+                except Exception as exc:
+                    self.log("scene: prewarm stopped at frame %d (%r)" % (index, exc))
+                    return
+            self.log("scene: prewarmed %d frames in %.0f s; stepping is now ~0.15 s a frame"
+                     % (warmed, time.perf_counter() - t0))
+        self._prewarm = threading.Thread(target=run, name="ll2-scene-prewarm", daemon=True)
+        self._prewarm.start()
+
     def stop(self):
+        self._stopping.set()
         # shutdown() waits for serve_forever() to return and blocks forever if
         # it was never entered, so only call it when the server really started.
         if self._thread is not None:
@@ -83,33 +150,82 @@ class SceneHttpServer:
             self._thread = None
         self._httpd.server_close()
 
-    def points_blob(self, index):
-        """Frame `index` in viewer ENU, from RAM, from disk, or decoded.
+    def points_blob(self, index, still_wanted=None):
+        """Frame `index` in viewer ENU, or GONE if the browser left meanwhile.
 
         The disk cache holds the frame in the *scene's* metric frame, so it
         stays valid across a change of ENU anchor; only the cheap
         re-projection is redone.
         """
-        def build():
+        key = ("points", index, self.source.anchor)
+        hit = self.cache.get(key)
+        if hit is not None:
+            return hit
+
+        # A step and its prefetch (or two tabs) asking for the same frame wait
+        # on one decode instead of starting two.
+        with self._inflight_lock:
+            event = self._inflight.get(key)
+            mine = event is None
+            if mine:
+                event = threading.Event()
+                self._inflight[key] = event
+        if not mine:
+            event.wait(timeout=180)
+            hit = self.cache.get(key)
+            if hit is not None:
+                return hit
+        try:
+            return self._build(key, index, still_wanted)
+        finally:
+            if mine:
+                with self._inflight_lock:
+                    self._inflight.pop(key, None)
+                event.set()
+
+    def _build(self, key, index, still_wanted):
+        with self._gate:
+            # Queued behind another decode; the tab may be long gone by now.
+            if still_wanted is not None and not still_wanted():
+                self.log("scene: frame %d dropped, the browser moved on" % index)
+                return GONE
+            hit = self.cache.get(key)  # someone may have finished it while we waited
+            if hit is not None:
+                return hit
             t0 = time.perf_counter()
             cached = self.disk.get(index) if self.disk else None
             if cached is not None:
                 xyz, intensity, sensor, _ = decode_points(cached)
+                if intensity is not None:
+                    # Came back quantised to a byte; give the encoder the
+                    # 0..2 reflectivity it expects.
+                    intensity = intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
                 where = "cache"
             else:
                 xyz, intensity, sensor = self.source.frame_points_scene(index)
                 if self.disk:
                     self.disk.put(index, encode_points(xyz, intensity, sensor))
                 where = "dataset"
-            # Intensity came back quantised to a byte; feed it through as the
-            # 0..2 reflectivity the encoder expects.
-            if cached is not None and intensity is not None:
-                intensity = intensity.astype(np.float32) * (INTENSITY_FULL_SCALE / 255.0)
             blob = encode_points(self.source.to_enu(xyz), intensity, sensor)
+            self.cache.put(key, blob)
             self.log("scene: frame %d -> %d points, %.1f MB in %.2fs (%s)"
                      % (index, len(xyz), len(blob) / 1e6, time.perf_counter() - t0, where))
             return blob
-        return self.cache.get(("points", index, self.source.anchor), build)
+
+
+class _QuietThreadingHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        """A tab that navigates away mid-response is normal, not an error.
+
+        Without this, every aborted fetch prints a BrokenPipeError traceback
+        and buries the lines that matter.
+        """
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def _make_handler(server):
@@ -120,13 +236,16 @@ def _make_handler(server):
             pass
 
         def _send(self, body, content_type, status=200):
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", server.allow_origin)
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", server.allow_origin)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True  # the tab moved on mid-response
 
         def _json(self, obj, status=200):
             self._send(json.dumps(obj).encode("utf-8"), "application/json", status)
@@ -150,28 +269,53 @@ def _make_handler(server):
                 return
             match = FRAME_POINTS_RE.match(path)
             if match:
-                index = int(match.group(1))
-                if not 0 <= index < source.frame_count:
-                    self._json({"error": "frame out of range"}, 404)
-                    return
-                try:
-                    self._send(server.points_blob(index), "application/octet-stream")
-                except Exception as exc:
-                    server.log("scene: frame %d failed: %r" % (index, exc))
-                    self._json({"error": repr(exc)}, 500)
+                self._serve_points(int(match.group(1)))
                 return
             match = FRAME_IMAGE_RE.match(path)
             if match:
-                index, camera = int(match.group(1)), match.group(2)
-                if camera not in source.cameras:
-                    self._json({"error": "unknown camera"}, 404)
-                    return
-                image = source.image_path(camera, index)
-                if not image or not image.is_file():
-                    self._json({"error": "no image"}, 404)
-                    return
-                self._send(image.read_bytes(), "image/jpeg")
+                self._serve_image(int(match.group(1)), match.group(2))
                 return
             self._json({"error": "not found"}, 404)
+
+        def _serve_points(self, index):
+            source = server.source
+            if not 0 <= index < source.frame_count:
+                self._json({"error": "frame out of range"}, 404)
+                return
+            with server._waiting_lock:
+                server._waiting += 1
+            try:
+                blob = server.points_blob(
+                    index, still_wanted=lambda: not client_gone(self.connection))
+            except Exception as exc:
+                server.log("scene: frame %d failed: %r" % (index, exc))
+                self._json({"error": repr(exc)}, 500)
+                return
+            finally:
+                with server._waiting_lock:
+                    server._waiting -= 1
+            if blob is GONE:
+                # Nobody is listening any more; say so cheaply rather than
+                # spending seconds producing an answer for a closed socket.
+                self.close_connection = True
+                self._json({"error": "cancelled"}, 409)
+                return
+            self._send(blob, "application/octet-stream")
+
+        def _serve_image(self, index, camera):
+            source = server.source
+            if camera not in source.cameras:
+                self._json({"error": "unknown camera"}, 404)
+                return
+            image = source.image_path(camera, index)
+            if not image or not image.is_file():
+                self._json({"error": "no image"}, 404)
+                return
+            try:
+                body = image.read_bytes()
+            except OSError as exc:
+                self._json({"error": repr(exc)}, 500)
+                return
+            self._send(body, "image/jpeg")
 
     return Handler

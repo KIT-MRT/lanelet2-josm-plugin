@@ -63,6 +63,12 @@ def main(argv=None):
                         help="trim the cache to this size, least recently used first")
     parser.add_argument("--clear-cache", action="store_true",
                         help="drop this scene's cached frames before starting")
+    parser.add_argument("--prewarm", action="store_true",
+                        help="decode the whole scene into the cache in the background, "
+                             "pausing whenever the browser asks for something")
+    parser.add_argument("--decode-workers", type=int, default=1,
+                        help="frames decoded at once (default 1: more of them makes "
+                             "every single answer slower, which is what the user feels)")
     args = parser.parse_args(argv)
 
     log = lambda msg: print(msg, flush=True)  # noqa: E731
@@ -91,8 +97,12 @@ def main(argv=None):
         log("scene: %s" % disk.describe())
         origin = "http://%s:%d" % (args.viewer_host, args.viewer_port)
         http = SceneHttpServer(source, host=args.viewer_host, port=args.http_port,
-                               allow_origin=origin, log=log, disk_cache=disk)
+                               allow_origin=origin, log=log, disk_cache=disk,
+                               decode_workers=args.decode_workers)
         http.start()
+        if args.prewarm:
+            log("scene: prewarming %d frames in the background" % source.frame_count)
+            http.prewarm()
 
     def on_connect():
         if send_map:

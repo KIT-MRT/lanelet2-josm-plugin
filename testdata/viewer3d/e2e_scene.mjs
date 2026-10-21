@@ -16,7 +16,7 @@ const shotsDir = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
 const t = new Checks();
 const Z = 100;
 
-const FRAMES = 6;
+const FRAMES = 14;
 const POINTS_PER_FRAME = 500;
 // Frame i puts its cloud around x = 10 * i, so "did the frame change?" is a
 // question about geometry, not about a counter.
@@ -55,6 +55,9 @@ const ego = {
 };
 
 let served = [];
+let delayMs = 0;        // pretend a frame costs real decode time
+let inFlight = 0;
+let maxInFlight = 0;
 const data = http.createServer((req, res) => {
   const cors = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
   const match = /^\/frame\/(\d+)\/points\.bin$/.exec(req.url);
@@ -72,8 +75,23 @@ const data = http.createServer((req, res) => {
       return;
     }
     const body = encodeCloud(index);
-    res.writeHead(200, { ...cors, "Content-Type": "application/octet-stream" });
-    res.end(body);
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    let done = false;
+    const release = () => { if (!done) { done = true; inFlight--; } };
+    // An aborted fetch closes the connection; the real server drops that work
+    // at the gate, so it must not count as busy here either.
+    res.on("close", release);
+    const finish = () => {
+      if (done) return;
+      release();
+      if (!res.writableEnded) {
+        res.writeHead(200, { ...cors, "Content-Type": "application/octet-stream" });
+        res.end(body);
+      }
+    };
+    if (delayMs) setTimeout(finish, delayMs);
+    else finish();
     return;
   }
   res.writeHead(404, cors);
@@ -144,7 +162,7 @@ try {
   t.check("the point cloud is on screen", p.count === POINTS_PER_FRAME && p.visible, JSON.stringify(p));
   t.check("placed where the scene server put it",
     dist3(p.origin, frameOrigin(0)) < 1e-9, JSON.stringify(p.origin));
-  t.check("the frame label counts from 0", (await label()).startsWith("0 / 5"), await label());
+  t.check("the frame label counts from 0", (await label()).startsWith(`0 / ${FRAMES - 1}`), await label());
   await v.key("b");
   await v.shot("scene_points.png");
 
@@ -212,6 +230,44 @@ try {
   t.check("a frame out of range clamps instead of erroring",
     (await sceneState()).frame === FRAMES - 1 && !(await sceneState()).error,
     JSON.stringify(await sceneState()));
+
+  // ---- stepping fast must not pile decodes on the server ---------------------------
+  // Each frame costs the real server seconds of CPU; eight at once made every
+  // answer ~6x slower, including the one being waited for.
+  served = [];
+  maxInFlight = 0;
+  delayMs = 250;
+  await v.evaluate("window.__ll2scene.show(6)");
+  for (let i = 0; i < 6; i++) await v.key(".");
+  const settled = await waitFor(async () => {
+    const st = await sceneState();
+    return !st.loading && st.frame === 12;
+  }, 15000);
+  await sleep(300);
+  t.check("rapid stepping ends on the frame asked for", settled, JSON.stringify(await sceneState()));
+  t.check("with only one request in flight at a time", maxInFlight === 1, `peak ${maxInFlight}`);
+  t.check("and the frames stepped over are never fetched",
+    served.length <= 4, `fetched ${JSON.stringify(served)}`);
+  t.check("the cloud shown is the one for that frame",
+    dist3((await points()).origin, frameOrigin(12)) < 1e-9, JSON.stringify((await points()).origin));
+  // A look-ahead is dropped for a frame the user is actually waiting for.
+  await v.evaluate("window.__ll2scene.show(13)");
+  await waitLoaded(13);
+  served = [];
+  maxInFlight = 0;
+  delayMs = 400;
+  await sleep(600);           // the idle look-ahead starts (and will not finish)
+  await v.evaluate("window.__ll2scene.show(5)");
+  const jumped = await waitFor(async () => {
+    const st = await sceneState();
+    return st.frame === 5 && !st.loading;
+  }, 10000);
+  t.check("a jump during a look-ahead is served, not queued behind it", jumped,
+    JSON.stringify(await sceneState()));
+  t.check("and still only one request runs at a time", maxInFlight === 1, `peak ${maxInFlight}`);
+  t.check("showing the frame that was asked for",
+    dist3((await points()).origin, frameOrigin(5)) < 1e-9, JSON.stringify((await points()).origin));
+  delayMs = 0;
 
   // ---- camera lock ---------------------------------------------------------------
   await v.evaluate("window.__ll2scene.show(2)");

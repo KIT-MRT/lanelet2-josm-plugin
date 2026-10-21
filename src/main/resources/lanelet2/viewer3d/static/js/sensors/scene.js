@@ -22,10 +22,19 @@ export const sceneState = {
   error: null,
 };
 
-const PLAY_MIN_MS = 60; // never queue faster than the fetches come back
+const PLAY_MIN_MS = 60;       // never queue faster than the fetches come back
+const PREFETCH_IDLE_MS = 400; // only look ahead once the user has settled
 let els = {};
 let playTimer = null;
-let inFlight = null;
+let prefetchTimer = null;
+// Exactly one request is ever in flight. Decoding a frame costs the server
+// seconds of CPU, so a held step key used to put eight decodes on it at once,
+// which made every one of them -- including the frame actually being waited
+// for -- about six times slower. Now the newest wanted frame wins: whatever
+// is in flight finishes, then the latest wanted frame is fetched, so the
+// frames stepped over are never asked for at all.
+let pending = null;  // { index, controller, show }
+let wanted = null;   // the frame the user last asked for
 const cache = new Map(); // frame -> ArrayBuffer
 const CACHE_MAX = 6;
 
@@ -91,6 +100,7 @@ export function showFrame(index) {
   if (!info) return Promise.resolve(null);
   index = Math.max(0, Math.min(info.frames - 1, Math.round(index)));
   sceneState.frame = index;
+  wanted = index;
   updateLabels();
   // The locked view rides along with the frame, image and all.
   if (rig.on) updateRig(index);
@@ -99,31 +109,68 @@ export function showFrame(index) {
     apply(index, cached);
     return Promise.resolve(cached);
   }
-  sceneState.loading = true;
-  updateLabels();
-  const request = fetch(frameUrl(index))
+  if (pending) {
+    if (pending.index === index) return pending.promise;
+    // A look-ahead is worth dropping for a frame the user is waiting for; a
+    // request already being decoded is not -- aborting it would send one
+    // request per keypress anyway, and the server has started the work. Let
+    // it finish, and its `finally` jumps straight to whatever is wanted by
+    // then, so the frames stepped over are never asked for.
+    if (!pending.show) {
+      pending.controller.abort();
+      return startFetch(index, true);
+    }
+    sceneState.loading = true;
+    return pending.promise;
+  }
+  return startFetch(index, true);
+}
+
+/** Fetch one frame. `show` distinguishes a user step from a look-ahead. */
+function startFetch(index, show) {
+  const controller = new AbortController();
+  if (show) {
+    sceneState.loading = true;
+    updateLabels();
+  }
+  const promise = fetch(frameUrl(index), { signal: controller.signal })
     .then((r) => {
       if (!r.ok) throw new Error(`frame ${index}: HTTP ${r.status}`);
       return r.arrayBuffer();
     })
     .then((buf) => {
       remember(index, buf);
-      sceneState.loading = false;
       sceneState.error = null;
-      // A later click may have moved on while this was in flight.
-      if (sceneState.frame === index) apply(index, buf);
+      if (show && sceneState.frame === index) apply(index, buf);
       return buf;
     })
     .catch((err) => {
-      sceneState.loading = false;
-      sceneState.error = String(err.message || err);
-      setPlaying(false);
-      toast(`Point cloud: ${sceneState.error}`, "error");
-      updateLabels();
+      if (err && err.name === "AbortError") return null; // we moved on; normal
+      if (show) {
+        sceneState.error = String(err.message || err);
+        setPlaying(false);
+        toast(`Point cloud: ${sceneState.error}`, "error");
+      }
       return null;
+    })
+    .finally(() => {
+      // An aborted look-ahead settles *after* its replacement has taken the
+      // slot; clearing it blindly would let two requests run at once.
+      if (!pending || pending.controller !== controller) return;
+      pending = null;
+      sceneState.loading = false;
+      if (wanted !== null && wanted !== index && !cache.has(wanted)) {
+        startFetch(wanted, true);
+        return;
+      }
+      if (wanted !== null && cache.has(wanted) && sceneState.frame === wanted) {
+        apply(wanted, cache.get(wanted));
+      }
+      updateLabels();
+      schedulePrefetch();
     });
-  inFlight = request;
-  return request;
+  pending = { index, controller, show, promise };
+  return promise;
 }
 
 function apply(index, buffer) {
@@ -134,7 +181,7 @@ function apply(index, buffer) {
     toast(`Point cloud: ${sceneState.error}`, "error");
   }
   updateLabels();
-  prefetch(index + 1);
+  schedulePrefetch();
 }
 
 function remember(index, buffer) {
@@ -142,13 +189,15 @@ function remember(index, buffer) {
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
-function prefetch(index) {
-  const info = sceneState.info;
-  if (!info || index < 0 || index >= info.frames || cache.has(index)) return;
-  fetch(frameUrl(index))
-    .then((r) => (r.ok ? r.arrayBuffer() : null))
-    .then((buf) => { if (buf) remember(index, buf); })
-    .catch(() => {});
+/** Look one frame ahead, but only once nothing else is being waited for. */
+function schedulePrefetch() {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(() => {
+    const info = sceneState.info;
+    if (!info || pending) return;
+    const next = sceneState.frame + 1;
+    if (next < info.frames && !cache.has(next)) startFetch(next, false);
+  }, PREFETCH_IDLE_MS);
 }
 
 export function step(delta) {

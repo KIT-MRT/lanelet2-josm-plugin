@@ -123,6 +123,14 @@ to learn about the viewport rectangle.
       (a 220-frame scene is 2.3 GB). Cached in the *scene's* frame, so a
       change of ENU anchor does not invalidate it.
 
+- [x] Stepping fast piled decodes on the server (8 at once -> 20 s each,
+      the awaited frame last). Decoding is now serialised, identical requests
+      share one decode, abandoned work is dropped, and the browser keeps one
+      request in flight with the newest frame winning. First answer out of
+      eight: 4.9 s instead of ~20 s. `--prewarm` fills the cache in the
+      background for ~0.15 s stepping afterwards.
+- [x] Aborted fetches no longer print a BrokenPipeError traceback per request.
+
 ### M3 — aggregated scene cloud
 - [ ] Voxel downsample + chunking + draw-distance LOD.
       220 frames x 740 k = 163 M points raw, so this is a downsampling problem,

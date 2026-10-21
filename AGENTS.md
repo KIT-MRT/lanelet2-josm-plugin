@@ -405,6 +405,15 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   they hold the frame in the *scene's* metric frame so adopting JOSM's anchor
   later does not throw the cache away (only the 0.12 s re-projection is
   redone). 1.3 s -> 0.15 s per frame; LRU-trimmed to `--cache-limit-gb`.
+- **Decoding is serialised, deliberately.** A frame is seconds of CPU and
+  `ThreadingHTTPServer` is thread-per-request, so stepping fast once put eight
+  decodes on the box at once: one frame alone is 3.4 s, eight at once are 20 s
+  *each*, and the frame being waited for arrived last. `_gate` allows one
+  (`--decode-workers`), identical requests share one decode via `_inflight`,
+  and `client_gone` drops queued work whose tab left. The browser keeps one
+  request in flight and lets the newest wanted frame win, so stepped-over
+  frames are never requested. Raising the worker count helps bulk `--prewarm`
+  throughput and hurts every individual answer.
 - Tests: `.venv/bin/python -m unittest discover -s tests -t .` (pure),
   `testdata/viewer3d/e2e_scene.mjs` (browser, fakes the scene server),
   `testdata/viewer3d/live_scene.mjs <scene>` (real data; prints how far the

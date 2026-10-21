@@ -77,6 +77,8 @@ stays JOSM's (and editable) while the sensor data comes from here.
 | `--no-cache` | decode every frame afresh |
 | `--cache-limit-gb N` | trim the cache to N GB, least recently used first (default 10) |
 | `--clear-cache` | drop this scene's cached frames before starting |
+| `--prewarm` | decode the whole scene into the cache in the background |
+| `--decode-workers N` | frames decoded at once (default 1, see below) |
 
 ## Cache
 
@@ -89,6 +91,32 @@ hit, about 10x faster.
 `~/.cache/josm-lanelet2/scene-server/...` by default; it is safe to delete at
 any time, and it is trimmed to `--cache-limit-gb` (10 GB) by dropping the
 least recently used frames. A full 220-frame scene is about 2.3 GB.
+
+### Why one decode at a time
+
+`ThreadingHTTPServer` gives every request its own thread, so a few taps on the
+step key used to put eight decodes on the machine at once. Measured: one frame
+alone takes 3.4 s, eight at once take **20 s each** — the frame being waited
+for arrived last. Now decoding is serialised (`--decode-workers`, default 1),
+requests for the same frame share one decode, and a request whose tab has
+navigated away is dropped before it starts. First answer out of eight: 4.9 s
+instead of ~20 s.
+
+The browser half matches it: one request in flight, newest frame wins. Holding
+the step key no longer asks for the frames it passes over — it jumps to where
+you stopped.
+
+Raising `--decode-workers` gives better bulk throughput (8 at once decode ~1.8x
+more frames per second overall) at the cost of every individual answer, so it
+is worth it for `--prewarm` and not for stepping.
+
+### Prewarming
+
+`--prewarm` walks the scene in the background and fills the cache, one frame
+at a time and only while no browser is waiting, so it never costs you a step
+(at worst you wait out the one frame already being decoded). About 3.8 s a
+frame, so a 220-frame scene takes ~14 minutes, after which every frame answers
+in ~0.15 s.
 
 Frames are cached **in the scene's own metric frame**, not in the viewer's
 ENU, so the cache stays valid when the ENU anchor changes — which happens as
