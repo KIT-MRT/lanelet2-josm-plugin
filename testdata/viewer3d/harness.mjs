@@ -172,6 +172,7 @@ export async function openViewer({ width = 1280, height = 800, shotsDir = null, 
     cdp("Input.dispatchMouseEvent", { type, x, y, button, buttons: BTN[button], ...extra });
 
   const s = {
+    ports: { http, ingest, cdp: cdpPort },
     commands, errors, evaluate, cdp, sendScene,
     set reply(fn) { replyFn = fn; },
     /** Ops of every command received so far (flattened), optionally by op name. */

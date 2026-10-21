@@ -113,6 +113,29 @@
       background: rgba(10, 14, 20, 0.9); border: 1px solid #3d4d63; border-radius: 5px; padding: 5px 6px;
     }
     #editBar input:disabled { opacity: 0.45; }
+    #sceneBar {
+      margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      background: rgba(18, 24, 33, 0.92); border: 1px solid #3d4d63; border-radius: 6px;
+      padding: 5px 7px; max-width: 760px;
+    }
+    #sceneBar[hidden] { display: none; }
+    #sceneBar button {
+      background: rgba(34, 46, 62, 0.95); color: #e8eef7; border: 1px solid #4a5a73;
+      border-radius: 5px; padding: 3px 8px; font: 12px/1.2 ui-monospace, Menlo, monospace; cursor: pointer;
+    }
+    #sceneBar button:hover { background: rgba(52, 68, 90, 0.95); }
+    #sceneBar button.on { border-color: #3ff0ff; color: #b8f6ff; }
+    #sceneBar label, #sceneBar .slab {
+      font: 12px/1 ui-monospace, Menlo, monospace; color: #cdd6e4;
+      display: flex; align-items: center; gap: 4px;
+    }
+    #sceneBar .sep { width: 1px; align-self: stretch; background: #3d4d63; margin: 0 3px; }
+    #sceneBar select {
+      background: rgba(34, 46, 62, 0.95); color: #e8eef7; border: 1px solid #4a5a73;
+      border-radius: 5px; padding: 2px 4px; font: 12px/1.2 ui-monospace, Menlo, monospace;
+    }
+    #sceneBar input[type=range] { width: 120px; accent-color: #3ff0ff; }
+    #sceneBar #sceneFrameLabel { min-width: 86px; color: #9fb0c7; }
     #imageryMenu {
       position: fixed; top: 44px; right: 12px; z-index: 13;
       display: flex; flex-direction: column; gap: 3px; min-width: 180px;
@@ -172,6 +195,25 @@
     <button type="button" data-edit="delete" title="Delete the selection through JOSM's Delete action (Del)">Del</button>
     <button type="button" data-edit="undo" title="Undo in JOSM (Ctrl+Z)">Undo</button>
     <button type="button" data-edit="redo" title="Redo in JOSM (Ctrl+Shift+Z / Ctrl+Y)">Redo</button>
+  </div>
+  <div id="sceneBar" hidden>
+    <span class="slab" id="sceneName" title="The recorded scene the point clouds come from">scene</span>
+    <span class="sep"></span>
+    <button type="button" id="scenePoints" title="Show or hide the LiDAR point cloud (P)">Points</button>
+    <button type="button" id="sceneCar" title="Put the camera behind the car at this frame (K)">Go to car</button>
+    <span class="sep"></span>
+    <button type="button" id="scenePrev" title="Previous frame (,)">◀</button>
+    <button type="button" id="scenePlay" title="Play the scene (Space is a camera key, so use this or .)">▶</button>
+    <button type="button" id="sceneNext" title="Next frame (.)">▶|</button>
+    <input type="range" id="sceneFrame" min="0" max="0" value="0" step="1" title="Frame">
+    <span id="sceneFrameLabel">0 / 0</span>
+    <span class="sep"></span>
+    <label>Colour <select id="sceneMode" title="What the point colour shows">
+      <option value="intensity">intensity</option>
+      <option value="height">height</option>
+      <option value="sensor">sensor</option>
+    </select></label>
+    <label title="Point size in pixels">Size <input type="range" id="sceneSize" min="1" max="8" step="1" value="2"></label>
   </div>
   </div>
   <div id="toolbar">

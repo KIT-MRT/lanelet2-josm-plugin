@@ -17,6 +17,7 @@ import { frameAll, bevNorth, defaultBevView } from "./framing.js";
 import { requestJosmRecenter } from "./josmview.js";
 import { setLookHud } from "./hud.js";
 import { laneletLayer } from "./render/lanelets.js";
+import { handleSceneKey } from "./sensors/scene.js";
 
 const CAM_PAN_STEP_M = 1;    // metres per pan / height tick (walk)
 const CAM_FAST_STEP_M = 10;  // metres per tick with Shift (WASD / arrows / pad)
@@ -205,6 +206,7 @@ export function installKeys() {
     trackModifiers(e);
     if (isTypingTarget(e.target)) return;
     if (handleEditKey(e)) return;
+    if (!e.repeat && handleSceneKey(e)) return;
 
     if ((e.key === "f" || e.key === "F") && !e.repeat) {
       frameAll();

@@ -148,6 +148,16 @@ culling.
 - **Street view:** the viewer's button and the *SV* toolbar button open the
   selection or the view in Mapillary, Google Street View or Apple Maps.
 
+### Recorded sensor data (point clouds, no JOSM needed)
+
+`tools/scene_server/` streams a recorded driving scene (KITScenes Multimodal)
+into the same viewer: the scene's Lanelet2 map, the LiDAR point clouds of a
+frame and the ring camera images. It connects to the viewer server like the
+JOSM bridge does, so **viewing needs no JOSM** — and when JOSM *is* connected,
+the map stays JOSM's (editable) while the sensor data comes from the scene
+server. See `tools/scene_server/README.md`; the plan is in
+`docs/sensor-viewer-plan.md`.
+
 New nodes created in JOSM without `ele` get a height (on by default; settings:
 *Heights*): a node inserted into a way, or joining ways, is interpolated
 between the known heights on both sides, a free end or a lone node takes the

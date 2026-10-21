@@ -12,3 +12,7 @@ bin/
 .DS_Store
 *pyc
 handoff.md
+# scene server virtualenv (tools/scene_server/setup.sh recreates it)
+tools/scene_server/.venv/
+__pycache__/
+*.pyc

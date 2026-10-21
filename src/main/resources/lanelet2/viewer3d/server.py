@@ -131,6 +131,12 @@ def _sse_encode(msg):
 #   selection: JOSM's selection (kept, and sent with the bootstrap snapshot)
 #     {"type":"selection","nodes":[17,-5],"ways":["way/3"],"truncated":false}
 #
+#   scene    : a sensor scene offered by a second bridge (the scene server),
+#              kept and sent with the bootstrap snapshot like the selection.
+#              The browser fetches the heavy data from `scene.base` itself.
+#     {"type":"scene","scene":{"id":..,"base":"http://127.0.0.1:8767",
+#                              "frames":220,"cameras":{..},"ego":{..}}}
+#
 #   command_result: JOSM's answer to a browser command that had an "id"
 #     {"type":"command_result","id":"c12","ok":false,"message":"..."}
 #
@@ -162,6 +168,7 @@ class SceneHub:
         self._anchor = None                 # {"lat":..,"lon":..} or None
         self._features = {}                 # id -> feature dict
         self._selection = None              # last JOSM selection message
+        self._scene = None                  # last sensor-scene announcement
         self._seq = 0                       # monotonically increasing
         self._subscribers = set()           # set[queue.Queue]
         self._bridges = set()               # set[_BridgeConn] (command back-channel)
@@ -251,6 +258,9 @@ class SceneHub:
         elif mtype == "selection":
             # Kept so a browser that (re)connects starts with JOSM's selection.
             self._selection = {"nodes": msg.get("nodes", []), "ways": msg.get("ways", [])}
+        elif mtype == "scene":
+            # Same reason: a reloaded tab must find the scene server again.
+            self._scene = msg.get("scene")
 
     def _snapshot_message_locked(self):
         msg = {
@@ -261,6 +271,8 @@ class SceneHub:
         }
         if self._selection is not None:
             msg["selection"] = self._selection
+        if self._scene is not None:
+            msg["scene"] = self._scene
         return msg
 
     def snapshot_message(self):

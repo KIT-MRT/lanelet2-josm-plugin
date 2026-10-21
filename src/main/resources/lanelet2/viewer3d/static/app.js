@@ -14,7 +14,7 @@
 // scene is centred near the origin. Z is up.
 import * as THREE from "three";
 import { PROFILE, TEST_HOOKS, now, plog } from "./js/util.js";
-import { renderer, scene } from "./js/scene.js";
+import { renderer, scene, mapRoot } from "./js/scene.js";
 import { camera, view } from "./js/camera.js";
 import { store, nodeToken } from "./js/store.js";
 import { lineLayer } from "./js/render/lines.js";
@@ -23,6 +23,8 @@ import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
 import { updateHighlight } from "./js/render/highlight.js";
 import { updateHover, hoverItem } from "./js/hover.js";
+import { pointLayer } from "./js/render/points.js";
+import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
 import { selection } from "./js/selection.js";
 import { edit, gizmoBusy, transform, clickTarget } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
@@ -40,6 +42,8 @@ installKeys();
 installJosmView({ busy: () => gizmoBusy() || navBusy() });
 installImagery();
 installHudToggle();
+installScene();
+pointLayer.attach(mapRoot);
 
 // A clicked button must not keep keyboard focus, or Enter clicks it again
 // instead of reaching the map. (Space is prevented as a move key anyway.)
@@ -53,7 +57,13 @@ document.addEventListener("click", (e) => {
 // right away rather than on the next frame, so a view chosen in between (B)
 // is not overridden.
 store.on("snapshot", ({ wasEmpty }) => { if (wasEmpty) frameAll(); });
-store.on("applied", (msg) => { if (msg.type === "command_result") onCommandResult(msg); });
+store.on("applied", (msg) => {
+  if (msg.type === "command_result") onCommandResult(msg);
+  // A reloaded tab gets the scene announcement folded into its bootstrap
+  // snapshot, the same way JOSM's selection arrives.
+  else if (msg.type === "scene") onSceneMessage(msg);
+  else if (msg.type === "snapshot" && msg.scene) onSceneMessage({ scene: msg.scene });
+});
 
 connect((msg, meta) => {
   const t0 = PROFILE ? now() : 0;
@@ -149,6 +159,11 @@ if (TEST_HOOKS) {
       const el = document.getElementById("toast");
       return el && el.classList.contains("show") ? { text: el.textContent, kind: el.className } : null;
     },
+    scene: () => ({
+      frame: sceneState.frame,
+      frames: sceneState.info ? sceneState.info.frames : 0,
+      points: pointLayer.stats(),
+    }),
     lanelets: () => ({
       count: laneletLayer.lanelets.size,
       surfaceTiles: laneletLayer.chunks.size,

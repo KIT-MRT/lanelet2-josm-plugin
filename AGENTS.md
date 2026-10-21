@@ -301,7 +301,8 @@ Offline self-containment is verified by fetching `/`, `/app.js` and all three
 
 Browser code has its own checks in `testdata/viewer3d/` (headless Chrome over
 CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
-`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`, and
+`e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`,
+`e2e_scene.mjs`, and
 `perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
 for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
 exact state under `?test=1` (`window.__ll2test`); use it, not the HUD text.
@@ -359,6 +360,40 @@ Browser camera and picking (`app.js`):
   handshake) is recycled; adopting it would pair its old routes and files with
   this plugin. Two JOSMs with different plugin builds on the same port will
   keep recycling each other's server: give the dev one another port.
+
+## Scene server (`tools/scene_server/`, not in the jar)
+
+Streams recorded driving scenes (KITScenes) into the viewer. Separate process,
+own `uv` venv; the shipped `server.py` stays stdlib-only.
+
+- **It is just another ingest bridge.** It sends the scene's Lanelet2 map as
+  the same protocol v2 features JOSM sends, so the browser cannot tell them
+  apart, and a new `scene` message (kept by the hub and replayed in the
+  bootstrap snapshot, like `selection`) tells the browser where to fetch the
+  heavy data. Point clouds and images go over the scene server's **own HTTP
+  port as binary**, never through SSE.
+- With JOSM already streaming, the scene server reads the head of `/state`,
+  adopts that anchor and does not send a map. It refuses edit commands
+  (`ok: false`), which the viewer already knows how to show.
+- **Python 3.12 + NumPy 1.x are forced**: the `lanelet2` wheel is built for
+  cp38-cp312 against NumPy 1.x and aborts on import under NumPy 2. `uv pip
+  install kitscenes` fails (its metadata names a wheel by relative path), so
+  the checkout goes on `sys.path` instead.
+- **Coordinates are the whole game** (`ll2_scene/enu.py`). The scene frame is
+  lanelet2's `UtmProjector` frame and the map is loaded through the same
+  projector, so those agree; the viewer's ENU is turned against it by the
+  meridian convergence (0.25 deg = 4.3 m/km) and scaled *anisotropically*
+  (east 0.9984, north 1.0012, because `Viewer3dEnu` uses the equatorial radius
+  for both axes). Everything goes through one exact chain, vectorised with
+  pyproj, which matches lanelet2's own projector to under a micrometre (there
+  is a test). A fitted local affine drifts **57 mm at 400 m** -- do not
+  reintroduce one.
+- Heights reuse the plugin's rule: `|ele| > 100 km` is "no height"; these maps
+  carry `-FLT_MAX` on unmapped signs and poles.
+- Tests: `.venv/bin/python -m unittest discover -s tests -t .` (pure),
+  `testdata/viewer3d/e2e_scene.mjs` (browser, fakes the scene server),
+  `testdata/viewer3d/live_scene.mjs <scene>` (real data; prints how far the
+  cloud's ground sits from the map's `ele` -- -0.5 cm on the example scene).
 
 ## In-scope `internal/` features
 
