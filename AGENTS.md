@@ -579,7 +579,18 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   jakarta.json. Ops: `move_node` (x/y and z each optional: height-only moves
   keep lat/lon exactly, XY moves never add `ele`), `set_tag` (still unused by
   the browser), `set_view`, `select`, `delete_selection` (runs JOSM's own
-  Delete action, with its warnings), `undo`, `redo`. Unknown ops are skipped.
+  Delete action, with its warnings), `undo`, `redo`, `describe`. Unknown ops
+  are skipped.
+- **`describe` is how the Selection tab gets tags.** The stream carries only
+  `type`/`subtype`/`participant:bicycle` per way (all tags of every way would
+  bloat a city snapshot, and `file_origin` alone is a full path per way), so
+  the browser asks for the selection's full tags and relation memberships
+  (`ids`, capped at `MAX_DESCRIBE`) and JOSM answers in the reply's
+  `details`. Read-only: no visibility check, answered on its own. Tags
+  edited in JOSM produce no patch, so the tab asks again when it opens, when
+  the selection or a selected way changes, and when the window regains
+  focus. The scene server refuses it, and the tab falls back to the
+  streamed tags with a note.
 - `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
   on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
   deliberate change from the Jython, which skipped missing nodes): if any

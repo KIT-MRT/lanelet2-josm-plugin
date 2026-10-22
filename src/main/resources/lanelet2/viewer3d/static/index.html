@@ -184,6 +184,17 @@
         </div>
       </section>
 
+      <!-- Selection: tags and relations ------------------------------------->
+      <section class="pane" data-pane="inspect" hidden>
+        <h2 class="paneTitle">Selection</h2>
+        <div class="inspectBar">
+          <span id="inspectSummary">Nothing selected</span>
+          <button type="button" id="inspectCopy" class="iconBtn" data-tip="Copy the tags the selection shares, as key=value lines" disabled><span data-icon="copy"></span></button>
+          <button type="button" id="inspectRefresh" class="iconBtn" data-tip="Ask JOSM again" disabled><span data-icon="refresh"></span></button>
+        </div>
+        <div id="inspectBody"></div>
+      </section>
+
       <!-- Scene / city ------------------------------------------------------>
       <section class="pane" data-pane="scene" hidden>
         <h2 class="paneTitle">Sensor data</h2>
@@ -278,6 +289,7 @@
     </div>
     <div class="tabs" role="tablist" aria-orientation="vertical">
       <button type="button" role="tab" data-tab="layers" data-tip="Layers"><span data-icon="layers"></span></button>
+      <button type="button" role="tab" data-tab="inspect" data-tip="Selection: every tag and the relations it belongs to"><span data-icon="tag"></span></button>
       <button type="button" role="tab" data-tab="scene" data-tip="Sensor data: scene, city, point clouds" hidden><span data-icon="car"></span><span class="badge" hidden></span></button>
       <button type="button" role="tab" data-tab="debug" data-tip="Debug readouts" hidden><span data-icon="bug"></span></button>
     </div>

@@ -154,6 +154,9 @@ def _sse_encode(msg):
 #
 #   command_result: JOSM's answer to a browser command that had an "id"
 #     {"type":"command_result","id":"c12","ok":false,"message":"..."}
+#     The answer to a `describe` op adds "details": [{"id":"way/3",
+#     "tags":{..},"nodes":5,"memberships":[{"id":"relation/7","role":"left",
+#     "tags":{..}}]}, ...] (relayed untouched, like the rest).
 #
 #   feature  : one renderable object (protocol v2: flat arrays)
 #     {"id":"way/-123",

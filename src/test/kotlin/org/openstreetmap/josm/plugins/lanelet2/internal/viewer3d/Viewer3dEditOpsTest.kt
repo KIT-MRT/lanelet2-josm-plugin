@@ -219,6 +219,58 @@ class Viewer3dEditOpsTest {
     }
 
     @Test
+    fun describeAnswersTagsAndMembershipsEvenOnAHiddenLayer() {
+        val w = Way().also {
+            it.setNodes(listOf(withEle, noEle))
+            it.put("type", "line_thin")
+            it.put("subtype", "dashed")
+            it.put("file_origin", "/maps/a.osm")
+            ds.addPrimitive(it)
+        }
+        val other = Way().also {
+            it.setNodes(listOf(noEle, withEle))
+            ds.addPrimitive(it)
+        }
+        val lanelet = Relation().also {
+            it.put("type", "lanelet")
+            it.put("subtype", "road")
+            it.addMember(RelationMember("left", w))
+            it.addMember(RelationMember("right", other))
+            ds.addPrimitive(it)
+        }
+        visible = false
+        val r = apply(command("""{"type":"command","id":"d","ops":[{"op":"describe",
+            "ids":["way/${w.uniqueId}","node/${withEle.uniqueId}","way/999999"]}]}"""))!!
+        assertTrue(r.ok, r.message)
+        val details = r.details!!
+        assertEquals(3, details.size)
+        val way = details[0]
+        assertEquals(mapOf("file_origin" to "/maps/a.osm", "subtype" to "dashed", "type" to "line_thin"), way.tags)
+        assertEquals(listOf("file_origin", "subtype", "type"), way.tags.keys.toList())
+        assertEquals(2, way.nodeCount)
+        assertEquals(listOf(Membership("relation/${lanelet.uniqueId}", "left", mapOf("subtype" to "road", "type" to "lanelet"))),
+            way.memberships)
+        assertEquals(mapOf("ele" to "110.5"), details[1].tags)
+        assertNull(details[1].nodeCount)
+        assertTrue(details[2].missing)
+        val json = Viewer3dJson.encode(r)
+        assertTrue(json.contains(""""details":[{"id":"way/${w.uniqueId}","tags":{"file_origin":"/maps/a.osm","""), json)
+        assertTrue(json.contains(""""memberships":[{"id":"relation/${lanelet.uniqueId}","role":"left","tags":{"subtype":"road","type":"lanelet"}}]"""), json)
+        assertTrue(json.contains(""""id":"way/999999","missing":true,"tags":{},"memberships":[]"""), json)
+        assertTrue(UndoRedoHandler.getInstance().undoCommands.isEmpty(), "describe edits nothing")
+    }
+
+    @Test
+    fun describeIsCappedAndNeedsALayer() {
+        val ids = (1..(Viewer3dConstants.MAX_DESCRIBE + 50)).joinToString(",") { "\"node/$it\"" }
+        val r = apply(command("""{"type":"command","id":"d","ops":[{"op":"describe","ids":[$ids]}]}"""))!!
+        assertEquals(Viewer3dConstants.MAX_DESCRIBE, r.details!!.size)
+        val none = apply(command("""{"type":"command","id":"d","ops":[{"op":"describe","ids":["node/1"]}]}"""), noLayer = true)!!
+        assertFalse(none.ok)
+        assertNull(none.details)
+    }
+
+    @Test
     fun resultEncodes() {
         val json = Viewer3dJson.encode(OutboundMessage.CommandResult("c1", false, "No \"layer\""))
         assertEquals("""{"type":"command_result","id":"c1","ok":false,"message":"No \"layer\""}""", json)

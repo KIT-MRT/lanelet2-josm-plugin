@@ -151,8 +151,26 @@ sealed class OutboundMessage {
         val ok: Boolean,
         val message: String,
         val warning: String? = null,
+        /** The answer to a `describe` op: one entry per object asked about. */
+        val details: List<PrimitiveInfo>? = null,
     ) : OutboundMessage()
 }
+
+/** A relation that an object is a member of, and in which role. */
+data class Membership(val id: String, val role: String, val tags: Map<String, String>)
+
+/**
+ * Everything the viewer's Selection panel shows about one object: all its
+ * tags (the stream carries only type/subtype), its relations, and for a way
+ * its node count. [missing]: the object no longer exists in JOSM.
+ */
+data class PrimitiveInfo(
+    val id: String,
+    val tags: Map<String, String> = emptyMap(),
+    val memberships: List<Membership> = emptyList(),
+    val nodeCount: Int? = null,
+    val missing: Boolean = false,
+)
 
 /** Parsed browser → JOSM command (before JOSM Command construction). */
 sealed class InboundOp {
@@ -184,6 +202,9 @@ sealed class InboundOp {
      */
     data class InterpolateHeight(val way: String, val anchors: List<String>) : InboundOp()
 
+    /** Read-only: answer with [PrimitiveInfo] for [ids] (no edit, no visibility check). */
+    data class Describe(val ids: List<String>) : InboundOp()
+
     data object Undo : InboundOp()
 
     data object Redo : InboundOp()
@@ -201,4 +222,5 @@ object Viewer3dConstants {
     const val SEQUENCE_TITLE = "3D viewer edit"
     const val MAX_SELECTION_SYNC = 20000
     const val SELECTION_DEBOUNCE_MS = 120
+    const val MAX_DESCRIBE = 500
 }

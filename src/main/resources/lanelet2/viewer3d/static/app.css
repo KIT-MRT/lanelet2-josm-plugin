@@ -427,6 +427,30 @@ button.full { width: 100%; }
 .sceneItem .meta { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
 .sceneItem .tag { color: var(--accent-text); }
 
+/* Selection tab */
+.inspectBar { display: flex; align-items: center; gap: 2px; padding: 0 8px 6px 14px; border-bottom: 1px solid var(--border); }
+#inspectSummary { flex: 1 1 auto; color: var(--text-strong); font-weight: 600; }
+#inspectBody { padding: 4px 14px 0; }
+#inspectBody .empty { color: var(--muted); padding: 10px 0; }
+.inspectHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 4px 0 2px; }
+.inspectId { font: var(--mono); color: var(--text-strong); overflow-wrap: anywhere; }
+.inspectList { display: flex; flex-direction: column; gap: 1px; max-height: 180px; overflow-y: auto; margin: 2px -6px 4px; }
+.inspectItem {
+  display: flex; gap: 8px; align-items: baseline; text-align: left; background: none; border: 0;
+  border-radius: 5px; padding: 3px 6px; color: var(--text);
+}
+.inspectItem:hover { background: var(--raised); }
+.inspectItem .inspectId { flex: none; }
+.tagTable { width: 100%; border-collapse: collapse; font: var(--mono); table-layout: fixed; }
+.tagTable th, .tagTable td { text-align: left; vertical-align: top; padding: 3px 4px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.tagTable th { width: 42%; color: var(--muted); font-weight: 500; }
+.tagTable td { color: var(--text-strong); }
+.tagTable .different { font-style: italic; color: var(--warn); cursor: help; }
+.memberRow { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.memberRow .role { font: var(--mono); color: var(--accent-text); }
+.warnText { color: #ffe0a0; }
+.subHead .spinner { display: inline-block; vertical-align: -1px; margin-left: 4px; }
+
 .readout { margin: 4px 14px; font: var(--mono); color: var(--text); }
 dl.readout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; }
 dl.readout dt { color: var(--muted); }

@@ -81,6 +81,16 @@ export function editBlockedReason() {
   return null;
 }
 
+/**
+ * What the Selection panel describes: the viewer's selection, or outside
+ * Edit mode (where JOSM's selection waits to be applied) JOSM's.
+ */
+export function inspectedTokens() {
+  if (edit.on || !selection.isEmpty() || !pendingJosmSelection) return selection.tokens();
+  const sel = pendingJosmSelection;
+  return [...(sel.nodes || []).map(nodeToken), ...(sel.ways || [])];
+}
+
 export function setEditMode(on) {
   if (on && !edit.on) {
     const why = editBlockedReason();
@@ -209,7 +219,10 @@ store.on("applied", (msg) => {
   if (msg.type === "selection" || (msg.type === "snapshot" && msg.selection)) {
     const sel = msg.type === "selection" ? msg : msg.selection;
     if (edit.on) selection.applyFromJosm(sel);
-    else pendingJosmSelection = sel;
+    else {
+      pendingJosmSelection = sel;
+      editEvents.emit("pending");
+    }
   }
   if (!drag) refreshGizmo();
 });

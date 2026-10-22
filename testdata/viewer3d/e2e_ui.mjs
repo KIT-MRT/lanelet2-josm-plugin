@@ -281,6 +281,76 @@ try {
   await clickEl("#viewModeBtn");
   t.check("View turns it off again", !(await v.evaluate("window.__ll2test.edit().on")) && (await hidden("editBar")));
 
+  // ---- the Selection tab: every tag, from JOSM -----------------------------------------------------------
+  const TAGS = {
+    "way/10": { type: "line_thin", subtype: "dashed", file_origin: "/maps/a.osm", lane_change: "yes" },
+    "way/11": { type: "line_thin", subtype: "solid", file_origin: "/maps/a.osm" },
+  };
+  const describes = () => v.ops("describe");
+  v.reply = (cmd) => {
+    const d = (cmd.ops || []).find((o) => o.op === "describe");
+    if (!d) return { ok: true, message: "ok" };
+    return { ok: true, message: "described", details: d.ids.map((id) => ({
+      id, tags: TAGS[id] || {}, nodes: 3,
+      memberships: id === "way/10" ? [{ id: "relation/7", role: "left", tags: { type: "lanelet", subtype: "road" } }] : [],
+    })) };
+  };
+  const insp = () => v.evaluate("window.__ll2inspect.state()");
+  await clickEl('#sidePanel .tabs [data-tab="inspect"]');
+  t.check("the Selection tab says how to select something",
+    (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("Edit mode"));
+  v.commands.length = 0;
+  await v.key("e");
+  let at = await v.reveal([20, 0, Z]);
+  await v.click(at[0], at[1]);
+  t.check("selecting a way asks JOSM to describe it",
+    await waitFor(async () => (await insp()).source === "josm"), JSON.stringify(await insp()));
+  t.check("once, for that way", describes().length === 1 && describes()[0].ids.join() === "way/10",
+    JSON.stringify(describes()));
+  let body = await v.evaluate("document.getElementById('inspectBody').textContent");
+  t.check("every tag shows, not just type and subtype",
+    body.includes("file_origin") && body.includes("/maps/a.osm") && body.includes("lane_change"), body);
+  t.check("with the relation it belongs to and its role", body.includes("left") && body.includes("lanelet road")
+    && body.includes("relation/7"), body);
+  t.check("and the way's length from the stream", body.includes("80.0 m"), body);
+  await v.shot("ui_inspect.png");
+  at = await v.reveal([40, 30, Z]);
+  await v.click(at[0], at[1], { modifiers: ["shift"] });
+  t.check("adding a second way describes both",
+    await waitFor(async () => (await insp()).tokens.length === 2 && !(await insp()).loading));
+  body = await v.evaluate("document.getElementById('inspectBody').textContent");
+  t.check("a tag they disagree on reads as two values", body.includes("2 values"), body);
+  t.check("a tag only one has says so", body.includes("on 1 of 2"), body);
+  t.check("the summary counts them", (await v.hud("inspectSummary")) === "2 ways", await v.hud("inspectSummary"));
+  t.check("Copy takes the tags they share", (await insp()).text === "type=line_thin\nfile_origin=/maps/a.osm",
+    JSON.stringify((await insp()).text));
+  await clickEl('#inspectBody .inspectItem[data-token="way/11"]');
+  t.check("clicking one of them selects only that one",
+    await waitFor(async () => (await insp()).tokens.join() === "way/11"));
+  // Not showing: nothing is asked.
+  await clickEl('#sidePanel .tabs [data-tab="layers"]');
+  const asked = describes().length;
+  await v.key("Escape");
+  at = await v.reveal([20, 0, Z]);
+  await v.click(at[0], at[1]);
+  await sleep(500);
+  t.check("while the tab is not showing, JOSM is not asked", describes().length === asked);
+  await clickEl('#sidePanel .tabs [data-tab="inspect"]');
+  t.check("opening it asks for what is selected now",
+    await waitFor(async () => (await insp()).tokens.join() === "way/10" && (await insp()).source === "josm"));
+  // Without JOSM's answer (the scene server refuses edits and describes):
+  v.reply = (cmd) => ({ ok: false, message: "The 3D scene server is read-only" });
+  await clickEl("#inspectRefresh");
+  t.check("without JOSM the streamed tags show, and why",
+    await waitFor(async () => (await insp()).source === "stream"), JSON.stringify(await insp()));
+  const st = await insp();
+  t.check("type and subtype from the stream", st.details["way/10"].tags.type === "line_thin" && st.note.includes("scene server"),
+    JSON.stringify(st));
+  v.reply = () => ({ ok: true, message: "ok" });
+  await v.key("Escape");
+  await v.key("e");
+  await clickEl('#sidePanel .tabs [data-tab="layers"]');
+
   // ---- a read-only map -------------------------------------------------------------------------------------
   v.sendScene({ type: "snapshot", source: "scene_server", anchor: { lat: 49.0, lon: 8.4 }, features });
   await waitFor(() => v.evaluate("document.getElementById('editBtn').classList.contains('blocked')"));

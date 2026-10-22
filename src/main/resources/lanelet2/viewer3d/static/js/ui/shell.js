@@ -58,7 +58,7 @@ export function resetPrefs() {
 }
 
 // ---- side panel -------------------------------------------------------------------
-const available = { layers: true, scene: false, debug: false };
+const available = { layers: true, inspect: true, scene: false, debug: false };
 let activeTab = "layers";
 
 export const panelOpen = () => !document.body.classList.contains("panelClosed");

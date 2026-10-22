@@ -45,6 +45,7 @@ import { setConn, refreshCounts, refreshCameraHud, setPerfLine, setRenderLine } 
 import { installCommands, setConnectionInfo } from "./js/ui/commands.js";
 import { installSettings } from "./js/ui/settings.js";
 import { installNavGizmo, updateNavGizmo } from "./js/ui/navgizmo.js";
+import { installInspector } from "./js/ui/inspector.js";
 import { ortho } from "./js/camera.js";
 
 installShell();
@@ -63,6 +64,7 @@ installBasemap();
 installCommands();
 installSettings();
 installNavGizmo();
+installInspector();
 if (PROFILE) setTabAvailable("debug", true);
 pointLayer.attach(mapRoot);
 

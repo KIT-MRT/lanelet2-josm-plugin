@@ -9,6 +9,7 @@ import org.openstreetmap.josm.data.osm.DataSet
 import org.openstreetmap.josm.data.osm.Node
 import org.openstreetmap.josm.data.osm.OsmPrimitive
 import org.openstreetmap.josm.data.osm.OsmPrimitiveType
+import org.openstreetmap.josm.data.osm.Relation
 import org.openstreetmap.josm.data.osm.Way
 import org.openstreetmap.josm.gui.MainApplication
 import org.openstreetmap.josm.gui.layer.OsmDataLayer
@@ -162,6 +163,39 @@ object Viewer3dCommands {
         return found to missing
     }
 
+    /** The viewer's id for [p]: "node/<uid>", "way/<uid>", "relation/<uid>". */
+    fun tokenOf(p: OsmPrimitive): String = when (p) {
+        is Node -> "node/${p.uniqueId}"
+        is Way -> "way/${p.uniqueId}"
+        else -> "relation/${p.uniqueId}"
+    }
+
+    /**
+     * Tags and relation memberships of [ids], at most [Viewer3dConstants.MAX_DESCRIBE]
+     * of them. Read-only, so it works on a hidden layer too. A relation listing
+     * the object twice (e.g. one way as both bounds) yields one entry per role.
+     */
+    fun describe(ds: DataSet, ids: List<String>): List<PrimitiveInfo> =
+        ids.distinct().take(Viewer3dConstants.MAX_DESCRIBE).map { id ->
+            val p = lookup(ds, id)
+            if (p == null || p.isDeleted) return@map PrimitiveInfo(id, missing = true)
+            val memberships = ArrayList<Membership>()
+            for (r in p.referrers) {
+                if (r !is Relation || r.isDeleted) continue
+                val tags = r.keys.toSortedMap()
+                for (m in r.members) {
+                    if (m.member === p) memberships.add(Membership(tokenOf(r), m.role, tags))
+                }
+            }
+            memberships.sortWith(compareBy({ it.tags["type"] ?: "" }, { it.id }, { it.role }))
+            PrimitiveInfo(
+                id = id,
+                tags = p.keys.toSortedMap(),
+                memberships = memberships,
+                nodeCount = (p as? Way)?.nodesCount,
+            )
+        }
+
     private fun describeMissing(missing: List<String>): String {
         val shown = missing.take(3).joinToString(", ")
         val more = if (missing.size > 3) " and ${missing.size - 3} more" else ""
@@ -210,6 +244,16 @@ object Viewer3dCommands {
 
         if (target == null) return reply(false, "No editable data layer in JOSM")
         val ds = target.ds
+
+        // Reading tags edits nothing, so it neither needs a visible layer nor
+        // mixes with edits: a describe-only command is answered on its own.
+        if (edits.all { it is InboundOp.Describe }) {
+            val ids = edits.flatMap { (it as InboundOp.Describe).ids }
+            val details = describe(ds, ids)
+            return command.id?.let {
+                OutboundMessage.CommandResult(it, true, "Described ${details.size} object(s)", details = details)
+            }
+        }
 
         val select = edits.filterIsInstance<InboundOp.Select>().lastOrNull()
         if (select != null && edits.size == 1) {

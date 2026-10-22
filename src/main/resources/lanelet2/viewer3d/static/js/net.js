@@ -30,7 +30,8 @@ export function onCommandResult(msg) {
   const resolve = pending.get(msg.id);
   if (!resolve) return;
   pending.delete(msg.id);
-  resolve({ ok: !!msg.ok, message: msg.message || "", warning: msg.warning || null });
+  resolve({ ok: !!msg.ok, message: msg.message || "", warning: msg.warning || null,
+            details: Array.isArray(msg.details) ? msg.details : null });
 }
 
 /**
@@ -39,7 +40,7 @@ export function onCommandResult(msg) {
  * { ok, message, warning } reply (only with `awaitResult`; { timeout: true } if none
  * came). `delivered` is 0 when no JOSM is connected.
  */
-export function sendCommand(ops, { awaitResult = false } = {}) {
+export function sendCommand(ops, { awaitResult = false, timeoutMs = RESULT_TIMEOUT_MS } = {}) {
   const id = awaitResult ? `c${nextId++}` : undefined;
   const body = { type: "command", ops };
   if (id) body.id = id;
@@ -47,7 +48,7 @@ export function sendCommand(ops, { awaitResult = false } = {}) {
     pending.set(id, resolve);
     setTimeout(() => {
       if (pending.delete(id)) resolve({ timeout: true });
-    }, RESULT_TIMEOUT_MS);
+    }, timeoutMs);
   }) : null;
   return fetch("/command", {
     method: "POST",

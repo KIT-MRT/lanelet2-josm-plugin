@@ -98,6 +98,7 @@ export const COMMANDS = [
   // Window
   { group: "Window", title: "Side panel", keys: ["\\"], run: () => togglePanel() },
   { group: "Window", title: "Show layers", run: () => showTab("layers") },
+  { group: "Window", title: "Show the selection's tags", run: () => showTab("inspect") },
   { group: "Window", title: "Show sensor data", run: () => showTab("scene"), when: () => hasScene() || hasCity() },
   { group: "Window", title: "Show debug readouts", run: () => showTab("debug"), when: () => prefs.debug },
   { group: "Window", title: "Connection and map source", run: () => $("connBtn")?.click() },

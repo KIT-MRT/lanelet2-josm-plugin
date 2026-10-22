@@ -37,9 +37,35 @@ object Viewer3dJson {
     }
 
     private fun encodeResult(msg: OutboundMessage.CommandResult): String {
-        val warning = msg.warning?.let { ",\"warning\":${jsonString(it)}" } ?: ""
-        return "{\"type\":\"command_result\",\"id\":${jsonString(msg.id)},\"ok\":${msg.ok}," +
-            "\"message\":${jsonString(msg.message)}$warning}"
+        val sb = StringBuilder(96)
+        sb.append("{\"type\":\"command_result\",\"id\":").append(jsonString(msg.id))
+        sb.append(",\"ok\":").append(msg.ok)
+        sb.append(",\"message\":").append(jsonString(msg.message))
+        msg.warning?.let { sb.append(",\"warning\":").append(jsonString(it)) }
+        msg.details?.let { details ->
+            sb.append(",\"details\":[")
+            details.forEachIndexed { i, info ->
+                if (i > 0) sb.append(',')
+                sb.append("{\"id\":").append(jsonString(info.id))
+                if (info.missing) sb.append(",\"missing\":true")
+                sb.append(",\"tags\":")
+                encodeTags(sb, info.tags)
+                info.nodeCount?.let { sb.append(",\"nodes\":").append(it) }
+                sb.append(",\"memberships\":[")
+                info.memberships.forEachIndexed { j, m ->
+                    if (j > 0) sb.append(',')
+                    sb.append("{\"id\":").append(jsonString(m.id))
+                    sb.append(",\"role\":").append(jsonString(m.role))
+                    sb.append(",\"tags\":")
+                    encodeTags(sb, m.tags)
+                    sb.append('}')
+                }
+                sb.append("]}")
+            }
+            sb.append(']')
+        }
+        sb.append('}')
+        return sb.toString()
     }
 
     private fun encodeSnapshot(msg: OutboundMessage.Snapshot): String {
@@ -269,6 +295,7 @@ object Viewer3dJson {
         "select" -> InboundOp.Select(strings(o, "ids"))
         "delete_selection" -> InboundOp.DeleteSelection(strings(o, "ids"))
         "interpolate_height" -> string(o, "way")?.let { InboundOp.InterpolateHeight(it, strings(o, "anchors")) }
+        "describe" -> InboundOp.Describe(strings(o, "ids"))
         "undo" -> InboundOp.Undo
         "redo" -> InboundOp.Redo
         else -> null
