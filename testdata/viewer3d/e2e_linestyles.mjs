@@ -97,6 +97,12 @@ try {
   a = await px(X0 + 15, 21);
   b = await px(X0 + 15, 24);
   t.check("from 300 m up a 12 cm line still shows", bright(a) > 70 && isBackground(b), `${show(a)} ${show(b)}`);
+  // From 600 m a metre is under 2 px: the chunk draws one-pixel lines.
+  await topDown(X0 + 15, 10, 600);
+  t.check("far away the chunk draws the cheap one-pixel lines instead",
+    (await lines()).nearChunks === 0, JSON.stringify(await lines()));
+  await topDown(X0 + 15, 10, 20);
+  t.check("up close it is paint again", (await lines()).nearChunks === 1, JSON.stringify(await lines()));
 
   // ---- raised walls ---------------------------------------------------------------------------
   await v.evaluate(`window.__ll2test.setView([${X0 + 15}, 3, ${Z + 1}], 0, 0)`);

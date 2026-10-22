@@ -194,6 +194,7 @@ function tick() {
   setRibbonResolution(_vp.z, _vp.w);
   setScreenLineResolution(_vp.z, _vp.w);
   lineLayer.update();
+  lineLayer.updateDetail(camera, _vp.w);
   laneletLayer.update();
   updateHover(gizmoBusy() || navBusy() || isPointerLocked() || rigActive());
   updateHighlight();

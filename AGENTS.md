@@ -365,6 +365,12 @@ Browser camera and picking (`app.js`):
   carries `color` and `sidewalk_entry` for them (`Viewer3dConstants.STYLE_KEYS`,
   scene server `KEEP_TAGS`). The selection highlight is a 3 px screen-space
   ribbon (`render/screenlines.js`); a 1 px line vanished next to wide paint.
+  **Level of detail per chunk** (`LOD_PX_PER_M` = 2): where a metre is under
+  2 px at a chunk's nearest point, it draws its one-pixel lines (same
+  colours) instead of the paint. Measured on `gen_city_map.py` (143k ways,
+  Iris Xe): whole city in view, paint 21-26 fps vs 60 fps for lines; street
+  level 60 fps either way. `flat` was as slow as `styled`, so the cost is
+  the paint's vertex work, not the raised faces.
 - **Picking tolerances are screen pixels** (`pickMapPoint`, `pickNode`).
   three's Line/Points raycast thresholds are world metres, which picked the
   wrong node up close. Lanes between two bounds have no geometry, so a miss

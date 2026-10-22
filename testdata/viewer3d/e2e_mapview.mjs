@@ -186,7 +186,9 @@ try {
   let lineSeen = null;
   for (let dy = -2; dy <= 2 && !lineSeen; dy++) {
     const p = await v.pixel(onLine[0], onLine[1] + dy);
-    if (p[1] > 150 && p[2] > 150) lineSeen = p;
+    // White over red tiles; a one-pixel line on a pixel boundary is drawn
+    // half-strength across two rows (far chunks draw one-pixel lines).
+    if (p[1] > 90 && p[2] > 90) lineSeen = p;
   }
   t.check("the map lines are drawn over the tiles", !!lineSeen, JSON.stringify(lineSeen));
   const offLine = await v.pixel(onLine[0], onLine[1] + 40);

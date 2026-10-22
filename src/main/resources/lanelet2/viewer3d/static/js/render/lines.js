@@ -9,6 +9,13 @@
 //     curbs, rails and walls when "3D" is on. One more draw call per chunk
 //     for the paint, one for the raised parts.
 //
+// Styled has a level of detail per chunk: where a metre is under
+// LOD_PX_PER_M pixels on screen, every marking is at its pixel minimum and
+// its dashes merge anyway, so the chunk shows the one-pixel lines (same
+// colours) instead. Measured on a Karlsruhe-size map (Iris Xe): the paint
+// for the whole city in view was 21-26 fps against 60 for one-pixel lines,
+// and the difference there is about half a pixel of width.
+//
 // A chunk is rebuilt (on the next frame) when a tile in it changes. A drag in
 // progress only rewrites the moved vertices in place, in every buffer.
 import * as THREE from "three";
@@ -20,6 +27,9 @@ import { paintMaterial, raisedMaterial, segmentGeometry, boundSegments, styleInd
 import { now, plog, PROFILE } from "../util.js";
 
 const lineMaterial = new THREE.LineBasicMaterial({ vertexColors: true });
+export const LOD_PX_PER_M = 2;
+const _cam = new THREE.Vector3();
+const _centre = new THREE.Vector3();
 const _col = new THREE.Color();
 const emptyGeometry = () => new THREE.BufferGeometry();
 const dotMaterial = new THREE.PointsMaterial({ color: EDIT_COLOR, size: 6, sizeAttenuation: false });
@@ -51,7 +61,37 @@ class LineLayer {
   /** Raised curbs, rails and walls (styled only); no rebuild needed. */
   setRaised(on) {
     this.raised = !!on;
-    for (const c of this.chunks.values()) c.raised.visible = this.styled && this.raised;
+    for (const c of this.chunks.values()) this._show(c);
+  }
+
+  /** Which of a chunk's looks is drawn: its paint up close, its lines far away or in Simple. */
+  _show(c) {
+    const styled = this.styled && c.hasPaint && c.near !== false;
+    c.lines.visible = !styled;
+    c.paint.visible = styled;
+    c.raised.visible = styled && c.hasRaised && this.raised;
+  }
+
+  /**
+   * Per frame, before drawing: pick each chunk's level of detail from how
+   * many pixels a metre is at its nearest point.
+   */
+  updateDetail(camera, viewportHeight) {
+    if (!this.styled) return;
+    camera.getWorldPosition(_cam);
+    const ortho = camera.isOrthographicCamera;
+    const pxPerM1 = ortho ? viewportHeight / Math.max(1e-6, camera.top - camera.bottom)
+      : viewportHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+    for (const c of this.chunks.values()) {
+      const sphere = c.paint.geometry.boundingSphere;
+      if (!c.hasPaint || !sphere) continue;
+      _centre.copy(sphere.center);
+      const d = Math.max(1, _cam.distanceTo(_centre) - sphere.radius);
+      const near = (ortho ? pxPerM1 : pxPerM1 / d) >= LOD_PX_PER_M;
+      if (near === c.near) continue;
+      c.near = near;
+      this._show(c);
+    }
   }
 
   /** What is drawn, for the tests and the perf script. */
@@ -66,7 +106,9 @@ class LineLayer {
         if (g === c.lines.geometry && g.index) bytes += g.index.array.byteLength;
       }
     }
-    return { styled: this.styled, raised: this.raised, chunks: this.chunks.size, segments, raisedSegments: raised,
+    const near = [...this.chunks.values()].filter((c) => c.hasPaint && c.near !== false).length;
+    return { styled: this.styled, raised: this.raised, chunks: this.chunks.size, nearChunks: this.styled ? near : 0,
+             segments, raisedSegments: raised,
              lineVertices: lineVerts, bufferMB: +(bytes / 1e6).toFixed(1) };
   }
 
@@ -181,7 +223,6 @@ class LineLayer {
     c.dots.geometry.dispose();
     c.lines.geometry = geom;
     c.dots.geometry = dotGeom;
-    c.lines.visible = !this.styled;
     c.paint.geometry.dispose();
     c.raised.geometry.dispose();
     if (paint) {
@@ -196,8 +237,10 @@ class LineLayer {
     } else {
       c.raised.geometry = emptyGeometry();
     }
-    c.paint.visible = !!paint;
-    c.raised.visible = !!raised && this.raised;
+    c.hasPaint = !!paint;
+    c.hasRaised = !!raised;
+    c.near = undefined;  // decided on the next frame
+    this._show(c);
     c.posDirty = false;
   }
 
