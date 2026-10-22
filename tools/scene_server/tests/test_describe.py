@@ -26,10 +26,11 @@ class Prim:
 
 
 class Lanelet(Prim):
-    def __init__(self, pid, attrs, left, right):
+    def __init__(self, pid, attrs, left, right, regelems=()):
         super().__init__(pid, attrs)
         self.leftBound = left
         self.rightBound = right
+        self.regulatoryElements = list(regelems)
 
 
 class RegElem(Prim):
@@ -52,6 +53,9 @@ class Layer:
     def findUsages(self, prim):
         return self._usages(prim)
 
+    def __iter__(self):
+        return iter(self._items.values())
+
 
 def fake_map():
     p1 = Prim(101, {"ele": "110.5"})
@@ -59,14 +63,17 @@ def fake_map():
     left = Prim(11, {"type": "line_thin", "subtype": "dashed", "file_origin": "/maps/a.osm"}, [p1, p2])
     right = Prim(12, {"type": "curbstone", "subtype": "high"}, [p2, p1])
     sign = Prim(13, {"type": "traffic_sign", "subtype": "de205"}, [p1, p2])
-    ll7 = Lanelet(7, {"subtype": "road", "one_way": "yes"}, left, right)
+    light = Prim(15, {"type": "traffic_light", "subtype": "red_yellow_green"}, [p1, p2])
+    stop = Prim(16, {"type": "stop_line"}, [p1, p2])
+    tl20 = RegElem(20, {"subtype": "traffic_light"}, {"refers": [light], "ref_line": [stop]})
+    ll7 = Lanelet(7, {"subtype": "road", "one_way": "yes"}, left, right, [tl20])
     # Line 11 is the right bound of lanelet 8 as well: two memberships.
     ll8 = Lanelet(8, {"subtype": "road"}, Prim(14), left)
     re9 = RegElem(9, {"type": "regulatory_element", "subtype": "right_of_way"},
                   {"refers": [sign], "ref_line": [left]})
     re10 = RegElem(10, {"subtype": "traffic_sign"}, {"refers": [p1]})
     lanelets = [ll7, ll8]
-    regelems = [re9, re10]
+    regelems = [re9, re10, tl20]
 
     def lanelet_usages(prim):
         return [ll for ll in lanelets if prim.id in (ll.leftBound.id, ll.rightBound.id)]
@@ -79,7 +86,7 @@ def fake_map():
 
     m = Map()
     m.pointLayer = Layer([p1, p2])
-    m.lineStringLayer = Layer([left, right, sign])
+    m.lineStringLayer = Layer([left, right, sign, light, stop])
     m.laneletLayer = Layer(lanelets, lanelet_usages)
     m.regulatoryElementLayer = Layer(regelems, regelem_usages)
     return m
@@ -95,9 +102,11 @@ class DescribeTest(unittest.TestCase):
         self.assertEqual(["file_origin", "subtype", "type"], list(d["tags"]))
         self.assertEqual(2, d["nodes"])
         self.assertNotIn("missing", d)
-        got = [(m["id"], m["role"], m["tags"].get("type")) for m in d["memberships"]]
-        self.assertEqual([("relation/7", "left", "lanelet"), ("relation/8", "right", "lanelet"),
-                          ("relation/9", "ref_line", "regulatory_element")], got)
+        got = [(m["id"], m["role"], m["tags"].get("type"), m.get("via")) for m in d["memberships"]]
+        self.assertEqual([("relation/7", "left", "lanelet", None), ("relation/8", "right", "lanelet", None),
+                          ("relation/9", "ref_line", "regulatory_element", None),
+                          # The lane's traffic light hangs off lanelet 7, not off the line.
+                          ("relation/20", "regulatory_element", "regulatory_element", "relation/7")], got)
         # A lanelet's own attributes, with the relation type the stream shows.
         self.assertEqual({"one_way": "yes", "subtype": "road", "type": "lanelet"}, d["memberships"][0]["tags"])
 
@@ -125,12 +134,37 @@ class DescribeTest(unittest.TestCase):
         many = describe(self.map, ["node/%d" % i for i in range(MAX_DESCRIBE + 20)])
         self.assertEqual(MAX_DESCRIBE, len(many))
 
-    def test_a_binding_without_an_overload_costs_the_membership_not_the_answer(self):
+    def test_regulatory_elements_do_not_need_find_usages(self):
+        # Some bindings lack findUsages(LineString) on this layer: the
+        # parameters index still finds the traffic light and its stop line.
         def broken(prim):
             raise TypeError("No registered converter")
         self.map.regulatoryElementLayer._usages = broken
+        [light] = describe(self.map, ["way/15"])
+        self.assertEqual([("relation/20", "refers")], [(m["id"], m["role"]) for m in light["memberships"]])
+        [stop] = describe(self.map, ["way/16"])
+        self.assertEqual([("relation/20", "ref_line")], [(m["id"], m["role"]) for m in stop["memberships"]])
         [d] = describe(self.map, ["way/11"])
-        self.assertEqual(["relation/7", "relation/8"], [m["id"] for m in d["memberships"]])
+        self.assertIn("relation/9", [m["id"] for m in d["memberships"]])
+
+    def test_a_broken_lanelet_lookup_costs_those_memberships_not_the_answer(self):
+        def broken(prim):
+            raise TypeError("No registered converter")
+        self.map.laneletLayer._usages = broken
+        [d] = describe(self.map, ["way/11"])
+        self.assertEqual(["relation/9"], [m["id"] for m in d["memberships"]])
+
+    def test_a_lanelet_lists_its_bounds_and_regulatory_elements(self):
+        [d] = describe(self.map, ["relation/7"])
+        self.assertEqual([("way/11", "left", "line_thin"), ("way/12", "right", "curbstone"),
+                          ("relation/20", "regulatory_element", "regulatory_element")],
+                         [(m["id"], m["role"], m["tags"].get("type")) for m in d["members"]])
+        self.assertEqual("traffic_light", d["members"][2]["tags"]["subtype"])
+
+    def test_a_traffic_light_lists_its_lights_and_stop_line(self):
+        [d] = describe(self.map, ["relation/20"])
+        self.assertEqual("regulatory_element", d["tags"]["type"])
+        self.assertEqual([("way/15", "refers"), ("way/16", "ref_line")], [(m["id"], m["role"]) for m in d["members"]])
 
 
 class HandlerTest(unittest.TestCase):
@@ -161,7 +195,7 @@ class HandlerTest(unittest.TestCase):
         bridge._handle(b'{"type":"command","id":"c9","ops":[{"op":"describe","ids":["way/11"]}]}')
         self.assertEqual(1, len(sent))
         self.assertEqual(("command_result", "c9", True), (sent[0]["type"], sent[0]["id"], sent[0]["ok"]))
-        self.assertEqual(3, len(sent[0]["details"][0]["memberships"]))
+        self.assertEqual(4, len(sent[0]["details"][0]["memberships"]))
         silent = ViewerBridge(on_command=make_command_handler(lambda: False), log=lambda m: None)
         silent.send = sent.append
         silent._handle(b'{"type":"command","id":"c10","ops":[{"op":"describe","ids":["way/11"]}]}')

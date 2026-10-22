@@ -69,9 +69,11 @@ panel turns to its *Sensor data* tab.
 A map the scene server sends itself is marked `"source": "scene_server"` in
 its snapshot, so the viewer greys out *Edit* (and says why) instead of
 letting edits be refused one by one. Selecting still works in View mode: a
-click selects a line or node, and the viewer's *Selection* tab shows every
+click selects a line or a lane, and the viewer's *Selection* tab shows every
 attribute from the lanelet2 map, with the lanelets (left / right bound),
-areas and regulatory elements (by role) that use it. The scene server answers
+areas and regulatory elements (by role) that use it, the regulatory elements
+of the lanelets a line bounds (a traffic light, marked "via" the lanelet),
+and for a lanelet or regulatory element its members. The scene server answers
 that `describe` request only while the map in the viewer is its own; with
 JOSM streaming the map, JOSM answers.
 

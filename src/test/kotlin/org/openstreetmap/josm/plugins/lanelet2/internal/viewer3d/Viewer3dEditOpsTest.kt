@@ -271,6 +271,49 @@ class Viewer3dEditOpsTest {
     }
 
     @Test
+    fun describeFollowsALaneletToItsTrafficLightAndListsRelationMembers() {
+        fun way(type: String) = Way().also {
+            it.setNodes(listOf(withEle, noEle))
+            it.put("type", type)
+            ds.addPrimitive(it)
+        }
+        val left = way("line_thin")
+        val right = way("curbstone")
+        val light = way("traffic_light")
+        val stop = way("stop_line")
+        val tl = Relation().also {
+            it.put("type", "regulatory_element")
+            it.put("subtype", "traffic_light")
+            it.addMember(RelationMember("refers", light))
+            it.addMember(RelationMember("ref_line", stop))
+            ds.addPrimitive(it)
+        }
+        val lanelet = Relation().also {
+            it.put("type", "lanelet")
+            it.addMember(RelationMember("left", left))
+            it.addMember(RelationMember("right", right))
+            it.addMember(RelationMember("regulatory_element", tl))
+            ds.addPrimitive(it)
+        }
+        val ll = "relation/${lanelet.uniqueId}"
+        val re = "relation/${tl.uniqueId}"
+        val r = apply(command("""{"type":"command","id":"d","ops":[{"op":"describe",
+            "ids":["way/${left.uniqueId}","way/${stop.uniqueId}","$ll","$re"]}]}"""))!!
+        val (line, stopLine, laneletInfo, light20) = r.details!!
+        assertEquals(listOf(ll to null, re to ll), line.memberships.map { it.id to it.via })
+        assertEquals("regulatory_element", line.memberships[1].role)
+        assertEquals("traffic_light", line.memberships[1].tags["subtype"])
+        assertEquals(listOf(re to "ref_line"), stopLine.memberships.map { it.id to it.role }, "no via for a non-bound")
+        assertNull(line.members)
+        assertEquals(listOf("way/${left.uniqueId}" to "left", "way/${right.uniqueId}" to "right", re to "regulatory_element"),
+            laneletInfo.members!!.map { it.id to it.role })
+        assertEquals(listOf("traffic_light", "stop_line"), light20.members!!.map { it.tags["type"] })
+        val json = Viewer3dJson.encode(r)
+        assertTrue(json.contains(""""id":"$re","role":"regulatory_element","tags":{"subtype":"traffic_light","type":"regulatory_element"},"via":"$ll"}"""), json)
+        assertTrue(json.contains(""""members":[{"id":"way/${light.uniqueId}","role":"refers","tags":{"type":"traffic_light"}}"""), json)
+    }
+
+    @Test
     fun resultEncodes() {
         val json = Viewer3dJson.encode(OutboundMessage.CommandResult("c1", false, "No \"layer\""))
         assertEquals("""{"type":"command_result","id":"c1","ok":false,"message":"No \"layer\""}""", json)

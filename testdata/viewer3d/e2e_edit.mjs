@@ -201,6 +201,9 @@ try {
   await v.key("b");
   await v.key("Escape");
   t.check("Esc clears the selection", (await sel()).nodes.length === 0 && (await sel()).ways.length === 0);
+  // The moves and the rotation above took node 1101 far off its way; put it
+  // back (locally) so way 11 lies straight inside the box again.
+  await v.evaluate(`void window.__ll2test.moveLocal([{ id: 1101, x: 0, y: 10, z: ${Z} }])`);
   // Pan way 11 into open view, clear of the HUD and edit bar on the left.
   const mid11 = await v.project([10, 10, Z]);
   await v.drag("middle", mid11[0], mid11[1], 760 - mid11[0], 460 - mid11[1]);

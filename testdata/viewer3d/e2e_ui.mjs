@@ -396,6 +396,79 @@ try {
     (await v.evaluate("window.__ll2test.selection()")).ways.join() === "way/10");
   await v.key("Escape");
   t.check("Esc deselects in View mode too", (await v.evaluate("window.__ll2test.selection()")).ways.length === 0);
+
+  // ---- View mode picks ways and lanes, not nodes ---------------------------------------------------------------
+  const lane = { id: "relation/7", kind: "lanelet", tags: { subtype: "road" }, pts: [40, 15, Z],
+                 left: "way/11", right: "way/10", lrev: false, rrev: false, two: false, arrow: [40, 15, Z, 1, 0, 0, 30] };
+  v.sendScene({ type: "snapshot", source: "scene_server", anchor: { lat: 49.0, lon: 8.4 }, features: [...features, lane] });
+  await waitFor(() => v.evaluate("window.__ll2test.lanelets().count === 1").catch(() => false));
+  const LL_DETAILS = {
+    "way/10": { id: "way/10", tags: { type: "line_thin" }, nodes: 3, memberships: [
+      { id: "relation/7", role: "right", tags: { type: "lanelet", subtype: "road" } },
+      { id: "relation/20", role: "regulatory_element", tags: { type: "regulatory_element", subtype: "traffic_light" },
+        via: "relation/7" }] },
+    "relation/7": { id: "relation/7", tags: { type: "lanelet", subtype: "road" }, memberships: [], members: [
+      { id: "way/11", role: "left", tags: { type: "line_thin" } },
+      { id: "way/10", role: "right", tags: { type: "line_thin" } },
+      { id: "relation/20", role: "regulatory_element", tags: { type: "regulatory_element", subtype: "traffic_light" } }] },
+    "relation/20": { id: "relation/20", tags: { type: "regulatory_element", subtype: "traffic_light" }, memberships: [
+      { id: "relation/7", role: "regulatory_element", tags: { type: "lanelet", subtype: "road" } }], members: [
+      { id: "way/30", role: "refers", tags: { type: "traffic_light", subtype: "red_yellow_green" } },
+      { id: "way/31", role: "ref_line", tags: { type: "stop_line" } }] },
+  };
+  v.reply = (cmd) => {
+    const d = (cmd.ops || []).find((o) => o.op === "describe");
+    if (!d) return { ok: false, message: "The 3D scene server is read-only" };
+    return { ok: true, message: "described", details: d.ids.map((id) => LL_DETAILS[id] || { id, tags: {}, memberships: [] }) };
+  };
+  const vsel = () => v.evaluate("window.__ll2test.selection()");
+  at = await v.reveal([0, 0, Z]);
+  await v.click(at[0], at[1]);
+  let s1 = await vsel();
+  t.check("a View-mode click on a node selects its way, not the node",
+    s1.nodes.length === 0 && s1.ways.join() === "way/10", JSON.stringify(s1));
+  t.check("the lane's traffic light shows, via the lanelet",
+    await waitFor(async () => (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("via relation/7")),
+    await v.evaluate("document.getElementById('inspectBody').textContent"));
+  at = await v.reveal([40, 15, Z]);
+  t.check("hovering the lane between two lines marks the lanelet",
+    await waitFor(async () => {
+      await v.hover(at[0], at[1]);
+      return (await v.evaluate("window.__ll2test.hover()")) === "relation/7";
+    }), String(await v.evaluate("window.__ll2test.hover()")));
+  await v.click(at[0], at[1]);
+  s1 = await vsel();
+  t.check("and a click there selects it", s1.relations.join() === "relation/7" && !s1.ways.length, JSON.stringify(s1));
+  t.check("the lanelet stays in the viewer: JOSM is not told to select a relation",
+    !v.ops("select").some((o) => o.ids.some((id) => id.startsWith("relation/"))), JSON.stringify(v.ops("select")));
+  t.check("its members are listed",
+    await waitFor(async () => (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("Members (3)")),
+    await v.evaluate("document.getElementById('inspectBody').textContent"));
+  t.check("the summary counts a relation", (await v.hud("inspectSummary")) === "1 relation", await v.hud("inspectSummary"));
+  await v.shot("ui_lanelet.png");
+  v.sendScene({ type: "selection", nodes: [], ways: [] });
+  await sleep(300);
+  t.check("an empty JOSM selection that matches leaves the lanelet selected",
+    (await vsel()).relations.join() === "relation/7", JSON.stringify(await vsel()));
+  await clickEl('#inspectBody .memberRow[data-token="relation/20"]');
+  t.check("a member row selects that relation (the traffic light)",
+    await waitFor(async () => (await vsel()).relations.join() === "relation/20"), JSON.stringify(await vsel()));
+  t.check("which lists its lights and stop line",
+    await waitFor(async () => {
+      const b = await v.evaluate("document.getElementById('inspectBody').textContent");
+      return b.includes("refers") && b.includes("ref_line") && b.includes("way/31");
+    }), await v.evaluate("document.getElementById('inspectBody').textContent"));
+  await v.key("Escape");
+  // Nodes in View mode again, with the setting.
+  await v.evaluate("document.getElementById('setViewNodes').click()");
+  at = await v.reveal([0, 0, Z]);
+  await v.click(at[0], at[1]);
+  s1 = await vsel();
+  t.check("with \"View clicks select nodes\" on, a click on a node selects the node",
+    s1.nodes.join() === "node/1001", JSON.stringify(s1));
+  await v.evaluate("document.getElementById('setViewNodes').click()");
+  t.check("(the setting is remembered)", (await ui()).prefs.viewNodes === false, JSON.stringify((await ui()).prefs));
+  await v.key("Escape");
   v.reply = () => ({ ok: true, message: "ok" });
   void cam0v;
   await clickEl('#sidePanel .tabs [data-tab="layers"]');

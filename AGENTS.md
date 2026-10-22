@@ -617,9 +617,17 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   `details`. Read-only: no visibility check, answered on its own. Tags
   edited in JOSM produce no patch, so the tab asks again when it opens, when
   the selection or a selected way changes, and when the window regains
-  focus. The scene server answers it too (`ll2_scene/describe.py`, from its
-  lanelet2 map: attributes, plus lanelets by bound role, areas outer/inner
-  and regulatory elements by parameter role via `findUsages`), but **only
+  focus. **Regulatory elements hang off the lanelet**, not its bounds (a
+  traffic light is the lanelet's `regulatory_element` member and refers to
+  its light ways and stop line), so for a way that bounds a lanelet both
+  answers also list that lanelet's regulatory elements with `via:
+  "relation/<lanelet>"`, after the direct memberships; a relation's entry
+  carries its `members` (role, id, tags). The scene server answers too
+  (`ll2_scene/describe.py`, from its lanelet2 map: attributes, plus
+  lanelets by bound role, areas outer/inner, and regulatory elements by
+  parameter role from an index built over `regulatoryElementLayer`'s own
+  parameters -- `findUsages` on that layer lacks overloads in some binding
+  versions, which silently lost every traffic light), but **only
   when the viewer's map is its own**; with JOSM streaming the map it sends
   no reply at all, because the browser takes the first `command_result`
   with a matching id and a refusal would beat JOSM's answer. Without either,
@@ -630,7 +638,17 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   used to wait for Edit mode), and the hover shows in both modes. Clicks a
   View-mode selection must not take go through `addViewClickFilter`: a
   trajectory in city mode, the camera lock. Esc deselects in View too,
-  after the camera lock's own Esc (`setEscapeGuard`).
+  after the camera lock's own Esc (`setEscapeGuard`). **View mode picks
+  ways, then lanelets, not nodes** (Settings: *Clicks in View mode select
+  nodes too*, `prefs.viewNodes`); hover and middle-click cycling follow the
+  same rule. A lanelet has no line of its own, so each surface triangle
+  remembers its lanelet (`userData.faceLanelets`) and a ray picks it.
+  **Relations stay in the viewer** (`selection.relations`): `tokens()` (what
+  JOSM selects, deletes, moves) is nodes and ways only, `allTokens()` is what
+  the tab describes, and a JOSM selection message that matches in nodes and
+  ways leaves them selected (JOSM lists a relation's members, never the
+  relation). A relation picked in the tab's Member of / Members rows (a
+  traffic light) is selectable even though the stream has no geometry for it.
 - `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
   on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
   deliberate change from the Jython, which skipped missing nodes): if any

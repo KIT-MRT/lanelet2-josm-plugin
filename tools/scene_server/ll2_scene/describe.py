@@ -10,9 +10,17 @@ scene server answers in the same shape, from the lanelet2 map it sent:
 
 Ids are the ones the map feed uses (`mapfeed.MapConverter`): line strings
 are ways, points are nodes, lanelets (and regulatory elements, areas) are
-relations. Memberships come from lanelet2's `findUsages`: the lanelets a line
-bounds (role left / right), the areas it outlines (outer / inner) and the
-regulatory elements that reference it, in the role their parameters give.
+relations. Memberships: the lanelets a line bounds (role left / right, via
+`findUsages`), the areas it outlines (outer / inner) and the regulatory
+elements that reference it, in the role their parameters give. Regulatory
+elements are indexed from their own parameters once per map rather than
+looked up with `findUsages`, whose overloads on that layer differ between
+binding versions (a missing one silently lost every traffic light).
+
+A traffic light belongs to a *lanelet* (its `regulatory_element` member), not
+to the lane's bounds, so for a line the regulatory elements of the lanelets
+it bounds come along too, marked `via` that lanelet. A relation (a lanelet, a
+regulatory element) also lists its `members`.
 
 Everything is looked up defensively: the lanelet2 bindings differ a little
 between versions in which layer offers which `findUsages`, and a missing
@@ -80,9 +88,16 @@ def _line_memberships(lanelet_map, line, pid):
     out = []
     for ll in _usages(lanelet_map.laneletLayer, line):
         tags = _relation_tags(ll, "lanelet")
+        bounds_it = False
         for role, bound in (("left", "leftBound"), ("right", "rightBound")):
             if _id(getattr(ll, bound, None)) == pid:
                 out.append(("relation/%d" % ll.id, role, tags))
+                bounds_it = True
+        # The lane's traffic lights, signs and rules hang off the lanelet.
+        if bounds_it:
+            for re_ in _lanelet_regelems(ll):
+                out.append(("relation/%d" % re_.id, "regulatory_element",
+                            _relation_tags(re_, "regulatory_element"), "relation/%d" % ll.id))
     area_layer = getattr(lanelet_map, "areaLayer", None)
     for area in _usages(area_layer, line) if area_layer is not None else []:
         tags = _relation_tags(area, "multipolygon")
@@ -96,16 +111,114 @@ def _line_memberships(lanelet_map, line, pid):
     return out
 
 
+_REGELEM_INDEX = {}  # id(lanelet map) -> {primitive id: [(regelem, role)]}
+
+
+def _parameter_items(regelem):
+    try:
+        params = regelem.parameters
+        return list(params.items()) if hasattr(params, "items") else [(k, params[k]) for k in params]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _values(values):
+    try:
+        return list(values)
+    except TypeError:
+        return [values]
+
+
+def _regelem_index(lanelet_map):
+    """Every primitive a regulatory element names, by id (lanelet2 ids are map-wide unique)."""
+    key = id(lanelet_map)
+    index = _REGELEM_INDEX.get(key)
+    if index is not None:
+        return index
+    index = {}
+    layer = getattr(lanelet_map, "regulatoryElementLayer", None)
+    try:
+        regelems = list(layer) if layer is not None else []
+    except Exception:  # noqa: BLE001 -- a layer that does not iterate: no index
+        regelems = []
+    for re_ in regelems:
+        for role, values in _parameter_items(re_):
+            for v in _values(values):
+                vid = _id(v)
+                if vid is not None:
+                    index.setdefault(vid, []).append((re_, str(role)))
+    _REGELEM_INDEX[key] = index
+    return index
+
+
 def _regelem_memberships(lanelet_map, prim, pid):
     out = []
+    seen = set()
+    for re_, role in _regelem_index(lanelet_map).get(pid, []):
+        if (re_.id, role) in seen:
+            continue
+        seen.add((re_.id, role))
+        out.append(("relation/%d" % re_.id, role, _relation_tags(re_, "regulatory_element")))
+    # findUsages as well, where the binding has it (a regulatory element that
+    # names the primitive some other way than through its parameters).
     layer = getattr(lanelet_map, "regulatoryElementLayer", None)
-    if layer is None:
-        return out
-    for re_ in _usages(layer, prim):
-        tags = _relation_tags(re_, "regulatory_element")
-        for role in _parameter_roles(re_, pid) or [""]:
-            out.append(("relation/%d" % re_.id, role, tags))
+    for re_ in _usages(layer, prim) if layer is not None else []:
+        if any(seen_id == re_.id for seen_id, _ in seen):
+            continue
+        roles = _parameter_roles(re_, pid) or [""]
+        for role in roles:
+            seen.add((re_.id, role))
+            out.append(("relation/%d" % re_.id, role, _relation_tags(re_, "regulatory_element")))
     return out
+
+
+def _lanelet_regelems(lanelet):
+    try:
+        return list(getattr(lanelet, "regulatoryElements", []) or [])
+    except TypeError:
+        return []
+
+
+def _member_token(obj):
+    """How the viewer names a parameter / member: node, way or relation."""
+    oid = _id(obj)
+    if oid is None:
+        return None
+    if hasattr(obj, "leftBound") or hasattr(obj, "outerBound") or hasattr(obj, "parameters"):
+        return "relation/%d" % oid
+    try:
+        len(obj)
+        return "way/%d" % oid
+    except TypeError:
+        return "node/%d" % oid
+
+
+def _member_tags(obj, token):
+    if token.startswith("relation/"):
+        default = "lanelet" if hasattr(obj, "leftBound") else (
+            "multipolygon" if hasattr(obj, "outerBound") else "regulatory_element")
+        return _relation_tags(obj, default)
+    return _sorted(_attrs(obj))
+
+
+def _relation_members(prim):
+    """A lanelet's bounds and regulatory elements, or a regulatory element's parameters."""
+    members = []
+    if hasattr(prim, "leftBound"):
+        for role, attr in (("left", "leftBound"), ("right", "rightBound")):
+            bound = getattr(prim, attr, None)
+            token = _member_token(bound) if bound is not None else None
+            if token:
+                members.append((token, role, _member_tags(bound, token)))
+        for re_ in _lanelet_regelems(prim):
+            members.append(("relation/%d" % re_.id, "regulatory_element", _relation_tags(re_, "regulatory_element")))
+    else:
+        for role, values in _parameter_items(prim):
+            for v in _values(values):
+                token = _member_token(v)
+                if token:
+                    members.append((token, str(role), _member_tags(v, token)))
+    return members
 
 
 def _find_relation(lanelet_map, pid):
@@ -130,6 +243,7 @@ def describe(lanelet_map, ids):
             continue
         entry = {"id": token, "tags": {}, "memberships": []}
         memberships = []
+        members = None
         if kind == "way":
             prim = _get(lanelet_map.lineStringLayer, pid)
             if prim is not None:
@@ -149,12 +263,16 @@ def describe(lanelet_map, ids):
             if prim is not None:
                 entry["tags"] = _relation_tags(prim, default_type)
                 memberships = _regelem_memberships(lanelet_map, prim, pid)
+                members = _relation_members(prim)
         else:
             prim = None
         if prim is None:
             entry["missing"] = True
-        memberships.sort(key=lambda m: (m[2].get("type", ""), m[0], m[1]))
-        entry["memberships"] = [{"id": i, "role": r, "tags": t} for i, r, t in memberships]
+        memberships.sort(key=lambda m: (len(m) > 3, m[2].get("type", ""), m[0], m[1]))
+        entry["memberships"] = [dict({"id": m[0], "role": m[1], "tags": m[2]}, **({"via": m[3]} if len(m) > 3 else {}))
+                                for m in memberships]
+        if members is not None:
+            entry["members"] = [{"id": i, "role": r, "tags": t} for i, r, t in members]
         details.append(entry)
     return details
 

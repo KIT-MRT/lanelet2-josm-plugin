@@ -115,6 +115,19 @@ function stripTriangles(L, R, emit) {
   }
 }
 
+/**
+ * The surface of lanelet feature `f` as triangle positions (x, y, z per
+ * corner), or null while a bound is missing. For the selection highlight.
+ */
+export function laneletTriangles(f) {
+  const L = boundPoints(f.lanelet.left, f.lanelet.lrev);
+  const R = boundPoints(f.lanelet.right, f.lanelet.rrev);
+  if (!L || !R) return null;
+  const out = [];
+  stripTriangles(L, R, (a, b, d) => out.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]));
+  return out;
+}
+
 class LaneletLayer {
   constructor() {
     this.lanelets = new Map();  // lanelet feature id -> feature
@@ -229,6 +242,7 @@ class LaneletLayer {
     }
     const pos = [];
     const col = [];
+    const faceLanelets = []; // lanelet id per triangle, for picking
     const c = new THREE.Color();
     for (const tile of tilesOfChunk(key)) for (const f of tile.features) {
       if (f.kind !== "lanelet") continue;
@@ -239,6 +253,7 @@ class LaneletLayer {
       stripTriangles(L, R, (a, b, d) => {
         pos.push(a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2]);
         for (let k = 0; k < 3; k++) col.push(c.r, c.g, c.b);
+        faceLanelets.push(f.id);
       });
     }
     if (!pos.length) return;
@@ -247,6 +262,7 @@ class LaneletLayer {
     geom.setAttribute("color", new THREE.BufferAttribute(new Float32Array(col), 3));
     geom.computeBoundingSphere();
     const mesh = new THREE.Mesh(geom, surfaceMat);
+    mesh.userData.faceLanelets = faceLanelets;
     mesh.visible = this.visible;
     mesh.renderOrder = 5;
     mapRoot.add(mesh);

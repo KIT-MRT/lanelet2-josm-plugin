@@ -23,6 +23,7 @@ const DEFAULT_PREFS = {
   debug: false,
   tooltips: true,
   walkExp: 0,        // walk speed = 2^walkExp
+  viewNodes: false,  // View-mode clicks select nodes too
   panelW: null,      // dragged panel width in px; null is the stylesheet's
 };
 const PANEL_MIN_PX = 240;

@@ -1,5 +1,6 @@
 // Hover (both modes): marks what a left click at the pointer would select
-// (the node, else the way; on a gizmo handle only a node dot), with the same
+// (Edit: the node, else the way, on a gizmo handle only a node dot; View: the
+// way, else the lanelet, nodes only with the setting), with the same
 // rule as the click itself, so there is no guessing before clicking. Picks at
 // most once a frame, and only when the pointer, the gizmo handle under it or
 // the map changed. While the camera moves the mark is hidden (what is under

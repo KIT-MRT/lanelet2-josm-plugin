@@ -159,8 +159,13 @@ sealed class OutboundMessage {
     ) : OutboundMessage()
 }
 
-/** A relation that an object is a member of, and in which role. */
-data class Membership(val id: String, val role: String, val tags: Map<String, String>)
+/**
+ * A relation that an object is a member of, and in which role. [via]: not a
+ * direct membership but one of the relation that the object belongs to (a
+ * lane line's traffic light is a member of the *lanelet*, not of the line).
+ * Also used for a relation's own [PrimitiveInfo.members], where [id] is the member.
+ */
+data class Membership(val id: String, val role: String, val tags: Map<String, String>, val via: String? = null)
 
 /**
  * Everything the viewer's Selection panel shows about one object: all its
@@ -173,6 +178,8 @@ data class PrimitiveInfo(
     val memberships: List<Membership> = emptyList(),
     val nodeCount: Int? = null,
     val missing: Boolean = false,
+    /** For a relation: its members in order, with their tags. */
+    val members: List<Membership>? = null,
 )
 
 /** Parsed browser → JOSM command (before JOSM Command construction). */

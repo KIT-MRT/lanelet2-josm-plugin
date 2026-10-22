@@ -1,5 +1,7 @@
-// The Selection tab: every tag of the selected nodes and ways, and the
-// relations they belong to (which lanelet uses this bound, as which side).
+// The Selection tab: every tag of the selected nodes, ways and relations, the
+// relations they belong to (which lanelet uses this bound, as which side; the
+// lane's traffic lights and signs, which belong to the lanelet, "via" it) and
+// a relation's members. Every relation and member row selects that object.
 //
 // The map stream carries only type/subtype, so the full tags are asked for
 // on demand with a read-only `describe` command that JOSM answers. Asked
@@ -88,13 +90,21 @@ export function refresh() {
     });
 }
 
-/** What the stream knows: a way's type/subtype, a node's height. */
+/** What the stream knows: a way's type/subtype, a node's height, a lanelet's bounds. */
 function fromStream() {
   state.source = "stream";
   state.details = new Map(state.tokens.map((t) => {
     const f = store.features.get(t);
-    return [t, { id: t, tags: f && f.tags ? { ...f.tags } : {}, memberships: [],
-                 nodes: f ? f.pos.length / 3 : undefined, missing: !f && t.startsWith("way/") }];
+    const info = { id: t, tags: f && f.tags ? { ...f.tags } : {}, memberships: [],
+                   nodes: f && f.kind === "line" ? f.pos.length / 3 : undefined, missing: !f && t.startsWith("way/") };
+    if (f && f.kind === "lanelet") {
+      info.tags.type ??= "lanelet";
+      info.members = [["left", f.lanelet.left], ["right", f.lanelet.right]].map(([role, id]) => {
+        const w = store.features.get(id);
+        return { id, role, tags: w && w.tags ? { ...w.tags } : {} };
+      });
+    }
+    return [t, info];
   }));
 }
 
@@ -141,20 +151,47 @@ function mergedTags(infos) {
   });
 }
 
-/** Relations, merged over the objects: relation -> roles and how many use it. */
+/**
+ * Relations, merged over the objects: relation -> roles and how many use it.
+ * Direct memberships first, then those through another relation (`via`).
+ */
 function mergedMemberships(infos) {
   const rel = new Map();
   for (const info of infos) {
     for (const m of info.memberships || []) {
-      if (!rel.has(m.id)) rel.set(m.id, { id: m.id, tags: m.tags || {}, roles: new Map() });
-      const r = rel.get(m.id);
+      const key = `${m.id}|${m.via || ""}`;
+      if (!rel.has(key)) rel.set(key, { id: m.id, via: m.via || "", tags: m.tags || {}, roles: new Map() });
+      const r = rel.get(key);
       r.roles.set(m.role || "", (r.roles.get(m.role || "") || 0) + 1);
     }
   }
-  return [...rel.values()].sort((a, b) => ((a.tags.type || "") + a.id).localeCompare((b.tags.type || "") + b.id));
+  const order = (r) => `${r.via ? 1 : 0}${r.tags.type || ""}${r.id}${r.via}`;
+  return [...rel.values()].sort((a, b) => order(a).localeCompare(order(b)));
+}
+
+// The token a row selects, as a selection item (relations not in the stream
+// are still selectable: the tab describes them).
+const itemOf = (t) => {
+  const kind = kindOf(t);
+  return { type: kind, id: kind === "node" ? Number(t.slice(5)) : t };
+};
+
+// Long lanelet2 words ("regulatory_element") may wrap after an underscore.
+const breakable = (text) => escapeHtml(text).replace(/_/g, "_<wbr>");
+
+function memberRow(id, roleText, tags, extraNote = "") {
+  const extra = Object.entries(tags || {}).filter(([k]) => k !== "type" && k !== "subtype")
+    .map(([k, v]) => `${k}=${v}`).join("\n");
+  const tip = [extra, `Select ${id}`].filter(Boolean).join("\n");
+  return `<button type="button" class="memberRow" data-token="${escapeHtml(id)}" title="${escapeHtml(tip)}">`
+    + `<span class="role">${breakable(roleText)}</span>`
+    + `<span>${breakable(describeRelation(tags || {}))}${extraNote}</span>`
+    + `<span class="muted inspectId">${escapeHtml(id)}</span></button>`;
 }
 
 function describeRelation(tags) {
+  // A rule reads as what it is: "traffic_light", not "regulatory_element traffic_light".
+  if (tags.type === "regulatory_element" && tags.subtype) return tags.subtype;
   const t = tags.type || "relation";
   const st = tags.subtype ? ` ${tags.subtype}` : "";
   return `${t}${st}`;
@@ -165,13 +202,15 @@ function render() {
   if (!body) return;
   const tokens = state.tokens;
   const ways = tokens.filter((t) => kindOf(t) === "way").length;
-  const nodes = tokens.length - ways;
+  const rels = tokens.filter((t) => kindOf(t) === "relation").length;
+  const nodes = tokens.length - ways - rels;
   $("inspectSummary").textContent = !tokens.length ? "Nothing selected"
-    : [nodes ? plural(nodes, "node") : null, ways ? plural(ways, "way") : null].filter(Boolean).join(" · ");
+    : [nodes ? plural(nodes, "node") : null, ways ? plural(ways, "way") : null,
+       rels ? plural(rels, "relation") : null].filter(Boolean).join(" · ");
   $("inspectCopy").disabled = !tokens.length || state.loading;
   $("inspectRefresh").disabled = !tokens.length || state.loading;
   if (!tokens.length) {
-    body.innerHTML = `<div class="empty">Click a line or a node to see its tags (in View or Edit mode), or select something in JOSM.</div>`;
+    body.innerHTML = `<div class="empty">Click a line or a lane to see its tags (nodes too in Edit mode), or select something in JOSM.</div>`;
     return;
   }
   const infos = tokens.map((t) => state.details.get(t)).filter(Boolean);
@@ -184,6 +223,7 @@ function render() {
     const geo = kindOf(t) === "way" ? wayGeometry(t) : null;
     const facts = [];
     if (info && info.nodes !== undefined) facts.push(plural(info.nodes, "node"));
+    if (info && Array.isArray(info.members)) facts.push(plural(info.members.length, "member"));
     if (geo) {
       facts.push(`${geo.len.toFixed(1)} m`);
       facts.push(geo.zMax - geo.zMin < 0.005 ? `z ${geo.zMin.toFixed(2)} m` : `z ${geo.zMin.toFixed(2)} … ${geo.zMax.toFixed(2)} m`);
@@ -228,18 +268,29 @@ function render() {
   }
 
   // Relations.
-  const rels = mergedMemberships(infos);
-  if (rels.length || state.source === "josm") {
+  const memberOf = mergedMemberships(infos);
+  if (memberOf.length || state.source === "josm") {
     parts.push('<div class="subHead">Member of</div>');
-    if (!rels.length) parts.push('<div class="hint">No relation.</div>');
-    for (const r of rels) {
+    if (!memberOf.length) parts.push('<div class="hint">No relation.</div>');
+    for (const r of memberOf) {
       const roles = [...r.roles.entries()].map(([role, n]) => (role || "(no role)")
         + (infos.length > 1 ? ` ×${n}` : "")).join(", ");
-      const extra = Object.entries(r.tags).filter(([k]) => k !== "type" && k !== "subtype")
-        .map(([k, v]) => `${k}=${v}`).join("\n");
-      parts.push(`<div class="memberRow" title="${escapeHtml(extra)}"><span class="role">${escapeHtml(roles)}</span>`
-        + `<span>${escapeHtml(describeRelation(r.tags))}</span><span class="muted inspectId">${escapeHtml(r.id)}</span></div>`);
+      const via = r.via ? ` <span class="muted">via ${escapeHtml(r.via)}</span>` : "";
+      parts.push(memberRow(r.id, roles, r.tags, via));
     }
+  }
+
+  // A single relation's members (a lanelet's bounds and rules, a traffic light's lights and stop line).
+  const one = tokens.length === 1 ? state.details.get(tokens[0]) : null;
+  if (one && Array.isArray(one.members)) {
+    parts.push(`<div class="subHead">Members (${one.members.length})</div>`);
+    if (!one.members.length) parts.push('<div class="hint">No members.</div>');
+    for (const m of one.members.slice(0, LIST_MAX)) {
+      const tags = m.tags || {};
+      parts.push(memberRow(m.id, m.role || "(no role)", kindOf(m.id) === "relation" ? tags
+        : { ...tags, type: tags.type || kindOf(m.id) }));
+    }
+    if (one.members.length > LIST_MAX) parts.push(`<div class="hint">and ${one.members.length - LIST_MAX} more</div>`);
   }
   if (state.note) parts.push(`<div class="hint warnText">${escapeHtml(state.note)}</div>`);
   else if (state.source === "josm" && store.mapSource === "scene_server") {
@@ -270,9 +321,7 @@ export function installInspector() {
   $("inspectBody")?.addEventListener("click", (e) => {
     const item = e.target.closest("[data-token]");
     if (!item) return;
-    const t = item.dataset.token;
-    const kind = kindOf(t);
-    selection.set([{ type: kind, id: kind === "node" ? Number(t.slice(5)) : t }]);
+    selection.set([itemOf(item.dataset.token)]);
   });
   selection.on("changed", () => schedule());
   editEvents.on("mode", () => schedule());

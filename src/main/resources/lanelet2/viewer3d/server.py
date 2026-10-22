@@ -156,7 +156,9 @@ def _sse_encode(msg):
 #     {"type":"command_result","id":"c12","ok":false,"message":"..."}
 #     The answer to a `describe` op adds "details": [{"id":"way/3",
 #     "tags":{..},"nodes":5,"memberships":[{"id":"relation/7","role":"left",
-#     "tags":{..}}]}, ...] (relayed untouched, like the rest).
+#     "tags":{..}}]}, ...] (relayed untouched, like the rest). A membership
+#     through a lanelet (its traffic light, for one of its bounds) adds
+#     "via":"relation/7"; a relation's entry adds "members" in the same shape.
 #
 #   feature  : one renderable object (protocol v2: flat arrays)
 #     {"id":"way/-123",

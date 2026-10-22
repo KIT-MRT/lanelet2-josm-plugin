@@ -280,13 +280,38 @@ export function pickNode(clientX, clientY, radiusPx = PICK_RADIUS_PX) {
 }
 
 /**
- * What a click at the cursor selects: the nearest node within `nodePx`, else
- * the nearest line, else null. `nodeOnly` looks for a node only.
+ * Lanelet feature ids whose surface the cursor ray meets, front to back (the
+ * surfaces have no feature of their own to pick; each triangle knows its
+ * lanelet). Empty while the surfaces are hidden.
  */
-export function pickItem(clientX, clientY, { nodePx = PICK_RADIUS_PX, nodeOnly = false } = {}) {
-  const id = pickNode(clientX, clientY, nodePx);
-  if (id !== null) return { type: "node", id };
+export function laneletsUnderCursor(clientX, clientY) {
+  const surfaces = laneletLayer.surfaceMeshes();
+  if (!surfaces.length) return [];
+  cursorRay(clientX, clientY);
+  const out = [];
+  for (const h of raycaster.intersectObjects(surfaces, false)) {
+    const ids = h.object.userData.faceLanelets;
+    const id = ids && h.faceIndex != null ? ids[h.faceIndex] : null;
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * What a click at the cursor selects: the nearest node within `nodePx`, else
+ * the nearest line, else (with `lanelets`) the lanelet under it, else null.
+ * `nodeOnly` looks for a node only; `nodes: false` never picks one.
+ */
+export function pickItem(clientX, clientY,
+  { nodePx = PICK_RADIUS_PX, nodeOnly = false, nodes = true, lanelets = false } = {}) {
+  if (nodes || nodeOnly) {
+    const id = pickNode(clientX, clientY, nodePx);
+    if (id !== null) return { type: "node", id };
+  }
   if (nodeOnly) return null;
   const ways = featuresUnderCursor(clientX, clientY);
-  return ways.length ? { type: "way", id: ways[0].id } : null;
+  if (ways.length) return { type: "way", id: ways[0].id };
+  if (!lanelets) return null;
+  const ll = laneletsUnderCursor(clientX, clientY);
+  return ll.length ? { type: "relation", id: ll[0] } : null;
 }

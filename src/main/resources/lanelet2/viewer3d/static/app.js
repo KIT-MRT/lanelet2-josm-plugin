@@ -267,7 +267,8 @@ if (TEST_HOOKS) {
       const one = selection.single();
       return one && one.type === "node" ? nodeToken(one.id) : null;
     },
-    selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways) }),
+    selection: () => ({ nodes: Array.from(selection.nodes).map(nodeToken), ways: Array.from(selection.ways),
+                        relations: Array.from(selection.relations) }),
     // What a left click at page pixel (x, y) would select, as { type, id } or null.
     pick: (x, y) => clickTarget(x, y, false),
     // What a click at the pointer would select: "node/<id>", "way/<id>" or null.

@@ -115,8 +115,11 @@ try {
   const hit = await v.evaluate(`window.__ll2test.pick(${mid[0]}, ${mid[1]})`);
   t.check("a click picks the line under it in ortho", hit && hit.id === "way/11", JSON.stringify(hit));
   const node = await v.project([100, -60, Z]);
+  // View mode picks ways; nodes are Edit mode's (or the setting's).
+  await v.key("e");
   const hitNode = await v.evaluate(`window.__ll2test.pick(${node[0]}, ${node[1]})`);
-  t.check("and a node", hitNode && hitNode.type === "node", JSON.stringify(hitNode));
+  await v.key("e");
+  t.check("and a node in Edit mode", hitNode && hitNode.type === "node", JSON.stringify(hitNode));
 
   // The wheel zooms about the point under the cursor.
   const target = [60, 60, Z];

@@ -174,25 +174,43 @@ object Viewer3dCommands {
      * Tags and relation memberships of [ids], at most [Viewer3dConstants.MAX_DESCRIBE]
      * of them. Read-only, so it works on a hidden layer too. A relation listing
      * the object twice (e.g. one way as both bounds) yields one entry per role.
+     *
+     * A lanelet's traffic lights, signs and right-of-way rules are members of
+     * the lanelet (role `regulatory_element`), not of its bounds, so a way that
+     * bounds a lanelet also lists those, marked `via` the lanelet, after its
+     * direct memberships. A relation lists its own [PrimitiveInfo.members].
      */
     fun describe(ds: DataSet, ids: List<String>): List<PrimitiveInfo> =
         ids.distinct().take(Viewer3dConstants.MAX_DESCRIBE).map { id ->
             val p = lookup(ds, id)
             if (p == null || p.isDeleted) return@map PrimitiveInfo(id, missing = true)
             val memberships = ArrayList<Membership>()
+            val via = ArrayList<Membership>()
             for (r in p.referrers) {
                 if (r !is Relation || r.isDeleted) continue
                 val tags = r.keys.toSortedMap()
                 for (m in r.members) {
                     if (m.member === p) memberships.add(Membership(tokenOf(r), m.role, tags))
                 }
+                if (p is Way && r.get("type") == "lanelet") {
+                    for (m in r.members) {
+                        val re = m.member
+                        if (m.role != "regulatory_element" || re !is Relation || re.isDeleted) continue
+                        via.add(Membership(tokenOf(re), m.role, re.keys.toSortedMap(), tokenOf(r)))
+                    }
+                }
             }
-            memberships.sortWith(compareBy({ it.tags["type"] ?: "" }, { it.id }, { it.role }))
+            val order = compareBy<Membership>({ it.tags["type"] ?: "" }, { it.id }, { it.role }, { it.via ?: "" })
+            memberships.sortWith(order)
+            via.sortWith(order)
             PrimitiveInfo(
                 id = id,
                 tags = p.keys.toSortedMap(),
-                memberships = memberships,
+                memberships = memberships + via.distinct(),
                 nodeCount = (p as? Way)?.nodesCount,
+                members = (p as? Relation)?.members?.map {
+                    Membership(tokenOf(it.member), it.role, it.member.keys.toSortedMap())
+                },
             )
         }
 

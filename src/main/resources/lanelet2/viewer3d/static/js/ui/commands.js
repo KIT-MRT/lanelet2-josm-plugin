@@ -201,7 +201,7 @@ const MOUSE = [
     [["2D view"], "Left-drag pans, right-drag turns"],
   ]],
   ["Select (View and Edit)", [
-    [["Click"], "Select the node under the cursor, else the way; its tags are in the Selection tab"],
+    [["Click"], "Edit: the node under the cursor, else the way. View: the way, else the lane (nodes too with the setting). Tags in the Selection tab"],
     [["Shift click"], "Add or remove"],
     [["Ctrl drag"], "Box select, Edit mode (Shift: add)"],
     [["Middle-click"], "Cycle through everything under the cursor"],

@@ -51,21 +51,29 @@ object Viewer3dJson {
                 sb.append(",\"tags\":")
                 encodeTags(sb, info.tags)
                 info.nodeCount?.let { sb.append(",\"nodes\":").append(it) }
-                sb.append(",\"memberships\":[")
-                info.memberships.forEachIndexed { j, m ->
-                    if (j > 0) sb.append(',')
-                    sb.append("{\"id\":").append(jsonString(m.id))
-                    sb.append(",\"role\":").append(jsonString(m.role))
-                    sb.append(",\"tags\":")
-                    encodeTags(sb, m.tags)
-                    sb.append('}')
-                }
-                sb.append("]}")
+                sb.append(",\"memberships\":")
+                encodeMemberships(sb, info.memberships)
+                info.members?.let { sb.append(",\"members\":"); encodeMemberships(sb, it) }
+                sb.append('}')
             }
             sb.append(']')
         }
         sb.append('}')
         return sb.toString()
+    }
+
+    private fun encodeMemberships(sb: StringBuilder, list: List<Membership>) {
+        sb.append('[')
+        list.forEachIndexed { j, m ->
+            if (j > 0) sb.append(',')
+            sb.append("{\"id\":").append(jsonString(m.id))
+            sb.append(",\"role\":").append(jsonString(m.role))
+            sb.append(",\"tags\":")
+            encodeTags(sb, m.tags)
+            m.via?.let { sb.append(",\"via\":").append(jsonString(it)) }
+            sb.append('}')
+        }
+        sb.append(']')
     }
 
     private fun encodeSnapshot(msg: OutboundMessage.Snapshot): String {

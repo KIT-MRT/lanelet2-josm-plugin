@@ -8,7 +8,9 @@
 // Selecting works in View mode too (to inspect tags, also on a read-only
 // map); everything that changes the map needs Edit mode.
 //
-//   click          select the node under the cursor, else the way
+//   click          select the node under the cursor, else the way. In View
+//                  mode: the way, else the lanelet under the cursor (nodes
+//                  only with the "View clicks select nodes" setting)
 //   shift+click    add / remove it
 //   ctrl+drag      box select (shift: add)
 //   middle-click   cycle through everything under the cursor (coincident nodes)
@@ -31,7 +33,9 @@ import { store, nodeToken } from "./store.js";
 import { lineLayer } from "./render/lines.js";
 import { setHighlightVisible } from "./render/highlight.js";
 import { selection } from "./selection.js";
-import { pickItem, nodesUnderCursor, featuresUnderCursor, screenProjector, projectToPage } from "./picking.js";
+import {
+  pickItem, nodesUnderCursor, featuresUnderCursor, laneletsUnderCursor, screenProjector, projectToPage,
+} from "./picking.js";
 import { sendCommand } from "./net.js";
 import { snapHeight, snapToNode, showSnap, hideSnap } from "./snap.js";
 import { setEditHud, setSelectionCard, toast } from "./hud.js";
@@ -85,7 +89,16 @@ export function editBlockedReason() {
 
 /** What the Selection panel describes: the selection, in either mode. */
 export function inspectedTokens() {
-  return selection.tokens();
+  return selection.allTokens();
+}
+
+// View mode is for looking: a click picks the way (or the lanelet), not the
+// node on it, unless the setting says otherwise.
+const viewPick = { nodes: false };
+
+/** Whether a click in View mode selects nodes as well (Settings). */
+export function setViewSelectsNodes(on) {
+  viewPick.nodes = !!on;
 }
 
 // A click in View mode may belong to something else first (a trajectory in
@@ -143,7 +156,7 @@ export function setKeysMove(target) {
 
 /** True when movement keys should move the selection rather than the camera. */
 export function keysMoveSelection() {
-  return edit.on && edit.keysMove === "selection" && !selection.isEmpty() && !drag;
+  return edit.on && edit.keysMove === "selection" && selection.hasEditable() && !drag;
 }
 
 export function toggleSnap() {
@@ -158,7 +171,7 @@ export function toggleHeightOnly() {
 }
 
 function refreshGizmo() {
-  const show = edit.on && !selection.isEmpty();
+  const show = edit.on && selection.hasEditable();
   if (show && !drag) placePivot();
   if (show) {
     const rotate = edit.tool === "rotate";
@@ -199,6 +212,8 @@ function refreshEditHud() {
   const parts = [];
   if (selection.nodes.size) parts.push(`${selection.nodes.size} node${selection.nodes.size > 1 ? "s" : ""}`);
   if (selection.ways.size) parts.push(`${selection.ways.size} way${selection.ways.size > 1 ? "s" : ""}`);
+  const rels = selection.relations.size;
+  if (rels) parts.push(`${rels} relation${rels > 1 ? "s" : ""} (not editable here)`);
   const one = selection.single();
   const what = one ? (one.type === "node" ? nodeToken(one.id) : one.id) : parts.join(", ");
   const tool = edit.heightOnly ? "height only" : edit.tool === "rotate" ? "rotate" : "move";
@@ -230,7 +245,7 @@ store.on("applied", (msg) => {
   }
   if (!drag) refreshGizmo();
 });
-store.on("nodes-moved", () => { if (!drag && edit.on && !selection.isEmpty()) placePivot(); });
+store.on("nodes-moved", () => { if (!drag && edit.on && selection.hasEditable()) placePivot(); });
 
 // --- gizmo drag ---------------------------------------------------------------------
 
@@ -519,7 +534,7 @@ store.on("nodes-moved", () => refreshZField());
 // --- JOSM actions --------------------------------------------------------------------
 
 export function deleteSelection() {
-  if (selection.isEmpty()) {
+  if (!selection.hasEditable()) {
     toast("Nothing selected to delete", "warn", 2000);
     return;
   }
@@ -639,7 +654,8 @@ function applyPick(item, add) {
  * arrow; only a click squarely on a node dot counts there.
  */
 export function clickTarget(x, y, onGizmo) {
-  return onGizmo ? pickItem(x, y, { nodePx: GIZMO_CLICK_NODE_PX, nodeOnly: true }) : pickItem(x, y);
+  if (onGizmo) return pickItem(x, y, { nodePx: GIZMO_CLICK_NODE_PX, nodeOnly: true });
+  return edit.on ? pickItem(x, y) : pickItem(x, y, { nodes: viewPick.nodes, lanelets: true });
 }
 
 function clickSelect(x, y, add, onGizmo) {
@@ -657,15 +673,18 @@ const camKey = () => `${camera.position.toArray().join()},${view.yaw},${view.pit
 /**
  * Middle-click: select the next of everything under the cursor, nodes first
  * (front to back), then ways. Repeated clicks on the same spot walk the list,
- * which is the only way to reach a node that sits exactly on another.
+ * which is the only way to reach a node that sits exactly on another. View
+ * mode follows its click: nodes only with the setting, lanelets last.
  */
 function cycleAt(x, y) {
   if (cycle && Math.hypot(x - cycle.x, y - cycle.y) <= 3 && cycle.camKey === camKey()) {
     cycle.idx = (cycle.idx + 1) % cycle.items.length;
   } else {
+    const view = !edit.on;
     const items = [
-      ...nodesUnderCursor(x, y).map((n) => ({ type: "node", id: n.id })),
+      ...(!view || viewPick.nodes ? nodesUnderCursor(x, y).map((n) => ({ type: "node", id: n.id })) : []),
       ...featuresUnderCursor(x, y).map((f) => ({ type: "way", id: f.id })),
+      ...(view ? laneletsUnderCursor(x, y).map((id) => ({ type: "relation", id })) : []),
     ];
     if (!items.length) {
       cycle = null;
