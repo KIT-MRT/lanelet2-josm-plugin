@@ -208,6 +208,22 @@ class HandlerTest(unittest.TestCase):
         handle = make_command_handler(lambda: False)
         self.assertIs(False, handle({"ops": [{"op": "describe", "ids": ["way/1"]}]}))
 
+    def test_stays_silent_on_edits_when_josm_owns_the_map(self):
+        """A read-only refusal from here beat JOSM's success on an edit it applied."""
+        handle = make_command_handler(lambda: False)
+        for ops in ([{"op": "set_tag", "id": "way/1", "key": "subtype", "value": "dashed"}],
+                    [{"op": "move_node", "id": "node/1", "z": 1}], [{"op": "undo"}],
+                    [{"op": "delete_selection", "ids": ["way/1"]}], [{"op": "select", "ids": []}], "junk"):
+            self.assertIs(False, handle({"type": "command", "id": "c1", "ops": ops}), ops)
+
+    def test_its_own_map_still_refuses_edits(self):
+        sent = []
+        bridge = ViewerBridge(on_command=make_command_handler(lambda: fake_map()), log=lambda m: None)
+        bridge.send = sent.append
+        bridge._handle(b'{"type":"command","id":"e1","ops":[{"op":"set_tag","id":"way/11","key":"k","value":"v"}]}')
+        self.assertEqual([("e1", False)], [(m["id"], m["ok"]) for m in sent])
+        self.assertIn("read-only", sent[0]["message"])
+
     def test_says_so_without_a_map(self):
         handle = make_command_handler(lambda: None)
         reply = handle({"ops": [{"op": "describe", "ids": ["way/1"]}]})
@@ -229,7 +245,8 @@ class HandlerTest(unittest.TestCase):
         silent = ViewerBridge(on_command=make_command_handler(lambda: False), log=lambda m: None)
         silent.send = sent.append
         silent._handle(b'{"type":"command","id":"c10","ops":[{"op":"describe","ids":["way/11"]}]}')
-        self.assertEqual(1, len(sent), "JOSM owns the map: no reply from the scene server")
+        silent._handle(b'{"type":"command","id":"c11","ops":[{"op":"set_tag","id":"way/11","key":"k","value":"v"}]}')
+        self.assertEqual(1, len(sent), "JOSM owns the map: no reply from the scene server, not even to an edit")
 
 
 if __name__ == "__main__":

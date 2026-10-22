@@ -337,20 +337,24 @@ def make_command_handler(map_owner, log=print):
     """`on_command` for the bridge: answers describe-only commands.
 
     `map_owner()` returns the lanelet2 map when this server sent the viewer's
-    map, else None. When another bridge (JOSM) streams the map, a describe is
-    not ours to answer: returning False sends no reply at all, so JOSM's is
-    the one the viewer gets. Anything else falls through to the bridge's
-    default (accept camera/selection traffic, refuse edits).
+    map, None when there is no map, and False when another bridge (JOSM)
+    streams it. Then **no command** is ours to answer, edits included:
+    returning False sends no reply at all. The viewer forwards every command
+    to every bridge and the browser takes the first `command_result` with a
+    matching id, so a read-only refusal from here used to beat JOSM's
+    success on a `set_tag` JOSM had in fact applied. With this server's own
+    map, anything but describe falls through to the bridge's default (accept
+    camera/selection traffic, refuse edits).
     """
     def handle(command):
+        state = map_owner()
+        if state is False:
+            return False
         ops = command.get("ops")
         if not isinstance(ops, list) or not ops:
             return None
         if not all(isinstance(op, dict) and op.get("op") == "describe" for op in ops):
             return None
-        state = map_owner()
-        if state is False:
-            return False
         if state is None:
             return {"ok": False, "message": "The scene server has no map loaded"}
         ids = [i for op in ops for i in (op.get("ids") or []) if isinstance(i, (str, int))]

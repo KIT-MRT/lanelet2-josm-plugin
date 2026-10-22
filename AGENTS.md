@@ -432,8 +432,12 @@ the shipped `server.py` stays stdlib-only.
   heavy data. Point clouds and images go over the scene server's **own HTTP
   port as binary**, never through SSE.
 - With JOSM already streaming, the scene server reads the head of `/state`,
-  adopts that anchor and does not send a map. It refuses edit commands
-  (`ok: false`), which the viewer already knows how to show.
+  adopts that anchor and does not send a map. **Then it answers no command
+  at all**, edits included: every command goes to every bridge and the
+  browser takes the first `command_result`, so its read-only refusal used
+  to beat JOSM's success on a `set_tag` JOSM had applied. With its own map
+  (no JOSM) it refuses edits (`ok: false`), which the viewer knows how to
+  show.
 - **Python 3.12 + NumPy 1.x are forced**: the `lanelet2` wheel is built for
   cp38-cp312 against NumPy 1.x and aborts on import under NumPy 2. `uv pip
   install kitscenes` fails (its metadata names a wheel by relative path), so
