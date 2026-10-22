@@ -623,8 +623,8 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
 - **browser -> JOSM:** `POST /command` (HTTP port **8765**), which the server
   only *forwards* to connected bridges. Parsed with JOSM's bundled
   jakarta.json. Ops: `move_node` (x/y and z each optional: height-only moves
-  keep lat/lon exactly, XY moves never add `ele`), `set_tag` (still unused by
-  the browser), `set_view`, `select`, `delete_selection` (runs JOSM's own
+  keep lat/lon exactly, XY moves never add `ele`), `set_tag` (the Selection tab's
+  value editor), `set_view`, `select`, `delete_selection` (runs JOSM's own
   Delete action, with its warnings), `undo`, `redo`, `describe`. Unknown ops
   are skipped.
 - **`describe` is how the Selection tab gets tags.** The stream carries only
@@ -639,8 +639,16 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   traffic light is the lanelet's `regulatory_element` member and refers to
   its light ways and stop line), so for a way that bounds a lanelet both
   answers also list that lanelet's regulatory elements with `via:
-  "relation/<lanelet>"`, after the direct memberships; a relation's entry
-  carries its `members` (role, id, tags). The scene server answers too
+  "relation/<lanelet>"`, after the direct memberships. **And the other way
+  round**: a node or way a regulatory element names (the light itself, its
+  stop line, a sign) lists the lanelets using that regulatory element with
+  `via: "relation/<regulatory element>"`, so a light shows the lanes it
+  controls (on the scene server a regulatory element also lists them as its
+  own memberships; in JOSM they are its referrers anyway). The scene server
+  finds them from an index over the lanelets' and areas' own
+  `regulatoryElements`, built once per map (0.06 s for Karlsruhe), not a
+  `findUsages` overload. A relation's entry carries its `members` (role,
+  id, tags). The scene server answers too
   (`ll2_scene/describe.py`, from its lanelet2 map: attributes, plus
   lanelets by bound role, areas outer/inner, and regulatory elements by
   parameter role from an index built over `regulatoryElementLayer`'s own
@@ -666,7 +674,23 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   the tab describes, and a JOSM selection message that matches in nodes and
   ways leaves them selected (JOSM lists a relation's members, never the
   relation). A relation picked in the tab's Member of / Members rows (a
-  traffic light) is selectable even though the stream has no geometry for it.
+  traffic light) is selectable even though the stream has no geometry for it,
+  and **shows as its members**: the tab hands each described relation's
+  member tokens to the highlight (`setRelationMembers`), which draws member
+  ways, nodes and lanelets (one level; members outside the stream are left
+  out) in red (`MEMBER_COLOR`) over a dark edge, wider than the yellow
+  selection, because yellow drowns on a point cloud. A selected lanelet is
+  drawn as itself, in yellow. `__ll2test.highlight()` counts what is drawn
+  (`members` separately).
+- **Tag values are edited in the Selection tab**, only in Edit mode on
+  JOSM's map with JOSM's answer showing (`canEdit` in `ui/inspector.js`):
+  click a value, Enter or leaving the field applies, Esc cancels. One
+  `set_tag` per object in one command, so one undo step; with several
+  objects only those carrying the key change. An empty value is refused in
+  the browser, because JOSM's `ChangePropertyCommand` would delete the tag.
+  The field's own keydown stops Enter/Esc before the document's handlers,
+  and `rendering` keeps a rebuild of the tab from counting as leaving the
+  field.
 - `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
   on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
   deliberate change from the Jython, which skipped missing nodes): if any

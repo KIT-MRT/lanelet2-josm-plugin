@@ -10,12 +10,22 @@
 // window gets the focus back (tags edited in JOSM do not reach the stream).
 // Without JOSM (the scene server's read-only map) the tab falls back to the
 // streamed tags and says so.
+//
+// With JOSM's map in Edit mode a value can be changed in place: click it,
+// Enter (or leaving the field) applies, Esc cancels. That is a `set_tag` per
+// object, applied by JOSM as one undo step; on several objects it changes
+// the ones that carry the key. An empty value is refused: in JOSM it would
+// delete the tag, and that is not what clearing a field should do.
+//
+// A relation's members go to the highlight, which is how a selected traffic
+// light rule shows its lights and stop line on the map.
 import { TEST_HOOKS } from "../util.js";
 import { store } from "../store.js";
 import { selection } from "../selection.js";
 import { edit, editEvents, inspectedTokens } from "../edit.js";
 import { sendCommand } from "../net.js";
 import { toast } from "../hud.js";
+import { setRelationMembers } from "../render/highlight.js";
 import { ui, currentTab, panelOpen, escapeHtml, setTabBadge } from "./shell.js";
 
 const DEBOUNCE_MS = 150;
@@ -33,7 +43,10 @@ const state = {
   note: "",          // why the streamed tags are all there is
   loading: false,
   stale: true,       // needs asking once the tab shows
+  editing: null,     // { key, draft, caret, selection } while a value is being typed
+  saving: false,     // a set_tag is on its way to JOSM
 };
+let rendering = false; // a blur while the body is rebuilt is not the user leaving the field
 let timer = null;
 let generation = 0;
 
@@ -64,9 +77,12 @@ export function refresh() {
   if (!tokens.length) {
     state.details = new Map();
     state.loading = false;
+    state.editing = null;
+    setRelationMembers(new Map());
     render();
     return Promise.resolve(null);
   }
+  if (state.editing && state.key !== state.editing.selection) state.editing = null;
   state.loading = true;
   render();
   return sendCommand([{ op: "describe", ids: tokens }], { awaitResult: true, timeoutMs: REPLY_TIMEOUT_MS })
@@ -85,10 +101,78 @@ export function refresh() {
           : r && r.timeout ? "JOSM did not answer in time; showing type and subtype only."
           : "This map comes from the scene server, which sends type and subtype only.";
       }
+      shareMembers();
       render();
       return state.details;
     });
 }
+
+/** Tell the highlight which members the described relations have. */
+function shareMembers() {
+  const members = new Map();
+  for (const [token, d] of state.details) {
+    if (token.startsWith("relation/") && Array.isArray(d.members)) members.set(token, d.members.map((m) => m.id));
+  }
+  setRelationMembers(members);
+}
+
+// ---- editing values ------------------------------------------------------------------
+/** Values can be changed: JOSM's map, its answer, Edit mode. */
+const canEdit = () => edit.on && state.source === "josm" && store.mapSource !== "scene_server";
+
+function startEdit(key) {
+  if (!canEdit() || state.loading || state.saving) return;
+  const row = mergedTags(currentInfos()).find((r) => r.key === key);
+  if (!row) return;
+  const draft = row.same ? [...row.values.keys()][0] : "";
+  // `selection`: a new selection ends the edit, a re-ask of the same one does not.
+  state.editing = { key, draft, caret: draft.length, selection: state.key };
+  render();
+}
+
+function cancelEdit() {
+  if (!state.editing) return;
+  state.editing = null;
+  render();
+}
+
+/** Send the typed value to JOSM, for every described object that has the key. */
+function commitEdit() {
+  const e = state.editing;
+  if (!e) return Promise.resolve(null);
+  state.editing = null;
+  const value = e.draft.trim();
+  const infos = currentInfos();
+  const row = mergedTags(infos).find((r) => r.key === e.key);
+  if (!value) {
+    if (row && row.same) toast(`An empty value would delete ${e.key} in JOSM; remove tags there`, "warn", 4000);
+    render();
+    return Promise.resolve(null);
+  }
+  const targets = infos.filter((info) => info.tags && e.key in info.tags && info.tags[e.key] !== value);
+  if (!targets.length) {
+    render();
+    return Promise.resolve(null);
+  }
+  const ops = targets.map((info) => ({ op: "set_tag", id: info.id, key: e.key, value }));
+  state.saving = true;
+  render();
+  return sendCommand(ops, { awaitResult: true }).then((info) => {
+    state.saving = false;
+    const r = info.result;
+    if (!info.delivered) toast(`${e.key}: JOSM is not connected`, "error");
+    else if (!r || r.timeout) toast(`${e.key}: JOSM did not answer`, "warn");
+    else if (r.ok === false) toast(`${e.key}: ${r.message}`, "warn", 5000);
+    else {
+      for (const t of targets) t.tags[e.key] = value;  // until JOSM's own answer replaces it
+      toast(`${e.key}=${value} on ${plural(targets.length, "object")}`, "info", 2000);
+    }
+    render();
+    return refresh();
+  });
+}
+
+const currentInfos = () => state.tokens.map((t) => state.details.get(t)).filter(Boolean);
 
 /** What the stream knows: a way's type/subtype, a node's height, a lanelet's bounds. */
 function fromStream() {
@@ -106,6 +190,7 @@ function fromStream() {
     }
     return [t, info];
   }));
+  shareMembers();
 }
 
 // ---- rendering -------------------------------------------------------------------
@@ -248,7 +333,10 @@ function render() {
 
   // Tags.
   const rows = mergedTags(infos);
-  parts.push(`<div class="subHead">Tags${state.loading ? ' <span class="spinner"></span>' : ""}</div>`);
+  if (state.editing && !canEdit()) state.editing = null;
+  const editable = canEdit() && !state.loading && !state.saving;
+  const busy = state.loading || state.saving;
+  parts.push(`<div class="subHead">Tags${busy ? ' <span class="spinner"></span>' : ""}</div>`);
   if (!rows.length) {
     parts.push(`<div class="hint">${state.loading ? "Asking JOSM…" : "No tags."}</div>`);
   } else {
@@ -262,7 +350,19 @@ function render() {
         value = `<span class="different" title="${escapeHtml(list)}">${firstOnly}</span>`
           + (r.count < infos.length ? ` <span class="muted">on ${r.count} of ${infos.length}</span>` : "");
       }
-      parts.push(`<tr><th>${escapeHtml(r.key)}</th><td>${value}</td></tr>`);
+      if (state.editing && state.editing.key === r.key) {
+        const hint = r.same ? "" : `${r.values.size} values: one for all ${r.count}`;
+        value = `<input type="text" class="tagInput" data-key="${escapeHtml(r.key)}" spellcheck="false"`
+          + ` value="${escapeHtml(state.editing.draft)}" placeholder="${escapeHtml(hint)}"`
+          + ` aria-label="Value of ${escapeHtml(r.key)}">`;
+        parts.push(`<tr><th>${escapeHtml(r.key)}</th><td class="tagValue editing">${value}</td></tr>`);
+      } else if (editable) {
+        const on = r.count < infos.length ? ` (on the ${r.count} that have it)` : "";
+        parts.push(`<tr><th>${escapeHtml(r.key)}</th><td class="tagValue editable" data-key="${escapeHtml(r.key)}"`
+          + ` title="Click to change${on}. Enter applies, Esc cancels">${value}</td></tr>`);
+      } else {
+        parts.push(`<tr><th>${escapeHtml(r.key)}</th><td>${value}</td></tr>`);
+      }
     }
     parts.push("</tbody></table>");
   }
@@ -296,9 +396,21 @@ function render() {
   else if (state.source === "josm" && store.mapSource === "scene_server") {
     parts.push('<div class="hint">From the scene server\'s lanelet2 map (read-only).</div>');
   } else if (state.source === "josm") {
-    parts.push('<div class="hint">From JOSM. Tags edited there show here once you come back to this window.</div>');
+    parts.push(`<div class="hint">From JOSM. ${edit.on ? "Click a value to change it (one undo step in JOSM)."
+      : "Values can be changed in Edit mode."} Tags edited in JOSM show here once you come back to this window.</div>`);
   }
-  body.innerHTML = parts.join("");
+  rendering = true;
+  try {
+    body.innerHTML = parts.join("");
+  } finally {
+    rendering = false;
+  }
+  const input = body.querySelector(".tagInput");
+  if (input && state.editing) {
+    input.focus();
+    const at = Math.min(state.editing.caret ?? input.value.length, input.value.length);
+    input.setSelectionRange(at, at);
+  }
 }
 
 /** The tags shared by every described object, as `key=value` lines. */
@@ -318,13 +430,45 @@ export function installInspector() {
       toast("No clipboard in this browser", "warn");
     }
   });
-  $("inspectBody")?.addEventListener("click", (e) => {
+  const body = $("inspectBody");
+  body?.addEventListener("click", (e) => {
+    const cell = e.target.closest("td.editable[data-key]");
+    if (cell) {
+      startEdit(cell.dataset.key);
+      return;
+    }
     const item = e.target.closest("[data-token]");
     if (!item) return;
     selection.set([itemOf(item.dataset.token)]);
   });
+  body?.addEventListener("input", (e) => {
+    if (!e.target.classList.contains("tagInput") || !state.editing) return;
+    state.editing.draft = e.target.value;
+    state.editing.caret = e.target.selectionStart;
+  });
+  body?.addEventListener("keydown", (e) => {
+    if (!e.target.classList.contains("tagInput")) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      commitEdit();
+    } else if (e.key === "Escape") {
+      // The field's own Esc: not the selection's, not the panel's.
+      e.preventDefault();
+      e.stopPropagation();
+      cancelEdit();
+    }
+  });
+  body?.addEventListener("focusout", (e) => {
+    if (rendering || !e.target.classList.contains("tagInput") || !state.editing) return;
+    commitEdit();
+  });
   selection.on("changed", () => schedule());
-  editEvents.on("mode", () => schedule());
+  editEvents.on("mode", () => {
+    if (!edit.on) state.editing = null;
+    render();
+    schedule();
+  });
   // A selected way changed in the stream (geometry, type or subtype).
   store.on("upsert", (f) => {
     if (state.key && state.tokens.includes(f.id)) schedule(true);
@@ -341,5 +485,7 @@ if (TEST_HOOKS) {
                     details: Object.fromEntries(state.details), text: tagsAsText(),
                     editOn: edit.on }),
     refresh: () => refresh(),
+    editing: () => (state.editing ? { ...state.editing } : null),
+    saving: () => state.saving,
   };
 }

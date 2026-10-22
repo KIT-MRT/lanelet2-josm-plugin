@@ -141,9 +141,11 @@ class DescribeTest(unittest.TestCase):
             raise TypeError("No registered converter")
         self.map.regulatoryElementLayer._usages = broken
         [light] = describe(self.map, ["way/15"])
-        self.assertEqual([("relation/20", "refers")], [(m["id"], m["role"]) for m in light["memberships"]])
+        self.assertEqual([("relation/20", "refers")],
+                         [(m["id"], m["role"]) for m in light["memberships"] if "via" not in m])
         [stop] = describe(self.map, ["way/16"])
-        self.assertEqual([("relation/20", "ref_line")], [(m["id"], m["role"]) for m in stop["memberships"]])
+        self.assertEqual([("relation/20", "ref_line")],
+                         [(m["id"], m["role"]) for m in stop["memberships"] if "via" not in m])
         [d] = describe(self.map, ["way/11"])
         self.assertIn("relation/9", [m["id"] for m in d["memberships"]])
 
@@ -165,6 +167,34 @@ class DescribeTest(unittest.TestCase):
         [d] = describe(self.map, ["relation/20"])
         self.assertEqual("regulatory_element", d["tags"]["type"])
         self.assertEqual([("way/15", "refers"), ("way/16", "ref_line")], [(m["id"], m["role"]) for m in d["members"]])
+
+
+    def test_a_traffic_light_lists_the_lanes_it_controls(self):
+        """The light way -> its regulatory element -> the lanelets using that."""
+        for token, role in (("way/15", "refers"), ("way/16", "ref_line")):
+            [d] = describe(self.map, [token])
+            got = [(m["id"], m["role"], m["tags"].get("type"), m.get("via")) for m in d["memberships"]]
+            self.assertEqual([("relation/20", role, "regulatory_element", None),
+                              ("relation/7", "regulatory_element", "lanelet", "relation/20")], got, token)
+            self.assertEqual("road", d["memberships"][1]["tags"]["subtype"])
+
+    def test_a_regulatory_element_lists_the_lanes_using_it(self):
+        [d] = describe(self.map, ["relation/20"])
+        self.assertEqual([("relation/7", "regulatory_element", "lanelet")],
+                         [(m["id"], m["role"], m["tags"]["type"]) for m in d["memberships"]])
+        self.assertNotIn("via", d["memberships"][0])
+        # A rule no lanelet uses has nothing to list.
+        [unused] = describe(self.map, ["relation/9"])
+        self.assertEqual([], unused["memberships"])
+
+    def test_the_lanes_need_no_find_usages_either(self):
+        def broken(prim):
+            raise TypeError("No registered converter")
+        self.map.laneletLayer._usages = broken
+        self.map.regulatoryElementLayer._usages = broken
+        [light] = describe(self.map, ["way/15"])
+        self.assertIn(("relation/7", "relation/20"),
+                      [(m["id"], m.get("via")) for m in light["memberships"]])
 
 
 class HandlerTest(unittest.TestCase):

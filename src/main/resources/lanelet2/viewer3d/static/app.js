@@ -28,7 +28,7 @@ import { setScreenLineResolution } from "./js/render/screenlines.js";
 import { iconLayer } from "./js/render/icons.js";
 import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
-import { updateHighlight } from "./js/render/highlight.js";
+import { updateHighlight, highlightStats } from "./js/render/highlight.js";
 import { updateHover, hoverItem } from "./js/hover.js";
 import { pointLayer } from "./js/render/points.js";
 import { installScene, onSceneMessage, sceneState } from "./js/sensors/scene.js";
@@ -276,6 +276,8 @@ if (TEST_HOOKS) {
       const h = hoverItem();
       return h ? (h.type === "node" ? nodeToken(h.id) : h.id) : null;
     },
+    // What the selection highlight draws: { segments, dots, triangles }.
+    highlight: () => { updateHighlight(); return highlightStats(); },
     edit: () => ({ on: edit.on, tool: edit.tool, heightOnly: edit.heightOnly, keysMove: edit.keysMove, snap: edit.snap }),
     // The gizmo handle under the pointer (null for none) and the handles it has.
     gizmo: () => ({ axis: transform.axis, dragging: transform.dragging, mode: transform.mode,

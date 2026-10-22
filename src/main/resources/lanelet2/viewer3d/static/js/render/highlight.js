@@ -4,12 +4,17 @@
 // geometry under it changes, including every frame of a drag. Under it, in
 // cyan, the hover: what a click at the pointer would select (see hover.js).
 // A lanelet (a relation picked in View mode) shows as its bounds over a tint
-// of its surface.
+// of its surface. Any other relation (a traffic light's regulatory element,
+// picked in the Selection tab) has no geometry in the stream, so it shows as
+// its members: the light, the stop line, the lanes of a right of way. Which
+// members those are comes from the tab's `describe` (`setRelationMembers`).
+// Members draw in red over a dark edge, wider than the yellow selection:
+// yellow is hard to find on a point cloud or a busy map.
 import * as THREE from "three";
 import { store } from "../store.js";
 import { overlayRoot } from "../scene.js";
 import { selection } from "../selection.js";
-import { SELECT_COLOR, HOVER_COLOR } from "./style.js";
+import { SELECT_COLOR, HOVER_COLOR, MEMBER_COLOR, MEMBER_EDGE_COLOR } from "./style.js";
 import { screenLines } from "./screenlines.js";
 import { laneletTriangles } from "./lanelets.js";
 
@@ -46,7 +51,22 @@ const fillMesh = (color, opacity, renderOrder) => {
 };
 const fill = fillMesh(SELECT_COLOR, 0.22, 1000);
 const hoverFill = fillMesh(HOVER_COLOR, 0.14, 999);
+// A selected relation's members: a dark edge, then red lines, dots and tint.
+const memberEdge = screenLines({ color: MEMBER_EDGE_COLOR, widthPx: 9, opacity: 0.6, renderOrder: 1005 });
+const memberLines = screenLines({ color: MEMBER_COLOR, widthPx: 5, opacity: 1, renderOrder: 1006 });
+const memberDots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
+  color: MEMBER_COLOR, size: 13, sizeAttenuation: false, depthTest: false, transparent: true,
+}));
+memberDots.renderOrder = 1007;
+memberDots.frustumCulled = false;
+overlayRoot.add(memberEdge);
+overlayRoot.add(memberLines);
+overlayRoot.add(memberDots);
+const memberFill = fillMesh(MEMBER_COLOR, 0.32, 1000);
 let hover = null; // { type: "node" | "way" | "relation", id }
+// Members of relations that are not in the stream: relation token -> [token].
+let relationMembers = new Map();
+let stats = { segments: 0, dots: 0, triangles: 0, members: { segments: 0, dots: 0, triangles: 0 } };
 
 // Separate flags: the hover changes often, the selection can be 20k nodes.
 let dirty = true;
@@ -89,8 +109,14 @@ function rebuildSelection() {
     if (f) wayPairs(f.pos, seg);
   }
   const tri = [];
-  for (const rid of selection.relations) relationOutline(rid, seg, tri);
   const pts = [];
+  const member = { seg: [], tri: [], pts: [] };
+  for (const rid of selection.relations) {
+    const f = store.features.get(rid);
+    // A lanelet is drawn as itself (yellow); any other relation as its members (red).
+    if (f && f.kind === "lanelet") relationOutline(rid, seg, tri, pts);
+    else relationOutline(rid, member.seg, member.tri, member.pts);
+  }
   if (selection.hasEditable()) {
     for (const id of selection.effectiveNodeIds()) {
       const rec = store.node(id);
@@ -100,18 +126,58 @@ function rebuildSelection() {
   lines.setPairs(seg);
   setPositions(dots, pts);
   setPositions(fill, tri);
+  memberEdge.setPairs(member.seg);
+  memberLines.setPairs(member.seg);
+  setPositions(memberDots, member.pts);
+  setPositions(memberFill, member.tri);
+  stats = { segments: seg.length / 6, dots: pts.length / 3, triangles: tri.length / 9,
+            members: { segments: member.seg.length / 6, dots: member.pts.length / 3,
+                       triangles: member.tri.length / 9 } };
 }
 
-/** A lanelet's bounds (as line pairs) and surface (as triangles); other relations have no geometry here. */
-function relationOutline(id, seg, tri) {
+/**
+ * A lanelet's bounds (as line pairs) and surface (as triangles). Any other
+ * relation draws its members, as far as they are known and streamed; a
+ * member relation is drawn only if it is a lanelet, so nothing recurses.
+ */
+function relationOutline(id, seg, tri, pts, nested = false) {
   const f = store.features.get(id);
-  if (!f || f.kind !== "lanelet") return;
-  for (const wid of [f.lanelet.left, f.lanelet.right]) {
-    const w = store.features.get(wid);
-    if (w) wayPairs(w.pos, seg);
+  if (f && f.kind === "lanelet") {
+    for (const wid of [f.lanelet.left, f.lanelet.right]) {
+      const w = store.features.get(wid);
+      if (w) wayPairs(w.pos, seg);
+    }
+    const t = laneletTriangles(f);
+    if (t) for (const v of t) tri.push(v);
+    return;
   }
-  const t = laneletTriangles(f);
-  if (t) for (const v of t) tri.push(v);
+  if (nested) return;
+  for (const token of relationMembers.get(id) || []) {
+    if (token.startsWith("way/")) {
+      const w = store.features.get(token);
+      if (w && w.kind === "line") wayPairs(w.pos, seg);
+    } else if (token.startsWith("node/")) {
+      const rec = pts && store.node(Number(token.slice(5)));
+      if (rec) pts.push(rec.x, rec.y, rec.z);
+    } else if (token.startsWith("relation/")) {
+      relationOutline(token, seg, tri, pts, true);
+    }
+  }
+}
+
+/**
+ * What the Selection tab learnt about relations: token -> member tokens.
+ * Replaces what was known before (only the described relations matter).
+ */
+export function setRelationMembers(map) {
+  relationMembers = new Map(map);
+  dirty = true;
+  hoverDirty = true;
+}
+
+/** What the selection highlight draws now (for the tests). */
+export function highlightStats() {
+  return { ...stats, members: { ...stats.members } };
 }
 
 function rebuildHover() {
@@ -122,7 +188,7 @@ function rebuildHover() {
     const f = store.features.get(hover.id);
     if (f) wayPairs(f.pos, hSeg);
   } else if (hover && hover.type === "relation") {
-    relationOutline(hover.id, hSeg, hTri);
+    relationOutline(hover.id, hSeg, hTri, hPts);
   } else if (hover) {
     const rec = store.node(hover.id);
     if (rec) hPts.push(rec.x, rec.y, rec.z);
@@ -158,4 +224,5 @@ export function setHighlightVisible(on) {
   hoverDot.visible = !!on;
   fill.visible = !!on;
   hoverFill.visible = !!on;
+  for (const m of [memberEdge, memberLines, memberDots, memberFill]) m.visible = !!on;
 }

@@ -479,6 +479,172 @@ try {
   t.check("once JOSM sends the map, editing works again", await v.evaluate("window.__ll2test.edit().on"));
   await v.key("e");
 
+  // ---- changing tag values (JOSM's map, Edit mode) ------------------------------------------------------------
+  const JOSM_TAGS = {
+    "way/10": { type: "line_thin", subtype: "dashed", lane_change: "yes" },
+    "way/11": { type: "line_thin", subtype: "solid", lane_change: "both" },
+  };
+  let refuse = null;
+  v.reply = (cmd) => {
+    const sets = (cmd.ops || []).filter((o) => o.op === "set_tag");
+    if (sets.length) {
+      if (refuse) return { ok: false, message: refuse };
+      for (const o of sets) JOSM_TAGS[o.id][o.key] = o.value;
+      return { ok: true, message: `Applied ${sets.length} change(s)` };
+    }
+    const d = (cmd.ops || []).find((o) => o.op === "describe");
+    if (!d) return { ok: true, message: "ok" };
+    return { ok: true, message: "described", details: d.ids.map((id) => ({
+      id, tags: { ...(JOSM_TAGS[id] || {}) }, nodes: 2, memberships: [] })) };
+  };
+  const bodyText = () => v.evaluate("document.getElementById('inspectBody').textContent");
+  const typeText = async (text) => {
+    await v.evaluate("document.activeElement.select()");
+    await v.cdp("Input.insertText", { text });
+    await sleep(80);
+  };
+  const editCell = async (key) => {
+    const sel = `#inspectBody td.editable[data-key="${key}"]`;
+    await waitFor(() => v.evaluate(`!!document.querySelector(${JSON.stringify(sel)})`));
+    await clickEl(sel);
+  };
+  await clickEl('#sidePanel .tabs [data-tab="inspect"]');
+  await v.key("Escape");
+  const pickAt = async (p) => {
+    const xy = await v.reveal(p);
+    return { xy, pick: await v.evaluate(`window.__ll2test.pick(${xy[0]}, ${xy[1]})`),
+             el: await v.evaluate(`document.elementFromPoint(${xy[0]}, ${xy[1]})?.tagName`) };
+  };
+  let probe = await pickAt([20, 0, Z]);
+  await v.click(probe.xy[0], probe.xy[1]);
+  t.check("in View mode JOSM's values are shown but not editable",
+    await waitFor(async () => (await insp()).tokens.join() === "way/10" && (await insp()).source === "josm"
+      && !(await insp()).loading)
+    && !(await v.evaluate("!!document.querySelector('#inspectBody td.editable')"))
+    && (await bodyText()).includes("Values can be changed in Edit mode"),
+    JSON.stringify(probe) + " " + await bodyText());
+  await v.key("e");
+  t.check("in Edit mode every value is",
+    await waitFor(() => v.evaluate("document.querySelectorAll('#inspectBody td.editable').length === 3")),
+    await bodyText());
+  v.commands.length = 0;
+  await editCell("lane_change");
+  t.check("a click turns the value into a field, focused and filled in",
+    (await v.evaluate("window.__ll2inspect.editing()"))?.key === "lane_change"
+    && (await v.evaluate("document.activeElement.classList.contains('tagInput') && document.activeElement.value")) === "yes");
+  await typeText("no");
+  await v.key("e");
+  t.check("typing an E into the field does not leave Edit mode", await v.evaluate("window.__ll2test.edit().on"));
+  await typeText("no");
+  await v.key("Enter");
+  t.check("Enter sends one set_tag to JOSM",
+    await waitFor(() => v.ops("set_tag").length === 1)
+    && JSON.stringify(v.ops("set_tag")) === JSON.stringify([{ op: "set_tag", id: "way/10", key: "lane_change", value: "no" }]),
+    JSON.stringify(v.ops("set_tag")));
+  t.check("and the tab shows JOSM's new value",
+    await waitFor(async () => (await insp()).details["way/10"]?.tags.lane_change === "no" && !(await insp()).loading),
+    JSON.stringify((await insp()).details));
+  await editCell("lane_change");
+  await typeText("zzz");
+  await v.key("Escape");
+  t.check("Esc cancels: nothing sent, the selection stays",
+    v.ops("set_tag").length === 1 && !(await v.evaluate("window.__ll2inspect.editing()"))
+    && (await vsel()).ways.join() === "way/10", JSON.stringify(await vsel()));
+  await editCell("lane_change");
+  await typeText("");
+  await v.key("Enter");
+  const emptyToast = await v.evaluate("window.__ll2test.toast()");
+  t.check("an empty value is refused, not sent as a deletion",
+    v.ops("set_tag").length === 1 && emptyToast && emptyToast.text.includes("empty"), JSON.stringify(emptyToast));
+  await editCell("subtype");
+  await typeText("solid_solid");
+  await clickEl("#inspectSummary");
+  t.check("leaving the field applies it too",
+    await waitFor(() => v.ops("set_tag").some((o) => o.key === "subtype" && o.value === "solid_solid")),
+    JSON.stringify(v.ops("set_tag")));
+  probe = await pickAt([40, 30, Z]);
+  await v.click(probe.xy[0], probe.xy[1], { modifiers: ["shift"] });
+  t.check("two ways selected",
+    await waitFor(async () => (await insp()).tokens.length === 2 && !(await insp()).loading),
+    JSON.stringify(probe) + " " + JSON.stringify(await vsel()));
+  v.commands.length = 0;
+  await editCell("lane_change");
+  t.check("a value they disagree on starts empty", (await v.evaluate("document.activeElement.value")) === "");
+  await typeText("left");
+  await v.key("Enter");
+  t.check("and is set on both, in one command (one undo step)",
+    await waitFor(() => v.ops("set_tag").length === 2)
+    && v.commands.filter((c) => (c.ops || []).some((o) => o.op === "set_tag")).length === 1
+    && JSON.stringify(v.ops("set_tag").map((o) => o.id).sort()) === JSON.stringify(["way/10", "way/11"]),
+    JSON.stringify(v.commands));
+  refuse = "The edit layer is hidden in JOSM; show it to edit from the 3D viewer";
+  await editCell("type");
+  await typeText("line_thick");
+  await v.key("Enter");
+  t.check("JOSM's refusal shows",
+    await waitFor(async () => ((await v.evaluate("window.__ll2test.toast()"))?.text || "").includes("hidden")));
+  t.check("and the old value stays", (await insp()).details["way/10"].tags.type === "line_thin");
+  refuse = null;
+  await v.key("e");
+  t.check("leaving Edit mode takes the fields away",
+    await waitFor(() => v.evaluate("!document.querySelector('#inspectBody td.editable')")));
+  await v.key("Escape");
+
+  // ---- a selected relation shows its members on the map --------------------------------------------------------
+  const light = { id: "way/30", kind: "line", tags: { type: "traffic_light", subtype: "red_yellow_green" },
+                  pts: [70, 50, Z + 3, 74, 50, Z + 3], nodes: [3001, 3002] };
+  v.sendScene({ type: "snapshot", anchor: { lat: 49.0, lon: 8.4 }, features: [...features, lane, light] });
+  await waitFor(() => v.evaluate("window.__ll2test.lanelets().count === 1").catch(() => false));
+  const REL = {
+    "way/10": { id: "way/10", tags: { type: "stop_line" }, nodes: 3, memberships: [
+      { id: "relation/20", role: "ref_line", tags: { type: "regulatory_element", subtype: "traffic_light" } },
+      { id: "relation/21", role: "ref_line", tags: { type: "regulatory_element", subtype: "right_of_way" } }] },
+    "relation/20": { id: "relation/20", tags: { type: "regulatory_element", subtype: "traffic_light" }, memberships: [],
+      members: [{ id: "way/30", role: "refers", tags: light.tags }, { id: "way/10", role: "ref_line", tags: {} },
+                { id: "way/99", role: "refers", tags: {} }] },
+    "relation/21": { id: "relation/21", tags: { type: "regulatory_element", subtype: "right_of_way" }, memberships: [],
+      members: [{ id: "relation/7", role: "right_of_way", tags: { type: "lanelet" } },
+                { id: "node/3001", role: "refers", tags: {} }] },
+  };
+  v.reply = (cmd) => {
+    const d = (cmd.ops || []).find((o) => o.op === "describe");
+    if (!d) return { ok: true, message: "ok" };
+    return { ok: true, message: "described", details: d.ids.map((id) => REL[id] || { id, tags: {}, memberships: [] }) };
+  };
+  const hl = () => v.evaluate("window.__ll2test.highlight()");
+  at = await v.reveal([20, 0, Z]);
+  await v.click(at[0], at[1]);
+  await waitFor(async () => (await bodyText()).includes("relation/20"));
+  t.check("a selected way highlights itself, in yellow", (await hl()).segments === 2 && (await hl()).members.segments === 0,
+    JSON.stringify(await hl()));
+  await clickEl('#inspectBody .memberRow[data-token="relation/20"]');
+  t.check("a traffic light rule highlights its light and its stop line, as members",
+    await waitFor(async () => (await vsel()).relations.join() === "relation/20" && (await hl()).members.segments === 3),
+    JSON.stringify(await hl()));
+  t.check("in the member colour, not the selection's", (await hl()).segments === 0, JSON.stringify(await hl()));
+  t.check("(a member outside the stream is simply left out)", (await hl()).members.triangles === 0, JSON.stringify(await hl()));
+  {
+    const mid = await v.reveal([72, 50, Z + 3]);
+    await frames(3);
+    const px = await v.pixel(mid[0], mid[1]);
+    t.check("on screen the light is red", px[0] > 180 && px[1] < 90 && px[2] < 110, JSON.stringify(px));
+  }
+  await v.shot("ui_regelem_members.png");
+  await v.key("Escape");
+  at = await v.reveal([20, 0, Z]);
+  await v.click(at[0], at[1]);
+  await waitFor(async () => (await bodyText()).includes("relation/21"));
+  await clickEl('#inspectBody .memberRow[data-token="relation/21"]');
+  t.check("a right of way highlights its lanelet (bounds and surface) and its node",
+    await waitFor(async () => { const h = (await hl()).members; return h.triangles > 0 && h.segments === 3 && h.dots === 1; }),
+    JSON.stringify(await hl()));
+  await v.key("Escape");
+  t.check("deselecting clears it", JSON.stringify((await hl()).members) === JSON.stringify({ segments: 0, dots: 0, triangles: 0 }),
+    JSON.stringify(await hl()));
+  v.reply = () => ({ ok: true, message: "ok" });
+  v.sendScene({ type: "snapshot", anchor: { lat: 49.0, lon: 8.4 }, features });
+  await clickEl('#sidePanel .tabs [data-tab="layers"]');
+
   // ---- a narrow window (the viewer next to JOSM) ---------------------------------------------------------------
   await v.cdp("Emulation.setDeviceMetricsOverride", { width: 700, height: 700, deviceScaleFactor: 1, mobile: false });
   await frames(4);

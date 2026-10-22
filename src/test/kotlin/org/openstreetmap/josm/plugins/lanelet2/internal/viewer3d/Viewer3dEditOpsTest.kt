@@ -303,11 +303,21 @@ class Viewer3dEditOpsTest {
         assertEquals(listOf(ll to null, re to ll), line.memberships.map { it.id to it.via })
         assertEquals("regulatory_element", line.memberships[1].role)
         assertEquals("traffic_light", line.memberships[1].tags["subtype"])
-        assertEquals(listOf(re to "ref_line"), stopLine.memberships.map { it.id to it.role }, "no via for a non-bound")
+        // A stop line bounds no lane, so no rules come via a lanelet; but its
+        // own regulatory element leads to the lane it controls.
+        assertEquals(listOf(Triple(re, "ref_line", null), Triple(ll, "regulatory_element", re)),
+            stopLine.memberships.map { Triple(it.id, it.role, it.via) })
+        assertEquals("lanelet", stopLine.memberships[1].tags["type"])
         assertNull(line.members)
         assertEquals(listOf("way/${left.uniqueId}" to "left", "way/${right.uniqueId}" to "right", re to "regulatory_element"),
             laneletInfo.members!!.map { it.id to it.role })
         assertEquals(listOf("traffic_light", "stop_line"), light20.members!!.map { it.tags["type"] })
+        assertEquals(listOf(ll to "regulatory_element"), light20.memberships.map { it.id to it.role },
+            "the regulatory element itself lists its lane directly")
+        val (lightWay) = apply(command("""{"type":"command","id":"d2","ops":[{"op":"describe",
+            "ids":["way/${light.uniqueId}"]}]}"""))!!.details!!
+        assertEquals(listOf(Triple(re, "refers", null), Triple(ll, "regulatory_element", re)),
+            lightWay.memberships.map { Triple(it.id, it.role, it.via) }, "a light leads to the lane it controls")
         val json = Viewer3dJson.encode(r)
         assertTrue(json.contains(""""id":"$re","role":"regulatory_element","tags":{"subtype":"traffic_light","type":"regulatory_element"},"via":"$ll"}"""), json)
         assertTrue(json.contains(""""members":[{"id":"way/${light.uniqueId}","role":"refers","tags":{"type":"traffic_light"}}"""), json)

@@ -178,7 +178,10 @@ object Viewer3dCommands {
      * A lanelet's traffic lights, signs and right-of-way rules are members of
      * the lanelet (role `regulatory_element`), not of its bounds, so a way that
      * bounds a lanelet also lists those, marked `via` the lanelet, after its
-     * direct memberships. A relation lists its own [PrimitiveInfo.members].
+     * direct memberships. The other way round, a node or way that a regulatory
+     * element names (the light itself, its stop line, a sign) lists the
+     * lanelets using that regulatory element, marked `via` it. A relation
+     * lists its own [PrimitiveInfo.members].
      */
     fun describe(ds: DataSet, ids: List<String>): List<PrimitiveInfo> =
         ids.distinct().take(Viewer3dConstants.MAX_DESCRIBE).map { id ->
@@ -197,6 +200,15 @@ object Viewer3dCommands {
                         val re = m.member
                         if (m.role != "regulatory_element" || re !is Relation || re.isDeleted) continue
                         via.add(Membership(tokenOf(re), m.role, re.keys.toSortedMap(), tokenOf(r)))
+                    }
+                }
+                // The lanes a traffic light (or its stop line, a sign) controls.
+                if (p !is Relation && r.get("type") == "regulatory_element") {
+                    for (user in r.referrers) {
+                        if (user !is Relation || user.isDeleted) continue
+                        for (m in user.members) {
+                            if (m.member === r) via.add(Membership(tokenOf(user), m.role, user.keys.toSortedMap(), tokenOf(r)))
+                        }
                     }
                 }
             }

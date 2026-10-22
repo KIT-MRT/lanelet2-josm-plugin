@@ -455,6 +455,11 @@ button.full { width: 100%; }
 .tagTable th { width: 42%; color: var(--muted); font-weight: 500; }
 .tagTable td { color: var(--text-strong); }
 .tagTable .different { font-style: italic; color: var(--warn); cursor: help; }
+.tagTable td.editable { cursor: text; border-radius: 3px; }
+.tagTable td.editable:hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--border); }
+.tagTable td.editing { padding: 1px 2px; }
+.tagTable .tagInput { width: 100%; box-sizing: border-box; font: inherit; color: var(--text-strong);
+  background: var(--bg, transparent); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 3px; }
 .memberRow {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; width: 100%;
   padding: 3px 4px; text-align: left; font: inherit; color: var(--text); background: none;

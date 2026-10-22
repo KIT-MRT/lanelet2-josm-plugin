@@ -25,6 +25,10 @@ export const VIEWPORT_COLOR = 0x9aa3af; // gray outline of the JOSM viewport on 
 export const EDIT_COLOR = 0x46c46a;
 export const SELECT_COLOR = 0xffd23f;
 export const HOVER_COLOR = 0x3ff0ff; // what a click at the pointer would select
+// Members of a selected relation (a traffic light rule's light and stop line):
+// red over a dark edge, so they stand out on point clouds where yellow drowns.
+export const MEMBER_COLOR = 0xff2440;
+export const MEMBER_EDGE_COLOR = 0x000000;
 export const PIVOT_COLOR = 0x4fc3f7;
 export const ZOOM_COLOR = 0x9dffc0;
 

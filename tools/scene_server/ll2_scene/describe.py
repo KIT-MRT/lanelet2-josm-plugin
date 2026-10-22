@@ -19,8 +19,11 @@ binding versions (a missing one silently lost every traffic light).
 
 A traffic light belongs to a *lanelet* (its `regulatory_element` member), not
 to the lane's bounds, so for a line the regulatory elements of the lanelets
-it bounds come along too, marked `via` that lanelet. A relation (a lanelet, a
-regulatory element) also lists its `members`.
+it bounds come along too, marked `via` that lanelet. The other way round, a
+line or point that a regulatory element names (the light itself, its stop
+line, a sign) lists the lanelets that use that regulatory element, marked
+`via` it, and a regulatory element lists them as its own memberships. A
+relation (a lanelet, a regulatory element) also lists its `members`.
 
 Everything is looked up defensively: the lanelet2 bindings differ a little
 between versions in which layer offers which `findUsages`, and a missing
@@ -151,6 +154,57 @@ def _regelem_index(lanelet_map):
     return index
 
 
+_USERS_INDEX = {}  # id(lanelet map) -> {regulatory element id: [lanelet or area]}
+
+
+def _regelem_users(lanelet_map):
+    """The lanelets and areas that use each regulatory element, by its id.
+
+    Built from the lanelets' own `regulatoryElements` once per map, like
+    `_regelem_index`, rather than trusting a `findUsages` overload.
+    """
+    key = id(lanelet_map)
+    users = _USERS_INDEX.get(key)
+    if users is not None:
+        return users
+    users = {}
+    for name in ("laneletLayer", "areaLayer"):
+        layer = getattr(lanelet_map, name, None)
+        try:
+            items = list(layer) if layer is not None else []
+        except Exception:  # noqa: BLE001 -- a layer that does not iterate
+            items = []
+        for item in items:
+            for re_ in _lanelet_regelems(item):
+                rid = _id(re_)
+                if rid is not None:
+                    users.setdefault(rid, []).append(item)
+    _USERS_INDEX[key] = users
+    return users
+
+
+def _users_of(lanelet_map, regelem_id, via=None):
+    """Memberships in the lanelets / areas using a regulatory element."""
+    out = []
+    for user in _regelem_users(lanelet_map).get(regelem_id, []):
+        default = "lanelet" if hasattr(user, "leftBound") else "multipolygon"
+        entry = ("relation/%d" % user.id, "regulatory_element", _relation_tags(user, default))
+        out.append(entry + ((via,) if via else ()))
+    return out
+
+
+def _with_users(lanelet_map, memberships):
+    """Direct regulatory element memberships plus the lanes using each, `via` it."""
+    out = list(memberships)
+    for m in memberships:
+        if len(m) == 3 and m[2].get("type") == "regulatory_element":
+            rid = int(m[0].partition("/")[2])
+            for entry in _users_of(lanelet_map, rid, via=m[0]):
+                if entry not in out:
+                    out.append(entry)
+    return out
+
+
 def _regelem_memberships(lanelet_map, prim, pid):
     out = []
     seen = set()
@@ -252,17 +306,19 @@ def describe(lanelet_map, ids):
                     entry["nodes"] = len(prim)
                 except TypeError:
                     pass
-                memberships = _line_memberships(lanelet_map, prim, pid)
+                memberships = _with_users(lanelet_map, _line_memberships(lanelet_map, prim, pid))
         elif kind == "node":
             prim = _get(lanelet_map.pointLayer, pid)
             if prim is not None:
                 entry["tags"] = _sorted(_attrs(prim))
-                memberships = _regelem_memberships(lanelet_map, prim, pid)
+                memberships = _with_users(lanelet_map, _regelem_memberships(lanelet_map, prim, pid))
         elif kind == "relation":
             prim, default_type = _find_relation(lanelet_map, pid)
             if prim is not None:
                 entry["tags"] = _relation_tags(prim, default_type)
                 memberships = _regelem_memberships(lanelet_map, prim, pid)
+                if default_type == "regulatory_element":
+                    memberships += _users_of(lanelet_map, pid)
                 members = _relation_members(prim)
         else:
             prim = None
