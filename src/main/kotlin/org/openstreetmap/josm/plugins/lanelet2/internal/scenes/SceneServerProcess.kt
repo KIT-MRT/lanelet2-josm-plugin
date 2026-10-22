@@ -22,6 +22,8 @@ data class LaunchPlan(
     val waitForMapS: Int = SceneLaunch.WAIT_FOR_MAP_S,
     /** City: read every scene from the dataset, not the local index cache (which is rewritten). */
     val rescan: Boolean = false,
+    /** Decoded frames kept on disk, all scenes together (`--cache-limit-gb`); null: the server's default. */
+    val cacheLimitGb: Int? = null,
 )
 
 /** The `python -m ll2_scene` command for a [LaunchPlan]; pure, so it is tested as such. */
@@ -42,7 +44,32 @@ object SceneLaunch {
             "--ingest-port", plan.ingestPort.toString(), "--http-port", plan.httpPort.toString()))
         if (plan.useJosmMap) addAll(listOf("--no-map", "--wait-for-map", plan.waitForMapS.toString()))
         if (plan.rescan && plan.mode == SceneMode.CITY) add("--rescan")
+        plan.cacheLimitGb?.let { addAll(listOf("--cache-limit-gb", it.toString())) }
     }
+
+    /** Where the scene server caches decoded frames (its default_cache_dir). */
+    fun cacheDir(
+        xdgCacheHome: String? = System.getenv("XDG_CACHE_HOME"),
+        home: String? = System.getProperty("user.home"),
+    ): File {
+        val base = xdgCacheHome?.takeIf { it.isNotBlank() }?.let(::File) ?: File(home ?: ".", ".cache")
+        return File(File(base, "josm-lanelet2"), "scene-server")
+    }
+
+    /** Free space on the disk holding [dir] (or its nearest existing parent). */
+    fun freeBytes(dir: File): Long {
+        var d: File? = dir.absoluteFile
+        while (d != null && !d.exists()) d = d.parentFile
+        return d?.usableSpace ?: 0L
+    }
+
+    /**
+     * The frame cache when nobody set one: 50 GB on a disk with 200 GB free,
+     * else the server's 10. A 400-frame drive decodes to ~5.6 GB, so 10 GB
+     * keeps one or two warm and a rebuild of an evicted one is cold again
+     * (~13 s of CPU a frame over the network mount).
+     */
+    fun defaultCacheLimitGb(freeBytes: Long): Int = if (freeBytes >= 200L * 1000 * 1000 * 1000) 50 else 10
 
     /** [python] with [args], through the backends' env script when one is set (as [BackendRunner] does). */
     fun wrap(python: String, args: List<String>, envScript: String?): List<String> {

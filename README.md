@@ -259,7 +259,10 @@ is then placed on JOSM's map, which stays editable; in city mode the map also
 picks the city. The window shows the scene server's log; it stops with JOSM.
 New scenes in the dataset are found by the next Start; **Rescan everything**
 re-reads every scene (about 17 s on a network mount), for one that was
-unreadable or still being copied when it was first indexed.
+unreadable or still being copied when it was first indexed. *Frame cache*
+sets how much decoded data stays on disk for all scenes together (empty: 50 GB
+when the disk has 200 GB free, else 10); a scene that was dropped from it
+decodes cold again, seconds per frame.
 
 **Without JOSM** (setup once: `tools/scene_server/setup.sh`, which needs `uv`
 and a `kitscenes` checkout next to this repository):

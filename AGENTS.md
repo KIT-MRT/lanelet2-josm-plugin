@@ -403,7 +403,11 @@ the shipped `server.py` stays stdlib-only.
   `PYTHONPATH`, output to `plugins/lanelet2/scene_server.log` (never an
   unread pipe: it logs a lot), worker processes stopped with it and on JOSM
   exit. A scene server JOSM did not start on the same port is named and only
-  stopped when the user agrees.
+  stopped when the user agrees. JOSM passes `--cache-limit-gb` from
+  `scenes.cache_limit_gb`, or by default 50 when the cache's disk has 200 GB
+  free, else 10 (`SceneLaunch.defaultCacheLimitGb`): a 400-frame drive is ~5.6
+  GB decoded, so 10 kept one or two warm, and an evicted scene's rebuild is
+  cold (~13 s of CPU a frame).
 - **Its Python is the backends' virtualenv** plus `SceneSetup.PIP_PACKAGES`
   and kitscenes from the GitHub archive at `KITSCENES_COMMIT`, `--no-deps`
   (no `git` needed; its matplotlib/huggingface_hub are never imported here).

@@ -84,6 +84,19 @@ class SceneServerTest {
     }
 
     @Test
+    fun theFrameCacheLimitIsPassedAndDefaultsByFreeSpace() {
+        val args = SceneLaunch.arguments(plan(File("/data"), SceneMode.CITY, josm = false).copy(cacheLimitGb = 50))
+        assertEquals(listOf("--cache-limit-gb", "50"), args.takeLast(2))
+        assertFalse("--cache-limit-gb" in SceneLaunch.arguments(plan(File("/data"), SceneMode.CITY, josm = false)),
+            "none set: the server's own default")
+        assertEquals(50, SceneLaunch.defaultCacheLimitGb(363L * 1000 * 1000 * 1000))
+        assertEquals(10, SceneLaunch.defaultCacheLimitGb(120L * 1000 * 1000 * 1000), "a fuller disk keeps 10")
+        assertEquals(File("/x/josm-lanelet2/scene-server"), SceneLaunch.cacheDir(xdgCacheHome = "/x", home = "/h"))
+        assertEquals(File("/h/.cache/josm-lanelet2/scene-server"), SceneLaunch.cacheDir(xdgCacheHome = null, home = "/h"))
+        assertTrue(SceneLaunch.freeBytes(File("/no/such/dir/below/root")) > 0, "measured on the nearest existing parent")
+    }
+
+    @Test
     fun withoutJosmsMapASceneBringsItsOwn() {
         val args = SceneLaunch.arguments(plan(File("/data/val/abc"), SceneMode.SCENE, josm = false))
         assertEquals(listOf("-m", "ll2_scene", "--scene", "/data/val/abc"), args.take(4))

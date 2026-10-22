@@ -42,6 +42,8 @@ object SceneServerWindow {
     const val KEY_ROOT = "scenes.root"
     const val KEY_USE_JOSM_MAP = "scenes.use_josm_map"
     const val KEY_HTTP_PORT = "scenes.http_port"
+    /** Frame cache limit in GB; 0 or unset: automatic (SceneLaunch.defaultCacheLimitGb). */
+    const val KEY_CACHE_GB = "scenes.cache_limit_gb"
     const val DEFAULT_HTTP_PORT = 8767
 
     val server: SceneServerProcess by lazy { SceneServerProcess() }
@@ -68,6 +70,12 @@ object SceneServerWindow {
         val josmBox = JCheckBox("Place it on the map open in JOSM", LaneletSettings.getBoolean(KEY_USE_JOSM_MAP, true))
         josmBox.toolTipText = "<html>JOSM keeps the map (editable), the scene server adopts its position,<br>" +
             "and in city mode the map picks the city. Turns 3D streaming on.</html>"
+        val autoCacheGb = SceneLaunch.defaultCacheLimitGb(SceneLaunch.freeBytes(SceneLaunch.cacheDir()))
+        val cacheField = JTextField(LaneletSettings.getInt(KEY_CACHE_GB, 0).takeIf { it > 0 }?.toString() ?: "", 5)
+        cacheField.toolTipText = "<html>Decoded frames kept on disk, all scenes together; the least recently used<br>" +
+            "go beyond this. A 400-frame drive is ~5.6 GB, and one that was dropped decodes<br>" +
+            "cold again. Empty: $autoCacheGb GB (50 when the disk has 200 GB free, else 10).</html>"
+        val cacheHint = JLabel("GB   (empty: $autoCacheGb GB, from the free disk space)")
         val setupLabel = JLabel()
         val serverLabel = JLabel()
         val log = JTextArea(16, 80).apply {
@@ -199,10 +207,11 @@ object SceneServerWindow {
                 return
             }
             SwingUtilities.invokeLater { installLog.setLength(0) }
+            val cacheGb = LaneletSettings.getInt(KEY_CACHE_GB, 0).takeIf { it > 0 } ?: autoCacheGb
             val plan = LaunchPlan(
                 root = root, mode = SceneLaunch.detectMode(root), useJosmMap = useJosmMap,
                 viewerHost = host, viewerPort = http, ingestPort = ingest, httpPort = port,
-                rescan = rescan,
+                rescan = rescan, cacheLimitGb = cacheGb,
             )
             val (ok, msg) = server.start(plan, python, extractDir, BackendRunner.resolveEnvScript())
             if (!ok) fail(msg)
@@ -227,6 +236,7 @@ object SceneServerWindow {
             val useJosmMap = josmBox.isSelected && hasJosmMap()
             LaneletSettings.put(KEY_ROOT, root.path)
             LaneletSettings.putBoolean(KEY_USE_JOSM_MAP, josmBox.isSelected)
+            LaneletSettings.putInt(KEY_CACHE_GB, cacheField.text.trim().toIntOrNull()?.takeIf { it > 0 } ?: 0)
             busy = true
             refresh()
             Thread {
@@ -262,8 +272,9 @@ object SceneServerWindow {
         row(0, "KITScenes folder:", rootField, browseBtn)
         row(1, null, modeLabel)
         row(2, null, josmBox)
-        row(3, null, setupLabel)
-        row(4, null, serverLabel)
+        row(3, "Frame cache:", JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { add(cacheField); add(cacheHint) })
+        row(4, null, setupLabel)
+        row(5, null, serverLabel)
         form.border = BorderFactory.createEmptyBorder(8, 8, 0, 8)
 
         val buttons = JPanel(BorderLayout())
