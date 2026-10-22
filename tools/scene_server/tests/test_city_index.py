@@ -199,7 +199,11 @@ class IndexCacheTest(unittest.TestCase):
         try:
             index = self.index()
             self.assertEqual(["bbbb-2"], sorted(index.by_id))
-            self.assertIn("PermissionError", index.unreadable[0][1])
+            # Unknown whether it is a scene at all: unreachable, not unreadable.
+            self.assertEqual([], index.unreadable)
+            self.assertTrue(any("could not reach 1 folder" in m for m in self.logs), self.logs)
+            self.assertEqual(1, len(IndexCache(self.cache, index.root).load()),
+                             "the scene that was read is cached all the same")
         finally:
             poses.chmod(0o644)
         index = self.index()
@@ -218,6 +222,40 @@ class IndexCacheTest(unittest.TestCase):
         index = self.index()
         self.assertEqual(2, index.read_count)
         self.assertEqual(0, self.index().read_count)
+
+    def test_an_unreachable_dataset_leaves_the_cache_alone(self):
+        """A network mount that is down is not an empty dataset."""
+        self.index()
+        before = IndexCache(self.cache, self.root.resolve() / "data").path.read_bytes()
+        gone = Path(self.tmp.name) / "unmounted"
+        (self.root).rename(gone)
+        self.root.symlink_to(Path(self.tmp.name) / "nowhere")   # a mount point whose target is missing
+        try:
+            with self.assertRaises(ValueError):
+                self.index()
+        finally:
+            self.root.unlink()
+            gone.rename(self.root)
+        self.assertEqual(before, IndexCache(self.cache, self.root.resolve() / "data").path.read_bytes(),
+                         "the cache was rewritten while the dataset was unreachable")
+        self.assertTrue(any("could not reach" in m for m in self.logs), self.logs)
+        self.assertEqual(0, self.index().read_count, "and it still serves the next start")
+
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "needs file permissions")
+    def test_a_split_that_cannot_be_listed_keeps_its_scenes_cached(self):
+        write_scene(self.root, "test", "tttt-1", FRANKFURT, start=(90, 0))
+        index = self.index()
+        self.assertIn("tttt-1", index.by_id)
+        split = self.root / "data" / "test"
+        split.chmod(0)
+        try:
+            index = self.index()
+            self.assertNotIn("tttt-1", index.by_id, "unreachable now")
+        finally:
+            split.chmod(0o755)
+        index = self.index()
+        self.assertEqual(0, index.read_count, "its scene was not dropped from the cache")
+        self.assertIn("tttt-1", index.by_id)
 
     def test_the_dataset_is_never_written(self):
         def snapshot():

@@ -74,11 +74,23 @@ class NotAScene(Exception):
     """A directory without `poses.txt`: not a scene, so look inside it."""
 
 
+class Unreachable(Exception):
+    """`poses.txt` could not be read for another reason than not being there.
+
+    Whether this is a scene at all is unknown (a split folder is named like
+    one, and a mount that is down fails with I/O errors, not "not found"), so
+    it is neither a scene nor a folder to look into: the walk reports it as
+    unreachable, and nothing under it is taken for gone.
+    """
+
+
 def _listing(directory):
-    """(dir names, file names) of one directory, sorted.
+    """(dir names, file names) of one directory, sorted; None if it cannot be listed.
 
     `scandir` knows which entries are directories from the listing itself,
-    so this is one request however many entries there are.
+    so this is one request however many entries there are. A folder that
+    cannot be listed (the network mount is down) is not an empty one: the
+    caller must not take its scenes for gone.
     """
     dirs, files = [], []
     try:
@@ -89,18 +101,19 @@ def _listing(directory):
                 except OSError:
                     continue
     except OSError:
-        return [], []
+        return None
     return sorted(dirs), sorted(files)
 
 
-def scan(root, probe, workers=DEFAULT_WORKERS, max_depth=3):
+def scan(root, probe, workers=DEFAULT_WORKERS, max_depth=3, unlisted=None):
     """Walk the tree in parallel: ([(split, dir, probe result)], [(split, tar)]).
 
     `probe(split, dir)` is called on every directory that could be a scene
     and raises `NotAScene` when there is no `poses.txt`, in which case the
     directory is listed instead (down to `max_depth`). Being a scene and
     reading it are one request, not a check and then a read. See
-    `find_scenes` for which roots work.
+    `find_scenes` for which roots work. Directories that could not be listed
+    are appended to `unlisted`.
     """
     root = _data_root(root)
     found, tars = [], []
@@ -112,6 +125,8 @@ def scan(root, probe, workers=DEFAULT_WORKERS, max_depth=3):
                 return "scene", probe(split, directory)
             except NotAScene:
                 pass
+            except Unreachable:
+                return "list", None
         elif (directory / "poses.txt").is_file():
             return "skip", None    # a scene, but its name could not go in a URL
         if level > max_depth:
@@ -127,6 +142,9 @@ def scan(root, probe, workers=DEFAULT_WORKERS, max_depth=3):
                 kind, value = future.result()
                 if kind == "scene":
                     found.append((split, directory, value))
+                elif kind == "list" and value is None:
+                    if unlisted is not None:
+                        unlisted.append(directory)
                 elif kind == "list":
                     dirs, files = value
                     for name in dirs:
@@ -140,6 +158,12 @@ def scan(root, probe, workers=DEFAULT_WORKERS, max_depth=3):
     tars = sorted((t for t in tars if t[1].with_suffix("") not in extracted),
                   key=lambda t: str(t[1]))
     return found, tars
+
+
+def _under_any(path, folders):
+    """Whether `path` (a string) is one of `folders` or inside one."""
+    p = Path(path)
+    return any(p == f or f in p.parents for f in folders)
 
 
 def find_scenes(root, max_depth=3, workers=DEFAULT_WORKERS):
@@ -172,7 +196,7 @@ def read_scene_files(scene_dir):
     except (ValueError, KeyError) as exc:
         return "error", repr(exc), True
     except OSError as exc:
-        return "error", repr(exc), False
+        raise Unreachable(scene_dir) from exc
     try:
         return "ok", read_origin(scene_dir), poses, read_reference_timestamps(scene_dir, poses)
     except (FileNotFoundError, ValueError, KeyError) as exc:
@@ -322,11 +346,21 @@ class CityIndex:
         self.workers = workers
         self.cache = IndexCache(cache_dir, self.root) if cache_dir else None
         cached = self.cache.load() if (self.cache and not rescan) else {}
-        found, self.unextracted, self.read_count = self._scan(cached)
+        found, self.unextracted, self.read_count, unlisted = self._scan(cached)
         self.cached_count = len(found) - self.read_count
         self._entries = {str(d): entry for _split, d, entry in found}
-        if self.cache and (self.read_count or set(self._entries) != set(cached)):
-            if not self.cache.save(self._entries):
+        # Scenes under a folder that could not be reached are not gone (a network
+        # mount that is down, a permission): their cached entries are kept for
+        # next time, though this index cannot serve them.
+        to_save = dict(self._entries)
+        if unlisted:
+            log("city: could not reach %d folder(s) (%s%s); their scenes are skipped, and kept in the cache"
+                % (len(unlisted), unlisted[0], ", ..." if len(unlisted) > 1 else ""))
+            for key, entry in cached.items():
+                if key not in to_save and _under_any(key, unlisted):
+                    to_save[key] = entry
+        if self.cache and (self.read_count or set(to_save) != set(cached)):
+            if not self.cache.save(to_save):
                 log("city: could not write the index cache %s" % self.cache.path)
         everything, self.unreadable = [], []
         for split, scene_dir, entry in found:
@@ -356,7 +390,7 @@ class CityIndex:
         self.by_id = {s.id: s for s in self.scenes}
 
     def _scan(self, cached):
-        """([(split, dir, entry)], tars, how many scenes were read, not cached)."""
+        """([(split, dir, entry)], tars, scenes read (not cached), folders that could not be listed)."""
         read = []
 
         def probe(_split, scene_dir):
@@ -367,8 +401,9 @@ class CityIndex:
             read.append(1)
             return entry
 
-        found, tars = scan(self.root, probe, workers=self.workers)
-        return found, tars, len(read)
+        unlisted = []
+        found, tars = scan(self.root, probe, workers=self.workers, unlisted=unlisted)
+        return found, tars, len(read), unlisted
 
     def check_in_background(self):
         """Once, after starting from the cache: read every scene afresh.
@@ -385,9 +420,13 @@ class CityIndex:
         def run():
             t0 = time.perf_counter()
             try:
-                found, _tars, _n = self._scan({})
+                found, _tars, _n, unlisted = self._scan({})
             except Exception as exc:  # a check must never take the server down
                 self.log("city: checking the index cache failed (%r)" % exc)
+                return
+            if unlisted:
+                self.log("city: index cache not checked: could not reach %d folder(s) (%s)"
+                         % (len(unlisted), unlisted[0]))
                 return
             fresh = {}
             for _split, d, entry in found:

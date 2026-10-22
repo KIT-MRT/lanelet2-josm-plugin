@@ -564,7 +564,13 @@ the shipped `server.py` stays stdlib-only.
   background check after a cached start (`check_in_background`, log only,
   the running index is not swapped) and `--rescan` (*Rescan everything* in
   the KITScenes window, `LaunchPlan.rescan`, city only) are for. Network errors
-  (`OSError` other than not-found) are never cached. `tests/test_city_index.py`
+  (`OSError` other than not-found) are never cached. **Unreachable is not
+  gone:** a folder `scandir` cannot list, or a `poses.txt` that fails with
+  anything but not-found (a split is named like a scene, and a mount that is
+  down answers with I/O errors), is reported as unreachable; its scenes are
+  skipped for this start but their cached entries are kept, and the
+  background check does not run. Before this, starting with the mount down
+  saved an empty index over the cache. `tests/test_city_index.py`
   holds the parallel and the cached index against a sequential copy of the
   old walk.
 - **Autoware traffic lights and signs** (`autowareLightQuad` in
