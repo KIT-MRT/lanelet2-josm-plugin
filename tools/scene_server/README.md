@@ -25,7 +25,18 @@ viewer shows the refusal and puts the change back.
 
 ## Setup
 
-Needs [uv](https://docs.astral.sh/uv/) and a checkout of the
+**From JOSM nothing of this is needed:** the plugin jar ships `ll2_scene`
+(packed from this directory by `processResources`) and *KITScenes Sensor
+Data…* installs what it needs into the backends' virtualenv: `lanelet2` and
+`numpy<2` from PyPI, `pyarrow==17.0.0`, `scipy<1.15`, `pyproj`, `pillow`,
+`tqdm`, and `kitscenes` from its GitHub archive at a pinned commit with
+`--no-deps` (its matplotlib and huggingface_hub are only used by modules this
+server never imports). PyPI's `lanelet2` works as well as the wheel the
+kitscenes checkout carries. The JOSM launch adds `--no-map --wait-for-map
+180`, so the server waits for JOSM's map, adopts its anchor and, in city mode
+without `--city-name`, serves the city that map is in.
+
+For development, `setup.sh` needs [uv](https://docs.astral.sh/uv/) and a checkout of the
 [kitscenes](https://github.com/KIT-MRT/kitscenes) API next to this repository
 (it carries the `lanelet2` wheel):
 

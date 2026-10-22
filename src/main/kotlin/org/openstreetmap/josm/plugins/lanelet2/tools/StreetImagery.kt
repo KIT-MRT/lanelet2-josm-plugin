@@ -107,9 +107,14 @@ object StreetImagery {
         )
     }
 
-    /** After the 3D viewer's entry in the utilities menu and toolbar. */
+    /**
+     * After the 3D viewer's entry in the utilities menu and toolbar. Anchored
+     * on the viewer's own anchor, registered after it: insertions do not chain
+     * (`ActionRegistry.applyInsertions`), so "after ll2_viewer3d_window", an
+     * inserted id itself, never placed this entry at all.
+     */
     fun registerAll(registry: ActionRegistry = ActionRegistry.INSTANCE) {
         registry.register(slot())
-        registry.insertAfter("ll2_viewer3d_window", listOf(SLOT_ID))
+        registry.insertAfter("hooks.zoom_filter_window", listOf(SLOT_ID))
     }
 }

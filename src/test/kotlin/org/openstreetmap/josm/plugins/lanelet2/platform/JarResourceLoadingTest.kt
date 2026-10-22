@@ -74,6 +74,19 @@ class JarResourceLoadingTest {
     }
 
     @Test
+    fun `the KITScenes scene server ships as a package`() {
+        jarOnlyLoader().use { loader ->
+            for (name in listOf("__main__.py", "city.py", "scene.py", "http.py")) {
+                assertNotNull(
+                    loader.getResource("lanelet2/scene_server/ll2_scene/$name"),
+                    "lanelet2/scene_server/ll2_scene/$name must ship in the plugin jar",
+                )
+            }
+            assertNotNull(loader.getResource("images/lanelet2/kitscenes.svg"))
+        }
+    }
+
+    @Test
     fun `action icons ship under the images prefix ImageProvider searches`() {
         jarOnlyLoader().use { loader ->
             listOf("create_lanelet", "split_way", "routing_graph", "filter_broken", "git_commit").forEach { icon ->

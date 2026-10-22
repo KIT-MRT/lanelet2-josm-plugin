@@ -50,6 +50,28 @@ def probe_viewer_anchor(host, port, timeout=2.0):
     return float(match.group(1)), float(match.group(2))
 
 
+def wait_for_viewer_anchor(host, port, seconds, log, probe=probe_viewer_anchor, sleep=time.sleep,
+                           clock=time.monotonic):
+    """`probe_viewer_anchor`, retried for up to `seconds` while JOSM's map is on its way.
+
+    Started from JOSM, this server comes up while JOSM may still be building
+    its first snapshot (seconds for a city). Adopting the anchor is what puts
+    the scene on JOSM's map, so it is worth waiting for, once, at the start.
+    """
+    anchor = probe(host, port)
+    if anchor or seconds <= 0:
+        return anchor
+    log("waiting up to %.0fs for JOSM's map in the viewer" % seconds)
+    deadline = clock() + seconds
+    while clock() < deadline:
+        sleep(0.5)
+        anchor = probe(host, port)
+        if anchor:
+            return anchor
+    log("no map from JOSM after %.0fs; going on without it" % seconds)
+    return None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Stream a recorded scene into the Lanelet2 3D viewer")
     which = parser.add_mutually_exclusive_group(required=True)
@@ -76,6 +98,9 @@ def main(argv=None):
                         help="city: build every scene's whole-scene cloud into the cache, "
                              "one after the other, then exit. Cold builds take minutes a "
                              "scene; browsing the city afterwards only reads the cache")
+    parser.add_argument("--wait-for-map", type=float, default=0.0, metavar="SECONDS",
+                        help="wait this long for a bridge (JOSM) to stream its map before "
+                             "starting, so its anchor is adopted (default: do not wait)")
     parser.add_argument("--viewer-host", default="127.0.0.1")
     parser.add_argument("--ingest-port", type=int, default=8766, help="the viewer's TCP ingest port")
     parser.add_argument("--viewer-port", type=int, default=8765, help="the viewer's HTTP port")
@@ -122,7 +147,7 @@ def main(argv=None):
         % (source.scene_id, source.frame_count, ",".join(source.lidars), len(source.cameras)))
 
     send_map = not args.no_map
-    existing = probe_viewer_anchor(args.viewer_host, args.viewer_port)
+    existing = wait_for_viewer_anchor(args.viewer_host, args.viewer_port, args.wait_for_map, log)
     if existing:
         source.set_anchor(existing)
         send_map = False
@@ -191,13 +216,36 @@ def main(argv=None):
     return 0
 
 
+def open_city_index(args, anchor, cache_dir, log):
+    """The city index: the named city, else the one JOSM's map (`anchor`) is in.
+
+    A map somewhere this dataset has no scenes falls back to the city with
+    the most scenes; a city named on the command line does not.
+    """
+    from .city import DEFAULT_WORKERS, CityIndex, city_of
+
+    city_name = args.city_name or (city_of(*anchor) if anchor else None)
+
+    def make(city):
+        return CityIndex(args.city, city=city, log=log, cache_dir=cache_dir,
+                         rescan=args.rescan, workers=args.index_workers or DEFAULT_WORKERS)
+    try:
+        return make(city_name)
+    except ValueError:
+        if args.city_name or not city_name:
+            raise
+        log("city: no scenes near JOSM's map (%s); serving the city with the most" % city_name)
+        return make(None)
+
+
 def run_city(args, log):
-    from .city import DEFAULT_WORKERS, CityIndex
 
     cache_dir = None if args.no_cache else (args.cache_dir or default_cache_dir())
+    # JOSM's map, when it streams one, also says which city this is about.
+    existing = None if args.build_aggregates else wait_for_viewer_anchor(
+        args.viewer_host, args.viewer_port, args.wait_for_map, log)
     t0 = time.perf_counter()
-    index = CityIndex(args.city, city=args.city_name, log=log, cache_dir=cache_dir,
-                      rescan=args.rescan, workers=args.index_workers or DEFAULT_WORKERS)
+    index = open_city_index(args, existing, cache_dir, log)
     log("city: %s (indexed in %.1fs: %d scenes read, %d from the local index cache)"
         % (index.describe_log(), time.perf_counter() - t0, index.read_count, index.cached_count))
     origin = index.default_anchor()
@@ -223,7 +271,6 @@ def run_city(args, log):
     map_file = MapFile(args.map, origin) if args.map else None
     anchor = origin
     send_map = bool(map_file) and not args.no_map
-    existing = probe_viewer_anchor(args.viewer_host, args.viewer_port)
     if existing:
         anchor = existing
         send_map = False

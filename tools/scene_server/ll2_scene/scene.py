@@ -23,24 +23,36 @@ RING_CAMERAS = ("camera_ring_front", "camera_ring_front_left", "camera_ring_fron
 SEGMENTED_CAMERAS = ("camera_ring_front", "camera_ring_rear")
 
 
+def _use_checkout(cand):
+    """Put a kitscenes checkout on sys.path; its path, or None if it is not one."""
+    if not cand:
+        return None
+    path = Path(cand)
+    if not (path / "kitscenes" / "__init__.py").is_file():
+        return None
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+    return path
+
+
 def add_kitscenes_to_path(explicit=None):
     """Import path for the `kitscenes` package.
 
-    Its published metadata points at a lanelet2 wheel by relative path, which
-    installers refuse to parse, so a checkout on `sys.path` is the reliable
-    way in. An installed copy is used when there is one.
+    In order: a checkout named on the command line or in KITSCENES_API_PATH,
+    then an installed package (what the plugin's setup installs, from the
+    GitHub archive with --no-deps), then a checkout next to this repo (the
+    developer layout). Returns the checkout used, or None for the installed
+    package or when there is none.
     """
-    candidates = [explicit, os.environ.get("KITSCENES_API_PATH"),
-                  Path(__file__).resolve().parents[4] / "kitscenes"]
-    for cand in candidates:
-        if not cand:
-            continue
-        path = Path(cand)
-        if (path / "kitscenes" / "__init__.py").is_file():
-            if str(path) not in sys.path:
-                sys.path.insert(0, str(path))
+    import importlib.util
+    for cand in (explicit, os.environ.get("KITSCENES_API_PATH")):
+        path = _use_checkout(cand)
+        if path:
             return path
-    return None
+    if importlib.util.find_spec("kitscenes") is not None:
+        return None
+    parents = Path(__file__).resolve().parents
+    return _use_checkout(parents[4] / "kitscenes") if len(parents) > 4 else None
 
 
 def read_origin(scene_dir):

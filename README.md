@@ -215,7 +215,7 @@ neighbouring nodes after that, an interpolation or a 3D move raises a
 warning, which also gives the distance and grade (a 3 m kerb-like step over
 1 m reads differently from 3 m over a 100 m ramp).
 
-### Recorded sensor data: KITScenes (no JOSM needed)
+### Recorded sensor data: KITScenes
 
 The 3D viewer can show a recorded drive next to the map: the LiDAR point
 clouds, the ring camera images and the ego trajectory of
@@ -242,8 +242,19 @@ cloud faded so the lanes show.*
 <sub>Screenshots: KITScenes Multimodal data (CC BY-NC 4.0); aerial images
 © HVBG, dl-de/by-2-0.</sub>
 
-**Start it** (setup once: `tools/scene_server/setup.sh`, which needs `uv` and a
-`kitscenes` checkout next to this repository):
+**From JOSM** (the plugin jar is all it takes): open the city's Lanelet2 map,
+then *Lanelet2 → KITScenes Sensor Data…* (toolbar: **KIT**). Choose the
+KITScenes folder (the dataset root, one split, or one scene) and press
+**Start**. The first Start offers a one-time setup (about a minute, ~500 MB,
+internet access needed). It installs the KITScenes packages into the Lanelet2
+backends' virtualenv, creating that first if there is none. Linux x64,
+Python 3.8–3.12; when the system Python is newer and
+[uv](https://docs.astral.sh/uv/) is installed, uv provides a 3.12. The scene
+is then placed on JOSM's map, which stays editable; in city mode the map also
+picks the city. The window shows the scene server's log; it stops with JOSM.
+
+**Without JOSM** (setup once: `tools/scene_server/setup.sh`, which needs `uv`
+and a `kitscenes` checkout next to this repository):
 
 ```bash
 python3 src/main/resources/lanelet2/viewer3d/server.py      # or JOSM's 3D viewer

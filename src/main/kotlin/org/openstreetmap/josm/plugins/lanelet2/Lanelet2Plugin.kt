@@ -17,6 +17,7 @@ import org.openstreetmap.josm.plugins.lanelet2.hooks.ZoomFilterHook
 import org.openstreetmap.josm.plugins.lanelet2.internal.CommitReminder
 import org.openstreetmap.josm.plugins.lanelet2.internal.InternalActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions
+import org.openstreetmap.josm.plugins.lanelet2.internal.scenes.SceneActions
 import org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dHook
 import org.openstreetmap.josm.plugins.lanelet2.notes.NotesActions
 import org.openstreetmap.josm.plugins.lanelet2.platform.LaneletSettings
@@ -53,6 +54,7 @@ class Lanelet2Plugin(info: PluginInformation) : Plugin(info) {
             InternalActions.registerAll()
             Viewer3dActions.registerAll()
             StreetImagery.registerAll()
+            SceneActions.registerAll()
             CommitReminder.install()
             Viewer3dHook.installIfEnabled()
             AutotagHook.installIfEnabled()

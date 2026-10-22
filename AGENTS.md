@@ -389,10 +389,41 @@ Browser camera and picking (`app.js`):
   this plugin. Two JOSMs with different plugin builds on the same port will
   keep recycling each other's server: give the dev one another port.
 
-## Scene server (`tools/scene_server/`, not in the jar)
+## Scene server (`tools/scene_server/`, shipped in the jar)
 
-Streams recorded driving scenes (KITScenes) into the viewer. Separate process,
-own `uv` venv; the shipped `server.py` stays stdlib-only.
+Streams recorded driving scenes (KITScenes) into the viewer. Separate process;
+the shipped `server.py` stays stdlib-only.
+
+- **Two ways to run it.** Developers: `tools/scene_server/.venv` from
+  `setup.sh` and a kitscenes checkout. Everyone else: *KITScenes Sensor
+  Data…* (`internal/scenes/`). `processResources` packs `ll2_scene/*.py`
+  under `lanelet2/scene_server/` (source of truth stays here),
+  `SceneServerStore` extracts it by content hash like the viewer, and
+  `SceneServerProcess` runs `python -m ll2_scene` from there with
+  `PYTHONPATH`, output to `plugins/lanelet2/scene_server.log` (never an
+  unread pipe: it logs a lot), worker processes stopped with it and on JOSM
+  exit. A scene server JOSM did not start on the same port is named and only
+  stopped when the user agrees.
+- **Its Python is the backends' virtualenv** plus `SceneSetup.PIP_PACKAGES`
+  and kitscenes from the GitHub archive at `KITSCENES_COMMIT`, `--no-deps`
+  (no `git` needed; its matplotlib/huggingface_hub are never imported here).
+  PyPI `lanelet2` 1.2.3 runs the whole test suite. `pyarrow==17.0.0` and
+  `scipy<1.15` are not taste: newer pyarrow refuses to import with
+  `numpy<2`. NumPy 1.x has no 3.13 wheels, so Python 3.8-3.12 only; with
+  only a newer system Python, `findBootstrapPython` asks `uv` for 3.12.
+  `add_kitscenes_to_path` prefers an installed kitscenes over a checkout
+  that merely sits next to the repo (a named one still wins).
+- **Launched from JOSM it waits for JOSM's map** (`--no-map --wait-for-map
+  180`): the anchor is adopted once, at the start, so starting before JOSM's
+  first snapshot would put the scene somewhere else. In city mode, JOSM's
+  anchor picks the city (`open_city_index`) unless `--city-name` says
+  otherwise; a map with no scenes nearby falls back to the city with most.
+- **Menu insertions do not chain** (`ActionRegistry.applyInsertions`, pinned
+  by `insertionsDoNotUseInsertedIdsAsAnchorsInTheSamePass`): anchoring on an
+  id that is itself inserted places nothing, silently. Street imagery was
+  anchored on `ll2_viewer3d_window` and so never reached the menu; it and
+  *KITScenes Sensor Data…* now anchor on the viewer's own anchor
+  (`hooks.zoom_filter_window`) and land after it in registration order.
 
 - **It is just another ingest bridge.** It sends the scene's Lanelet2 map as
   the same protocol v2 features JOSM sends, so the browser cannot tell them

@@ -59,10 +59,15 @@ class StreetImageryTest {
         assertNull(StreetImagery.position(emptyList(), null))
     }
 
+    /**
+     * With the real base order and the viewer's real registration: the viewer
+     * is itself an insertion, which a base order listing it used to hide
+     * (the entry then never reached the actual menu).
+     */
     @Test
     fun sitsAfterThe3dViewerInTheUtilitiesMenu() {
-        val registry = ActionRegistry(utilsOrder = listOf("ll2_viewer3d_window", "other"))
-        registry.register(org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions.slot())
+        val registry = ActionRegistry()
+        org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d.Viewer3dActions.registerAll(registry)
         StreetImagery.registerAll(registry)
         val ids = registry.build(MenuId.UTILS).mapNotNull { it?.id }
         assertEquals(listOf("ll2_viewer3d_window", StreetImagery.SLOT_ID), ids)

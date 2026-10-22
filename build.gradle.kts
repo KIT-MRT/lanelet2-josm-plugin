@@ -53,6 +53,12 @@ tasks.processResources {
         into("lanelet2/examples")
         include("*.py")
     }
+    // The KITScenes scene server: source of truth stays tools/scene_server/,
+    // the jar carries its package so "KITScenes sensor data" needs no checkout.
+    from("tools/scene_server/ll2_scene") {
+        into("lanelet2/scene_server/ll2_scene")
+        include("*.py")
+    }
 }
 
 josm {
