@@ -20,7 +20,9 @@ ARROW_AT = 0.35  # fraction along the centerline, as in Viewer3dFeatures
 ONE_WAY = "one_way"
 ARROW_PARTICIPANT = "vehicle:car"
 # Tags worth sending: the browser styles by `type`/`subtype` and shows icons.
-KEEP_TAGS = ("type", "subtype", "participant:bicycle", "location", "region")
+# "color" and "sidewalk_entry" are what the viewer's line styles read, as the
+# plugin streams them (Viewer3dConstants.STYLE_KEYS).
+KEEP_TAGS = ("type", "subtype", "participant:bicycle", "location", "region", "color", "sidewalk_entry")
 
 
 def usable_ele(z):

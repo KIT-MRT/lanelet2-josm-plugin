@@ -427,6 +427,15 @@ button.full { width: 100%; }
 .sceneItem .meta { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
 .sceneItem .tag { color: var(--accent-text); }
 
+/* Line style controls and legend */
+.seg.mini { margin-left: auto; padding: 1px; border-radius: 6px; }
+.seg.mini button { padding: 3px 10px; font-size: 12px; border-radius: 5px; }
+.layer:disabled .sw { opacity: 0.4; }
+.lineLegend { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 3px 10px; align-items: center; margin: 2px 0 6px; font-size: 12px; }
+.lineLegend svg { width: 54px; height: 14px; display: block; border-radius: 3px; background: #0d1117; }
+.lineLegend .grp { grid-column: 1 / -1; margin-top: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.lineLegend .dim { color: var(--muted); }
+
 /* Selection tab */
 .inspectBar { display: flex; align-items: center; gap: 2px; padding: 0 8px 6px 14px; border-bottom: 1px solid var(--border); }
 #inspectSummary { flex: 1 1 auto; color: var(--text-strong); font-weight: 600; }

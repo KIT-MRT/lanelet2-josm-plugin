@@ -20,9 +20,11 @@ import { PROFILE, TEST_HOOKS, now, plog } from "./js/util.js";
 // viewport has its final size before the renderer is sized to it.
 import { installShell, observeViewport, setHints, setCrumbs, setTabAvailable, showTab } from "./js/ui/shell.js";
 import { renderer, scene, mapRoot } from "./js/scene.js";
-import { camera, view, syncProjection } from "./js/camera.js";
+import { camera, view, syncProjection, setCameraView } from "./js/camera.js";
 import { store, nodeToken } from "./js/store.js";
 import { lineLayer } from "./js/render/lines.js";
+import { setRibbonResolution } from "./js/render/ribbons.js";
+import { setScreenLineResolution } from "./js/render/screenlines.js";
 import { iconLayer } from "./js/render/icons.js";
 import { laneletLayer } from "./js/render/lanelets.js";
 import { updateScreenSizedMarkers } from "./js/render/overlays.js";
@@ -46,6 +48,7 @@ import { installCommands, setConnectionInfo } from "./js/ui/commands.js";
 import { installSettings } from "./js/ui/settings.js";
 import { installNavGizmo, updateNavGizmo } from "./js/ui/navgizmo.js";
 import { installInspector } from "./js/ui/inspector.js";
+import { installLineStyleUi } from "./js/ui/linestyleui.js";
 import { ortho } from "./js/camera.js";
 
 installShell();
@@ -65,6 +68,7 @@ installCommands();
 installSettings();
 installNavGizmo();
 installInspector();
+installLineStyleUi();
 if (PROFILE) setTabAvailable("debug", true);
 pointLayer.attach(mapRoot);
 
@@ -175,6 +179,7 @@ connect((msg, meta) => {
 
 // --- render loop -----------------------------------------------------------
 let fpsFrames = 0, fpsT0 = now(), renderMsEma = 0;
+const _vp = new THREE.Vector4();
 let lastTick = now();
 function tick() {
   requestAnimationFrame(tick);
@@ -183,6 +188,11 @@ function tick() {
   lastTick = tNow;
   if (!rigActive()) applyHeldCamera(dt);
   maybeSyncJosmView();
+  // Styled lines and the highlight are sized in pixels of the current
+  // viewport (the camera lock letterboxes it).
+  renderer.getViewport(_vp);
+  setRibbonResolution(_vp.z, _vp.w);
+  setScreenLineResolution(_vp.z, _vp.w);
   lineLayer.update();
   laneletLayer.update();
   updateHover(gizmoBusy() || navBusy() || isPointerLocked() || rigActive());
@@ -264,6 +274,10 @@ if (TEST_HOOKS) {
     gizmo: () => ({ axis: transform.axis, dragging: transform.dragging, mode: transform.mode,
       at: transform.object && transform.visible ? transform.object.position.toArray() : null,
       handles: transform._gizmo.picker[transform.mode].children.map((c) => c.name) }),
+    // Put the camera exactly here (ENU metres, radians).
+    setView: (pos, yaw, pitch) => setCameraView(new THREE.Vector3(pos[0], pos[1], pos[2]), yaw, pitch),
+    // A drag in progress, without the gizmo: moves nodes locally only.
+    moveLocal: (moves) => store.moveNodes(moves),
     node: (id) => {
       const rec = store.node(id);
       return rec ? [rec.x, rec.y, rec.z] : null;

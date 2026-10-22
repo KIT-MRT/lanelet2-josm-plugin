@@ -125,6 +125,11 @@
         <div class="sect" data-sect="map">
           <button type="button" class="sectHead" data-collapse><span data-icon="chevron" class="chev"></span>Map</button>
           <div class="sectBody">
+            <div class="slider" title="Styled: markings at their real width, with dashes and double lines. Simple: one-pixel lines, the cheapest to draw">Lines
+              <div class="seg mini" role="group" aria-label="Line style"><button type="button" id="lineStyledBtn" class="on">Styled</button><button type="button" id="lineSimpleBtn">Simple</button></div></div>
+            <button type="button" id="raisedBtn" class="layer on sub" title="Curbs, guard rails, barriers, walls and fences as upright faces; off: flat line styles like the rest"><span class="lbl">Curbs, rails and walls in 3D</span><span class="sw"></span></button>
+            <button type="button" id="lineLegendBtn" class="subToggle"><span data-icon="chevron" class="chev"></span>Line types</button>
+            <div id="lineLegend" class="lineLegend" hidden></div>
             <button type="button" id="lanesBtn" class="layer"><span class="lbl">Lanelet surfaces and arrows</span><kbd>L</kbd><span class="sw"></span></button>
             <div class="hint">Yellow double arrows: two-way. Violet: a participant override.</div>
             <button type="button" id="iconsBtn" class="layer"><span class="lbl">Signs, lights and markings</span><kbd>N</kbd><span class="sw"></span></button>

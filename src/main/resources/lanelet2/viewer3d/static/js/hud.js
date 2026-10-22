@@ -42,7 +42,7 @@ export function setConn(live, text) {
 export function refreshCounts(count, seq, anchor) {
   hud.count.textContent = String(count);
   if (seq !== undefined && seq !== null) hud.seq.textContent = String(seq);
-  if (anchor) hud.anchor.textContent = `${anchor.lat.toFixed(5)}, ${anchor.lon.toFixed(5)}`;
+  if (anchor && Number.isFinite(anchor.lat) && Number.isFinite(anchor.lon)) hud.anchor.textContent = `${anchor.lat.toFixed(5)}, ${anchor.lon.toFixed(5)}`;
 }
 
 /** Camera rows; `nav` supplies the last orbit pivot. */

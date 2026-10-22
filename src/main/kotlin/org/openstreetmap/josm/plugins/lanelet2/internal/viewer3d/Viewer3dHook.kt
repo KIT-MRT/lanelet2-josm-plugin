@@ -566,6 +566,7 @@ internal fun Way.toSnapshot(): WaySnapshot = WaySnapshot(
     type = get("type"),
     subtype = get("subtype"),
     participantBicycle = get("participant:bicycle"),
+    styleTags = Viewer3dConstants.STYLE_KEYS.mapNotNull { k -> get(k)?.let { k to it } }.toMap(),
 )
 
 internal fun Node.toSnapshot(): NodeSnapshot = NodeSnapshot(

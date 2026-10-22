@@ -34,6 +34,8 @@ data class WaySnapshot(
     val type: String?,
     val subtype: String?,
     val participantBicycle: String?,
+    /** The [Viewer3dConstants.STYLE_KEYS] the way has: what the viewer's line styles read. */
+    val styleTags: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -102,11 +104,12 @@ class FeatureSignature(
     val subtype: String?,
     val participantBicycle: String?,
     val lanelet: LaneletRefs? = null,
+    val styleTags: Map<String, String> = emptyMap(),
 ) {
     override fun equals(other: Any?): Boolean =
         other is FeatureSignature && nodeIds.contentEquals(other.nodeIds) && pts.contentEquals(other.pts) &&
             type == other.type && subtype == other.subtype && participantBicycle == other.participantBicycle &&
-            lanelet == other.lanelet
+            lanelet == other.lanelet && styleTags == other.styleTags
 
     override fun hashCode(): Int = 31 * nodeIds.contentHashCode() + pts.contentHashCode()
 }
@@ -223,4 +226,11 @@ object Viewer3dConstants {
     const val MAX_SELECTION_SYNC = 20000
     const val SELECTION_DEBOUNCE_MS = 120
     const val MAX_DESCRIBE = 500
+
+    /**
+     * Way tags streamed besides type/subtype/participant:bicycle, because the
+     * viewer's line styles read them (`lines.mapcss` does too). Everything
+     * else reaches the viewer only through `describe`.
+     */
+    val STYLE_KEYS = listOf("color", "sidewalk_entry")
 }

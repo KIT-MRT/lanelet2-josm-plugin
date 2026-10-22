@@ -1,5 +1,8 @@
 // Load a whole .osm map into the viewer (headless) and report timings.
 //   node testdata/viewer3d/perf_viewer.mjs path/to/lanelet2_map.osm [--shots DIR]
+//        [--lines styled|flat|simple]   styled lines with 3D borders (default),
+//                                       styled without them, or one-pixel lines
+//   python3 testdata/viewer3d/gen_city_map.py city.osm makes a city-size map.
 //
 // Converts the map like Viewer3dFeatures.featureForWay does (protocol v2; ENU around the
 // bbox centre of all way nodes, `ele` as z, type/subtype/participant:bicycle
@@ -17,6 +20,8 @@ if (!mapPath) {
 }
 const shotsIdx = process.argv.indexOf("--shots");
 const shotsDir = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
+const linesIdx = process.argv.indexOf("--lines");
+const linesMode = linesIdx > 0 ? process.argv[linesIdx + 1] : "styled";
 
 const R = 6378137.0;
 const rad = (d) => (d * Math.PI) / 180;
@@ -130,7 +135,10 @@ for (const w of ways) {
   if (nds.length < 2) continue;
   if (known.includes(false)) fillUnknownHeights(points, known);
   const tags = {};
-  for (const k of ["type", "subtype", "participant:bicycle"]) if (w.tags[k] !== undefined) tags[k] = w.tags[k];
+  // Viewer3dFeatures: type/subtype/participant:bicycle plus the style keys.
+  for (const k of ["type", "subtype", "participant:bicycle", "color", "sidewalk_entry"]) {
+    if (w.tags[k] !== undefined) tags[k] = w.tags[k];
+  }
   features.push({ id: `way/${w.id}`, kind: "line", tags, pts: points, nodes: nds });
   nPts += nds.length;
 }
@@ -169,12 +177,22 @@ const pickCost = () => v.evaluate(`(() => {
 })()`);
 try {
   console.log(`renderer: ${await v.evaluate("(() => { const gl = document.createElement('canvas').getContext('webgl2'); const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()")}`);
+  // The line look, set before the map arrives so every chunk builds once.
+  await v.evaluate(`window.__ll2lines.setStyled(${linesMode !== "simple"})`);
+  await v.evaluate(`window.__ll2lines.setRaised(${linesMode === "styled"})`);
+  console.log(`lines: ${linesMode}`);
   const tSend = Date.now();
   v.sendScene(JSON.parse(snapshot));
   const ok = await v.waitForFeatures(features.length, 180000);
   const tShown = Date.now();
   console.log(`page shows all features: ${ok} after ${((tShown - tSend) / 1000).toFixed(2)} s`);
   console.log(`page apply: ${await v.hud("perf")}`);
+  // Chunks build on the frames after the data: time until the last is up.
+  const tBuild = Date.now();
+  await v.evaluate("new Promise((r) => { let k = 3; const f = () => (--k <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); })");
+  console.log(`first frames with every chunk built: ${((Date.now() - tBuild) / 1000).toFixed(2)} s`);
+  console.log(`line buffers: ${JSON.stringify(await v.evaluate("window.__ll2lines.stats()"))}`);
+  console.log(`JS heap: ${await v.evaluate("performance.memory ? (performance.memory.usedJSHeapSize / 1e6).toFixed(0) + ' MB' : 'n/a'")}`);
   // The first frames build every tile (and the arrows); wait them out so the
   // frame numbers below are steady state.
   await sleep(6000);

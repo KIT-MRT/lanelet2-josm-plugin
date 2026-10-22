@@ -176,4 +176,18 @@ class Viewer3dDiffTest {
         assertEquals("1", feat.tags["follow_camera"])
         assertFalse(Viewer3dConstants.VIEWPORT_ID in engine.sent)
     }
+
+    @Test
+    fun styleTagsAreStreamedAndAChangeOfThemIsAPatch() {
+        val plain = way(7, 8.4 to 49.0, 8.4001 to 49.0)
+        val yellow = plain.copy(styleTags = mapOf("color" to "yellow", "sidewalk_entry" to "true"))
+        val f0 = Viewer3dFeatures.featureForWay(plain, anchor)!!
+        val f1 = Viewer3dFeatures.featureForWay(yellow, anchor)!!
+        assertNull(f0.tags["color"])
+        assertEquals("yellow", f1.tags["color"])
+        assertEquals("true", f1.tags["sidewalk_entry"])
+        assertFalse(Viewer3dFeatures.featureSignature(f0) == Viewer3dFeatures.featureSignature(f1),
+            "a colour change must reach the viewer")
+        assertTrue(Viewer3dJson.encode(OutboundMessage.Snapshot(anchor, listOf(f1))).contains("\"color\":\"yellow\""))
+    }
 }

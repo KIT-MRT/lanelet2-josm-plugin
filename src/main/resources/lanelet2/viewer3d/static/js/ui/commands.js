@@ -10,6 +10,7 @@ import { rig, handleRigKey } from "../sensors/camrig.js";
 import { ortho } from "../camera.js";
 import { tileLayer } from "../render/tiles.js";
 import { laneletLayer } from "../render/lanelets.js";
+import { lineLayer } from "../render/lines.js";
 import { iconLayer } from "../render/icons.js";
 import { pointLayer } from "../render/points.js";
 import { trajectoryLayer } from "../render/trajectories.js";
@@ -44,6 +45,10 @@ export const COMMANDS = [
   // Layers
   { group: "Layers", title: "Lanelet surfaces and arrows", keys: ["L"], run: click("lanesBtn"), state: () => onOff(laneletLayer.visible) },
   { group: "Layers", title: "Signs, lights and markings", keys: ["N"], run: click("iconsBtn"), state: () => onOff(iconLayer.visible) },
+  { group: "Layers", title: "Styled lines (real widths, dashes)", run: () => (lineLayer.styled ? click("lineSimpleBtn") : click("lineStyledBtn"))(),
+    state: () => onOff(lineLayer.styled) },
+  { group: "Layers", title: "Curbs, rails and walls in 3D", run: click("raisedBtn"), when: () => lineLayer.styled,
+    state: () => onOff(lineLayer.raised) },
   { group: "Layers", title: "Map tiles", run: click("tilesBtn"), state: () => onOff(tileLayer.on) },
   { group: "Layers", title: "Tile source…", run: () => {
     const panel = $("tilePanel");

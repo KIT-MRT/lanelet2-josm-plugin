@@ -139,6 +139,14 @@ culling.
   every key and mouse gesture, and the status bar shows the ones that apply
   right now (they change in Edit mode, in the 2D view and under the camera
   lock). Buttons explain themselves on hover, with their shortcut.
+- **Lines** are drawn like the paint they stand for: at their real width,
+  with real dash lengths, double lines and `solid_dashed` sides, the `color`
+  tag, and never thinner than about a pixel when far away. Curbs, guard rails,
+  barriers, walls and fences stand up in 3D (switch it off in *Layers* to see
+  them as flat line styles). *Layers → Lines: Simple* goes back to one-pixel
+  lines, the cheapest look; *Line types* shows the legend. The vocabulary
+  follows `lines.mapcss`, with colours lifted where JOSM's would vanish on the
+  dark background.
 - **Compass** (bottom right): turns with the view; click it to face north.
   Next to it: *2D* (the map view, V), frame the map (F), top view (B).
 - **Navigate:** left-drag orbits the point under the cursor (over sky it turns

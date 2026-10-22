@@ -302,6 +302,7 @@ Offline self-containment is verified by fetching `/`, `/app.js` and all three
 Browser code has its own checks in `testdata/viewer3d/` (headless Chrome over
 CDP with a fake JOSM bridge; not part of Gradle): `e2e_viewer.mjs`,
 `e2e_edit.mjs`, `e2e_controls.mjs`, `e2e_lanelets.mjs`, `e2e_heights.mjs`, `e2e_ui.mjs`,
+`e2e_linestyles.mjs` (and the plain-Node `check_line_styles.mjs`),
 `e2e_scene.mjs`, and
 `perf_viewer.mjs <map.osm>` for real-map load and frame times (`LL2_GPU=1`
 for the real GPU; SwiftShader frame times are CPU-bound). The page exposes
@@ -343,6 +344,27 @@ Browser camera and picking (`app.js`):
   ENU metres). The browser triangulates surfaces from the way features, so a
   bound change needs its lanelets re-sent (the hook marks node → way →
   lanelet dirty) and `relationMembersChanged` is no longer ignored.
+- **Styled lines** (`render/linestyles.js`, `render/ribbons.js`, default;
+  *Layers → Lines: Styled | Simple*). One instanced quad per segment, one
+  draw call per chunk for the paint and one for raised shapes; patterns are
+  fragment-shader maths on two coordinates in metres (along, cumulative per
+  way; across, left positive), so dashes, double lines, `solid_dashed` sides
+  and the dash background cost no geometry. Paint is offset **in the ground
+  plane** (flat, foreshortens at street level); only where that comes out
+  thinner than the style's pixel minimum is it widened on screen instead.
+  Screen-facing paint looked like upright boards at street level. Raised
+  shapes (curbs, rails, barriers, walls, fences) are world-space upright
+  quads, toggled without a rebuild; off, those types are flat line styles.
+  Colours go through `#include <colorspace_fragment>` like three's own
+  materials, or every colour comes out darker. With the logarithmic depth
+  buffer, the paint's lift toward the camera has to move the points (view
+  space), not `clip.z`. `lines.mapcss` is the reference for the vocabulary;
+  `testdata/viewer3d/check_line_styles.mjs` fails when one of its `way`
+  rules has no style. Sizes are real metres (typical German values),
+  colours lifted where JOSM's would vanish on the dark canvas. The stream
+  carries `color` and `sidewalk_entry` for them (`Viewer3dConstants.STYLE_KEYS`,
+  scene server `KEEP_TAGS`). The selection highlight is a 3 px screen-space
+  ribbon (`render/screenlines.js`); a 1 px line vanished next to wide paint.
 - **Picking tolerances are screen pixels** (`pickMapPoint`, `pickNode`).
   three's Line/Points raycast thresholds are world metres, which picked the
   wrong node up close. Lanes between two bounds have no geometry, so a miss

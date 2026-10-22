@@ -89,6 +89,7 @@ object Viewer3dFeatures {
         way.type?.let { tags["type"] = it }
         way.subtype?.let { tags["subtype"] = it }
         way.participantBicycle?.let { tags["participant:bicycle"] = it }
+        for (key in Viewer3dConstants.STYLE_KEYS) way.styleTags[key]?.let { tags[key] = it }
         return ViewerFeature(
             id = "way/${way.uniqueId}",
             kind = "line",
@@ -106,6 +107,11 @@ object Viewer3dFeatures {
             subtype = feat.tags["subtype"],
             participantBicycle = feat.tags["participant:bicycle"],
             lanelet = feat.lanelet,
+            styleTags = if (feat.kind == "line") {
+                Viewer3dConstants.STYLE_KEYS.mapNotNull { k -> feat.tags[k]?.let { k to it } }.toMap()
+            } else {
+                emptyMap()
+            },
         )
 
     /** Whose direction rules the arrows show: lanelet2's car. */

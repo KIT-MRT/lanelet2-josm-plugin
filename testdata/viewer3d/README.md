@@ -18,6 +18,8 @@ node testdata/viewer3d/e2e_controls.mjs               # keys for camera and sele
 node testdata/viewer3d/e2e_lanelets.mjs               # lanelet surfaces, arrows, surface picking
 node testdata/viewer3d/e2e_heights.mjs                # typed heights, snapping
 node testdata/viewer3d/e2e_ui.mjs                     # side panel, palette, help, settings, compass, narrow window
+node testdata/viewer3d/e2e_linestyles.mjs             # styled lines, read off screen pixels
+node testdata/viewer3d/check_line_styles.mjs          # every lines.mapcss way rule has a 3D style (no browser)
 node testdata/viewer3d/e2e_viewer.mjs --shots /tmp/v3d  # also save screenshots
 CHROME=/path/to/chrome node testdata/viewer3d/e2e_viewer.mjs
 # As root (containers), Chrome needs --no-sandbox: point CHROME at a wrapper
@@ -32,6 +34,8 @@ reports load time, draw calls and frame time):
 ```bash
 node testdata/viewer3d/perf_viewer.mjs ~/lanelet2_maps_autoware/karlsruhe_city/lanelet2_map.osm
 LL2_VIEWER_DIR=/path/to/other/viewer3d node testdata/viewer3d/perf_viewer.mjs map.osm  # compare builds
+python3 testdata/viewer3d/gen_city_map.py /tmp/city.osm   # a synthetic map the size of Karlsruhe
+node testdata/viewer3d/perf_viewer.mjs /tmp/city.osm --lines simple   # or flat / styled (default)
 ```
 
 ## How the checks see the page

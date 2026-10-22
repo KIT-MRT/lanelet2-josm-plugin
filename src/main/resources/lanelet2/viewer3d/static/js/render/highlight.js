@@ -8,29 +8,25 @@ import { store } from "../store.js";
 import { overlayRoot } from "../scene.js";
 import { selection } from "../selection.js";
 import { SELECT_COLOR, HOVER_COLOR } from "./style.js";
+import { screenLines } from "./screenlines.js";
 
-const lineMat = new THREE.LineBasicMaterial({ color: SELECT_COLOR, depthTest: false, transparent: true });
+// Lines a few pixels wide: a one-pixel line vanishes next to a styled marking.
+const lines = screenLines({ color: SELECT_COLOR, widthPx: 3, opacity: 0.95, renderOrder: 1003 });
 const dotMat = new THREE.PointsMaterial({
   color: SELECT_COLOR, size: 9, sizeAttenuation: false, depthTest: false, transparent: true,
 });
 
-const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat);
 const dots = new THREE.Points(new THREE.BufferGeometry(), dotMat);
-lines.renderOrder = 1003;
 dots.renderOrder = 1004;
-lines.frustumCulled = false;
 dots.frustumCulled = false;
 overlayRoot.add(lines);
 overlayRoot.add(dots);
 
-const hoverLine = new THREE.LineSegments(new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: HOVER_COLOR, depthTest: false, transparent: true, opacity: 0.9 }));
+const hoverLine = screenLines({ color: HOVER_COLOR, widthPx: 5, opacity: 0.85, renderOrder: 1001 });
 const hoverDot = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({
   color: HOVER_COLOR, size: 14, sizeAttenuation: false, depthTest: false, transparent: true, opacity: 0.9,
 }));
-hoverLine.renderOrder = 1001; // below the selection, so a selected dot shows framed
-hoverDot.renderOrder = 1002;
-hoverLine.frustumCulled = false;
+hoverDot.renderOrder = 1002; // the hover sits below the selection, so a selected dot shows framed
 hoverDot.frustumCulled = false;
 overlayRoot.add(hoverLine);
 overlayRoot.add(hoverDot);
@@ -78,7 +74,7 @@ function rebuildSelection() {
       if (rec) pts.push(rec.x, rec.y, rec.z);
     }
   }
-  setPositions(lines, seg);
+  lines.setPairs(seg);
   setPositions(dots, pts);
 }
 
@@ -92,7 +88,7 @@ function rebuildHover() {
     const rec = store.node(hover.id);
     if (rec) hPts.push(rec.x, rec.y, rec.z);
   }
-  setPositions(hoverLine, hSeg);
+  hoverLine.setPairs(hSeg);
   setPositions(hoverDot, hPts);
 }
 

@@ -30,7 +30,10 @@ export const ZOOM_COLOR = 0x9dffc0;
 
 const _color = new THREE.Color();
 
-/** Feature colour, written into `out` (a THREE.Color). */
+/**
+ * Feature colour, written into `out` (a THREE.Color). Map lines are coloured
+ * by render/linestyles.js (both looks); this is for anything else.
+ */
 export function featureColor(feature, out = _color) {
   if (feature.color) {
     try {
