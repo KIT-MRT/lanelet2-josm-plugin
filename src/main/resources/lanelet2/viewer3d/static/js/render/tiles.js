@@ -93,6 +93,23 @@ export const TILE_PRESETS = {
     attribution: "© LGL-BW, www.lgl-bw.de",
     attributionUrl: "https://www.lgl-bw.de",
   },
+  // The MRT institute's own 2024 aerial images of Karlsruhe, in EPSG:25832.
+  // Not public: only from KIT's network (or its VPN). It sends no CORS
+  // header, so tiles come through the viewer server's proxy only
+  // (`needsProxy`): the host has to be in its allowed tile hosts.
+  mrt_karlsruhe_2024: {
+    label: "MRT Karlsruhe 2024 (aerial, KIT network)",
+    type: "wms",
+    url: "https://srv1.mrt.kit.edu/geoserver/karlsruhe/ows",
+    layers: "all2024_epsg25832",
+    format: "image/jpeg",
+    version: "1.3.0",
+    crs: "EPSG:25832",
+    maxZoom: 21,
+    attribution: "© MRT, KIT",
+    needsProxy: true,
+    note: "Not publicly reachable: only from the KIT network or its VPN.",
+  },
 };
 
 const rad = (d) => (d * Math.PI) / 180;

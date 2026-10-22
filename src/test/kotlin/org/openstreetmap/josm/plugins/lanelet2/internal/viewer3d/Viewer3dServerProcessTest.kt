@@ -1,8 +1,11 @@
 package org.openstreetmap.josm.plugins.lanelet2.internal.viewer3d
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.openstreetmap.josm.spi.preferences.Config
+import org.openstreetmap.josm.spi.preferences.MemoryPreferences
 import java.io.File
 
 class Viewer3dServerProcessTest {
@@ -21,6 +24,26 @@ class Viewer3dServerProcessTest {
         val (ok, msg) = proc.start("127.0.0.1", 48766, 48765)
         assertFalse(ok)
         assertTrue(msg.contains("python3"))
+    }
+
+    @Test
+    fun allowedTileHostsAreReadLikeTheServerReadsThem() {
+        assertEquals(listOf("srv1.mrt.kit.edu", "tiles.example.org:8443", "wms.example.org"),
+            Viewer3dSettings.parseHosts(" SRV1.mrt.kit.edu, tiles.example.org:8443;wms.example.org srv1.mrt.kit.edu"))
+        assertEquals(listOf("srv1.mrt.kit.edu"),
+            Viewer3dSettings.parseHosts("https://srv1.mrt.kit.edu/geoserver/karlsruhe/ows?SERVICE=WMS"),
+            "a pasted URL keeps its host")
+        assertEquals(listOf("host:8080"), Viewer3dSettings.parseHosts("http://host:8080/wms"))
+        assertEquals(emptyList<String>(), Viewer3dSettings.parseHosts("user@evil, -bad-, bad_host, host:99999x , \"\""))
+        assertEquals(emptyList<String>(), Viewer3dSettings.parseHosts(null))
+    }
+
+    @Test
+    fun allowedTileHostsAreStoredNormalised() {
+        Config.setPreferencesInstance(MemoryPreferences())
+        assertEquals(emptyList<String>(), Viewer3dSettings.getTileProxyHosts(), "nothing is proxied by default")
+        Viewer3dSettings.setTileProxyHosts("SRV1.mrt.kit.edu  tiles.example.org:8443")
+        assertEquals(listOf("srv1.mrt.kit.edu", "tiles.example.org:8443"), Viewer3dSettings.getTileProxyHosts())
     }
 
     @Test

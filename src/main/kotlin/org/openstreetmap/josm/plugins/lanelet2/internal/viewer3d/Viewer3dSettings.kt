@@ -13,6 +13,7 @@ object Viewer3dSettings {
     const val KEY_CULL_RANGE_M = "viewer3d.cull.range_m"
     const val KEY_FOLLOW_VIEW = "viewer3d.follow_view"
     const val KEY_DRIVE_VIEW = "viewer3d.drive_view"
+    const val KEY_TILE_PROXY_HOSTS = "viewer3d.tile_proxy_hosts"
 
     const val DEFAULT_HOST = "127.0.0.1"
     const val DEFAULT_INGEST_PORT = 8766
@@ -49,6 +50,34 @@ object Viewer3dSettings {
     /** Defaults **on** in the Jython settings file. */
     fun driveViewEnabled(default: Boolean = true): Boolean =
         LaneletSettings.getBoolean(KEY_DRIVE_VIEW, default)
+
+    /**
+     * Tile servers the viewer server may fetch from for the page
+     * (`--tile-proxy-host`): those that do not allow cross-origin use, which
+     * WebGL needs. `host` allows its scheme's default port only, `host:port`
+     * that port. Empty by default: nothing is proxied unless the user says so.
+     */
+    fun getTileProxyHosts(): List<String> = parseHosts(LaneletSettings.get(KEY_TILE_PROXY_HOSTS, ""))
+
+    fun setTileProxyHosts(text: String) {
+        LaneletSettings.put(KEY_TILE_PROXY_HOSTS, parseHosts(text).joinToString(", "))
+    }
+
+    /**
+     * Hosts from free text: commas, semicolons or spaces between them,
+     * lower case, as the viewer server normalises them. Pasted URLs keep only
+     * their host (and an explicit port); anything else unusable is dropped.
+     */
+    fun parseHosts(text: String?): List<String> =
+        text.orEmpty().split(',', ';', ' ', '\t', '\n').mapNotNull { raw ->
+            var t = raw.trim().lowercase()
+            if (t.isEmpty()) return@mapNotNull null
+            if ("://" in t) t = t.substringAfter("://")
+            t = t.substringBefore('/').substringBefore('?')
+            t.takeIf { HOST_RE.matches(it) }
+        }.distinct()
+
+    private val HOST_RE = Regex("""[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?""")
 
     fun saveConfig(
         enabled: Boolean,

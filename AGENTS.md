@@ -608,7 +608,16 @@ the shipped `server.py` stays stdlib-only.
   served in 25832 and in 3857 render with a 0 px shift.
   The viewer server's `/tileproxy` fetches only from hosts named on its
   command line or in `LL2_TILE_PROXY_HOSTS`, follows no redirects and passes
-  on images only.
+  on images only. JOSM passes `viewer3d.tile_proxy_hosts` (*Allowed tile
+  hosts* in the Live 3D Viewer window, `Viewer3dSettings.parseHosts`: split,
+  lower case, a pasted URL keeps its host) as `--tile-proxy-host`. The server
+  reads them once, at its start, so `start()` adopts a running server only
+  when its `/tileproxy/hosts` equals settings + environment, else restarts
+  it; the page asks `/tileproxy/hosts` again whenever tiles matter (form
+  opened, source applied, tiles on) and reloads the tiles if the list
+  changed. A preset may carry a `note` (shown under the Source list) and
+  `needsProxy` (the note then says whether its host is allowed here):
+  `mrt_karlsruhe_2024` is the institute's WMS, KIT network only, no CORS.
 - **Who may talk to the two local servers.** Both listen on loopback, but
   any web page can send them requests. Both refuse a `Host` that is not a
   loopback name or the bind address (DNS rebinding; skipped for a wildcard

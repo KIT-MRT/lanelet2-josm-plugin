@@ -196,14 +196,18 @@ culling.
   your own XYZ / TMS template or WMS endpoint (GeoServer and the like) from
   *Layers → Base map → Tile source*, with an opacity slider. A WMS can be asked in EPSG:3857 or in
   UTM (EPSG:25832 and friends, what German state servers serve); the
-  Hessen and Baden-Württemberg 20 cm aerial images are presets. Tiles are drawn in the scene, each
+  Hessen and Baden-Württemberg 20 cm aerial images are presets, and so is
+  *MRT Karlsruhe 2024*, the institute's own aerial images, which are **not
+  publicly reachable** (KIT network or VPN only) and need the proxy below. Tiles are drawn in the scene, each
   corner placed through the same lat/lon → ENU as the map, so they line up
   in ortho and in perspective. They are off on every start, since turning
   them on sends the viewed area to the tile server. WebGL can only use tiles
   from servers that allow cross-origin use (CORS); for one that does not,
-  start the viewer with `--tile-proxy-host <host>` (`<host>:<port>` for a
-  non-standard port; or set `LL2_TILE_PROXY_HOSTS`) to fetch through the
-  viewer server, for that host only.
+  list it under *Allowed tile hosts* in JOSM's *Live 3D Viewer* window
+  (`srv1.mrt.kit.edu`, comma separated, `<host>:<port>` for a non-standard
+  port), or start a viewer by hand with `--tile-proxy-host <host>` (or set
+  `LL2_TILE_PROXY_HOSTS`). The viewer server then fetches tiles from that
+  host only, for the page. Changing the list restarts the viewer server.
 
 New nodes created in JOSM without `ele` get a height (on by default; settings:
 *Heights*): a node inserted into a way, or joining ways, is interpolated

@@ -148,10 +148,12 @@
                 <option value="osm">OpenStreetMap</option>
                 <option value="hessen_dop20">Hessen DOP20 (aerial)</option>
                 <option value="bw_dop20">Baden-Württemberg DOP20 (aerial)</option>
+                <option value="mrt_karlsruhe_2024">MRT Karlsruhe 2024 (aerial, KIT network)</option>
                 <option value="xyz">Custom XYZ</option>
                 <option value="tms">Custom TMS</option>
                 <option value="wms">Custom WMS</option>
               </select>
+              <div id="tilePresetNote" class="hint full" hidden></div>
               <label for="tileUrl">URL</label>
               <input type="text" id="tileUrl" spellcheck="false" autocomplete="off" placeholder="https://host/{z}/{x}/{y}.png">
               <div class="hint full">XYZ / TMS: {z} {x} {y}, {-y} for flipped rows, {s} for a, b, c. WMS: the service URL, e.g. https://host/geoserver/wms.</div>

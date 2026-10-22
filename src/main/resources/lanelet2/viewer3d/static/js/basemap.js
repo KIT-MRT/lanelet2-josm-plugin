@@ -54,16 +54,14 @@ export function installBasemap() {
     status: document.getElementById("tileStatus"),
     credit: document.getElementById("tileAttribution"),
     sourceName: document.getElementById("tileSourceName"),
+    note: document.getElementById("tilePresetNote"),
   };
   tileLayer.attach();
   tileLayer.onProblem = onTileProblem;
   const saved = load();
   if (saved && saved.source && !checkSource(saved.source).length) tileLayer.setSource(saved.source);
   if (saved && saved.opacity) tileLayer.setOpacity(saved.opacity);
-  // Hosts the viewer server will fetch tiles from on the page's behalf.
-  fetch("/tileproxy/hosts").then((r) => (r.ok ? r.json() : null))
-    .then((j) => { if (j && j.hosts) tileLayer.setProxyHosts(j.hosts); })
-    .catch(() => {});
+  refreshProxyHosts();
 
   if (!els.ortho) return;
   els.ortho.addEventListener("click", () => toggleOrtho());
@@ -72,7 +70,10 @@ export function installBasemap() {
   els.menu.addEventListener("click", () => {
     els.panel.hidden = !els.panel.hidden;
     els.menu.classList.toggle("on", !els.panel.hidden);
-    if (!els.panel.hidden) fillForm(tileLayer.source);
+    if (!els.panel.hidden) {
+      fillForm(tileLayer.source);
+      refreshProxyHosts();
+    }
   });
   els.preset.addEventListener("change", () => {
     const preset = TILE_PRESETS[els.preset.value];
@@ -97,10 +98,53 @@ export function toggleOrtho(on) {
 }
 
 export function setTiles(on) {
+  if (on) refreshProxyHosts();
   tileLayer.setOn(on);
   // The reference grid is noise on top of a map.
   grid.visible = !tileLayer.on;
   refresh();
+}
+
+/**
+ * Ask the viewer server which hosts it fetches tiles from for us. Asked
+ * again whenever tiles matter (the form opens, a source is applied, tiles go
+ * on): JOSM restarts the server when its allowed hosts change, and this tab
+ * may have been open all along.
+ */
+export function refreshProxyHosts() {
+  return fetch("/tileproxy/hosts").then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      if (j && j.hosts) {
+        const before = [...(tileLayer.proxyHosts || [])].sort().join(",");
+        tileLayer.setProxyHosts(j.hosts);
+        // Tiles asked for meanwhile went the other way (direct or proxied): ask again.
+        if (before !== [...tileLayer.proxyHosts].sort().join(",") && tileLayer.on) tileLayer.setSource(tileLayer.source);
+      }
+      showPresetNote();
+    })
+    .catch(() => {});
+}
+
+/** The chosen preset's note, and for one that needs the proxy, whether it has it. */
+function showPresetNote() {
+  if (!els || !els.note) return;
+  const preset = TILE_PRESETS[els.preset.value];
+  const parts = [];
+  let warn = false;
+  if (preset && preset.note) parts.push(preset.note);
+  if (preset && preset.needsProxy) {
+    const host = new URL(preset.url).hostname.toLowerCase();
+    if (tileLayer.proxyHosts && tileLayer.proxyHosts.has(host)) {
+      parts.push(`${host} is an allowed tile host here.`);
+    } else {
+      warn = true;
+      parts.push(`It needs ${host} as an allowed tile host: in JOSM, Live 3D Viewer, "Allowed tile hosts", `
+        + `or start the viewer with --tile-proxy-host ${host}.`);
+    }
+  }
+  els.note.textContent = parts.join(" ");
+  els.note.hidden = !parts.length;
+  els.note.classList.toggle("warnText", warn);
 }
 
 /** Put a source into the form; presets fill it, custom types keep what was typed. */
@@ -121,6 +165,7 @@ function fillForm(source) {
   els.wms.hidden = (preset2 ? preset2.type : els.preset.value) !== "wms";
   for (const el of [els.url, els.layers, els.styles, els.format, els.version, els.crs,
                     els.transparent, els.maxZoom, els.attribution]) el.disabled = !!preset2;
+  showPresetNote();
 }
 
 function readForm() {
@@ -154,6 +199,7 @@ export function applyForm() {
   tileLayer.setSource(source);
   save();
   if (!tileLayer.on) setTiles(true);
+  else refreshProxyHosts();
   refresh();
   return [];
 }

@@ -35,6 +35,11 @@ object Viewer3dWindow {
             "Pan JOSM (and culling) with the 3D camera",
             Viewer3dSettings.driveViewEnabled(),
         )
+        val proxyHostsField = JTextField(Viewer3dSettings.getTileProxyHosts().joinToString(", "), 16)
+        proxyHostsField.toolTipText = "<html>Map tile servers that do not allow cross-origin use (many in-house<br>" +
+            "GeoServers): the viewer server fetches their tiles for the page. Host names,<br>" +
+            "comma separated, e.g. <code>srv1.mrt.kit.edu</code>; <code>host:port</code> for another port.<br>" +
+            "Only these hosts, nothing else. A change restarts the viewer server.</html>"
         val statusLabel = JLabel()
         fun refreshStatus() {
             val host = hostField.text.trim().ifBlank { Viewer3dSettings.DEFAULT_HOST }
@@ -43,7 +48,7 @@ object Viewer3dWindow {
         }
         refreshStatus()
 
-        val form = JPanel(GridLayout(8, 2, 6, 6))
+        val form = JPanel(GridLayout(9, 2, 6, 6))
         form.add(JLabel("Viewer host:"))
         form.add(hostField)
         form.add(JLabel("Viewer ingest port:"))
@@ -60,6 +65,8 @@ object Viewer3dWindow {
         form.add(followBox)
         form.add(JLabel("Drive JOSM view:"))
         form.add(driveBox)
+        form.add(JLabel("Allowed tile hosts (proxy):"))
+        form.add(proxyHostsField)
 
         val startBtn = JButton("Start viewer server")
         val stopBtn = JButton("Stop viewer server")
@@ -67,6 +74,7 @@ object Viewer3dWindow {
         val server = Viewer3dHook.serverProcess()
 
         startBtn.addActionListener {
+            Viewer3dSettings.setTileProxyHosts(proxyHostsField.text)
             val host = hostField.text.trim().ifBlank { Viewer3dSettings.DEFAULT_HOST }
             val ingest = ingestPortField.text.trim().toIntOrNull() ?: Viewer3dSettings.DEFAULT_INGEST_PORT
             val http = httpPortField.text.trim().toIntOrNull() ?: Viewer3dSettings.DEFAULT_HTTP_PORT
@@ -145,6 +153,7 @@ object Viewer3dWindow {
             followView = followBox.isSelected,
             driveView = driveBox.isSelected,
         )
+        Viewer3dSettings.setTileProxyHosts(proxyHostsField.text)
         Viewer3dHook.reinstallFromSettings()
 
         if (enabled) {

@@ -34,6 +34,12 @@ class Viewer3dServerProcess(
             null
         }
     },
+    /** Tile servers to proxy (`--tile-proxy-host`), from the settings. */
+    private val proxyHosts: () -> List<String> = { Viewer3dSettings.getTileProxyHosts() },
+    /** What the server adds on its own from JOSM's environment. */
+    private val envProxyHosts: () -> List<String> = {
+        Viewer3dSettings.parseHosts(System.getenv("LL2_TILE_PROXY_HOSTS"))
+    },
 ) {
     @Volatile
     private var process: Process? = null
@@ -47,6 +53,10 @@ class Viewer3dServerProcess(
         val want = expectedBuild() ?: return true
         return probeBuild(host, httpPort) == want
     }
+
+    /** Whether the running server proxies the hosts this JOSM would start it with. */
+    fun servesProxyHosts(host: String, httpPort: Int): Boolean =
+        probeProxyHosts(host, httpPort)?.toSet() == (proxyHosts() + envProxyHosts()).toSet()
 
     fun statusText(host: String, httpPort: Int): String =
         if (isServingUi(host, httpPort)) {
@@ -70,7 +80,11 @@ class Viewer3dServerProcess(
     ): Pair<Boolean, String> {
         val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
         if (isServingUi(h, httpPort)) {
-            if (isCurrentBuild(h, httpPort)) return true to "Viewer server is already running."
+            // Adopt only a server that proxies exactly the hosts asked for:
+            // it reads them once, at its start.
+            if (isCurrentBuild(h, httpPort) && servesProxyHosts(h, httpPort)) {
+                return true to "Viewer server is already running."
+            }
             // Serves a page, but from another plugin build (or one older than
             // the build handshake): recycle rather than adopt stale code.
             stop(h, httpPort)
@@ -105,6 +119,10 @@ class Viewer3dServerProcess(
             "--ingest-port", ingestPort.toString(),
             "--icons-dir", paths.iconsDir.absolutePath,
         )
+        for (proxied in proxyHosts()) {
+            cmd.add("--tile-proxy-host")
+            cmd.add(proxied)
+        }
         if (profile) cmd.add("--profile")
         if (!openBrowser) cmd.add("--no-browser")
         return try {
@@ -339,6 +357,27 @@ class Viewer3dServerProcess(
             }
             return null
         }
+
+        /** The hosts a running server proxies tiles from, or null when it cannot say. */
+        fun probeProxyHosts(host: String, httpPort: Int, timeoutMs: Int = 400): List<String>? {
+            val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
+            for (candidate in listOf(h, "127.0.0.1", "localhost").distinct()) {
+                try {
+                    val conn = URI("http://$candidate:$httpPort/tileproxy/hosts").toURL()
+                        .openConnection() as HttpURLConnection
+                    conn.connectTimeout = timeoutMs
+                    conn.readTimeout = timeoutMs
+                    if (conn.responseCode != 200) continue
+                    val body = conn.inputStream.bufferedReader().readText()
+                    val list = HOSTS_FIELD.find(body)?.groupValues?.get(1) ?: return null
+                    return Regex("\"([^\"]*)\"").findAll(list).map { it.groupValues[1] }.toList()
+                } catch (_: Exception) {
+                }
+            }
+            return null
+        }
+
+        private val HOSTS_FIELD = Regex("\"hosts\"\\s*:\\s*\\[([^\\]]*)\\]")
 
         fun probeHealth(host: String, httpPort: Int, timeoutMs: Int = 400): Boolean {
             val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }

@@ -294,6 +294,44 @@ class Viewer3dE2ETest {
         }
     }
 
+    /**
+     * The allowed tile hosts from JOSM's settings reach the server it starts.
+     * The server reads them once, at its start, so a running one with another
+     * list is restarted rather than adopted; the same list is adopted.
+     */
+    @Test
+    fun allowedTileHostsReachTheServerAndAChangeRestartsIt(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        val httpPort = 49165
+        val ingestPort = 49166
+        var hosts = listOf("srv1.mrt.kit.edu")
+        val server = Viewer3dServerProcess(
+            python = { python3 },
+            extract = { Viewer3dStore.ensureExtracted(root) },
+            proxyHosts = { hosts },
+            envProxyHosts = { emptyList() },
+        )
+        try {
+            val (ok, msg) = server.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok, msg)
+            assertEquals(listOf("srv1.mrt.kit.edu"), Viewer3dServerProcess.probeProxyHosts("127.0.0.1", httpPort))
+            assertEquals("Viewer server is already running.",
+                server.start("127.0.0.1", ingestPort, httpPort, openBrowser = false).second, "same hosts: adopted")
+
+            hosts = listOf("srv1.mrt.kit.edu", "tiles.example.org:8443")
+            assertFalse(server.servesProxyHosts("127.0.0.1", httpPort))
+            val (ok2, msg2) = server.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok2, msg2)
+            assertFalse(msg2.contains("already running"), msg2)
+            assertEquals(setOf("srv1.mrt.kit.edu", "tiles.example.org:8443"),
+                Viewer3dServerProcess.probeProxyHosts("127.0.0.1", httpPort)?.toSet())
+        } finally {
+            server.stop("127.0.0.1", httpPort)
+        }
+    }
+
     private fun waitForHealth(httpPort: Int, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

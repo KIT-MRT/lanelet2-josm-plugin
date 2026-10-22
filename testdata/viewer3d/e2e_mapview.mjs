@@ -316,6 +316,39 @@ try {
   t.check("the Baden-Württemberg preset asks in EPSG:25832",
     (await v.evaluate("document.getElementById('tileCrs').value")) === "EPSG:25832"
     && (await v.evaluate("document.getElementById('tileLayers').value")) === "IMAGES_DOP_20_RGB");
+  const note = () => v.evaluate("(() => { const n = document.getElementById('tilePresetNote');"
+    + " return { hidden: n.hidden, text: n.textContent, warn: n.classList.contains('warnText') }; })()");
+  t.check("only a preset with something to say has a note", (await note()).hidden, JSON.stringify(await note()));
+  await v.evaluate("(() => { const el = document.getElementById('tilePreset'); el.value = 'mrt_karlsruhe_2024';"
+    + " el.dispatchEvent(new Event('change')); })()");
+  t.check("the MRT Karlsruhe preset is the institute's WMS in EPSG:25832",
+    (await v.evaluate("document.getElementById('tileUrl').value")) === "https://srv1.mrt.kit.edu/geoserver/karlsruhe/ows"
+    && (await v.evaluate("document.getElementById('tileLayers').value")) === "all2024_epsg25832"
+    && (await v.evaluate("document.getElementById('tileCrs').value")) === "EPSG:25832"
+    && (await v.evaluate("document.getElementById('tileFormat').value")) === "image/jpeg");
+  let n = await note();
+  t.check("and says it is not publicly reachable", !n.hidden && n.text.includes("Not publicly reachable"), JSON.stringify(n));
+  t.check("and, while its host is not allowed here, how to allow it",
+    n.warn && n.text.includes("Allowed tile hosts") && n.text.includes("--tile-proxy-host srv1.mrt.kit.edu"), JSON.stringify(n));
+  // The viewer server says it proxies that host (as after JOSM restarts it with it):
+  await v.evaluate("(() => { const real = window.fetch; window.fetch = (u, o) => String(u) === '/tileproxy/hosts'"
+    + " ? Promise.resolve(new Response(JSON.stringify({ hosts: ['srv1.mrt.kit.edu'] })))"
+    + " : real(u, o); window.__realFetch = real; })()");
+  await clickElement("tilesMenuBtn");
+  await clickElement("tilesMenuBtn");   // reopened: the form shows the source in use, and asks the server again
+  const pickMrt = "(() => { const el = document.getElementById('tilePreset'); el.value = 'mrt_karlsruhe_2024';"
+    + " el.dispatchEvent(new Event('change')); })()";
+  t.check("reopening the form asks again, and the warning goes",
+    await waitFor(async () => {
+      await v.evaluate(pickMrt);
+      const m = await note();
+      return !m.warn && m.text.includes("is an allowed tile host here") && m.text.includes("Not publicly reachable");
+    }), JSON.stringify(await note()));
+  await v.evaluate("window.fetch = window.__realFetch");
+  // Close, open (which asks the real server again: the checks below need its host), close.
+  await clickElement("tilesMenuBtn");
+  await clickElement("tilesMenuBtn");
+  await sleep(300);
   await clickElement("tilesMenuBtn");
 
   // A server without CORS: WebGL refuses its images...
