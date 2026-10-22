@@ -236,8 +236,11 @@ object Viewer3dConstants {
 
     /**
      * Way tags streamed besides type/subtype/participant:bicycle, because the
-     * viewer's line styles read them (`lines.mapcss` does too). Everything
-     * else reaches the viewer only through `describe`.
+     * viewer reads them: `color` and `sidewalk_entry` for the line styles
+     * (`lines.mapcss` does too), `height` for the upright icon of a 2-point
+     * Autoware traffic light or sign (`autowareLightQuad`). Everything else
+     * reaches the viewer only through `describe`. The scene server streams
+     * the same keys (`KEEP_TAGS` in `tools/scene_server/ll2_scene/mapfeed.py`).
      */
-    val STYLE_KEYS = listOf("color", "sidewalk_entry")
+    val STYLE_KEYS = listOf("color", "sidewalk_entry", "height")
 }

@@ -136,7 +136,7 @@ for (const w of ways) {
   if (known.includes(false)) fillUnknownHeights(points, known);
   const tags = {};
   // Viewer3dFeatures: type/subtype/participant:bicycle plus the style keys.
-  for (const k of ["type", "subtype", "participant:bicycle", "color", "sidewalk_entry"]) {
+  for (const k of ["type", "subtype", "participant:bicycle", "color", "sidewalk_entry", "height"]) {
     if (w.tags[k] !== undefined) tags[k] = w.tags[k];
   }
   features.push({ id: `way/${w.id}`, kind: "line", tags, pts: points, nodes: nds });

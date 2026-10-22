@@ -20,9 +20,12 @@ ARROW_AT = 0.35  # fraction along the centerline, as in Viewer3dFeatures
 ONE_WAY = "one_way"
 ARROW_PARTICIPANT = "vehicle:car"
 # Tags worth sending: the browser styles by `type`/`subtype` and shows icons.
-# "color" and "sidewalk_entry" are what the viewer's line styles read, as the
-# plugin streams them (Viewer3dConstants.STYLE_KEYS).
-KEEP_TAGS = ("type", "subtype", "participant:bicycle", "location", "region", "color", "sidewalk_entry")
+# "color" and "sidewalk_entry" are what the viewer's line styles read, and
+# "height" makes a 2-point Autoware traffic light or sign stand upright
+# (`autowareLightQuad`), as the plugin streams them
+# (Viewer3dConstants.STYLE_KEYS).
+KEEP_TAGS = ("type", "subtype", "participant:bicycle", "location", "region", "color",
+             "sidewalk_entry", "height")
 
 
 def usable_ele(z):

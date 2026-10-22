@@ -362,8 +362,8 @@ Browser camera and picking (`app.js`):
   `testdata/viewer3d/check_line_styles.mjs` fails when one of its `way`
   rules has no style. Sizes are real metres (typical German values),
   colours lifted where JOSM's would vanish on the dark canvas. The stream
-  carries `color` and `sidewalk_entry` for them (`Viewer3dConstants.STYLE_KEYS`,
-  scene server `KEEP_TAGS`). The selection highlight is a 3 px screen-space
+  carries `color` and `sidewalk_entry` for them, and `height` for the Autoware
+  light icons (`Viewer3dConstants.STYLE_KEYS`, scene server `KEEP_TAGS`). The selection highlight is a 3 px screen-space
   ribbon (`render/screenlines.js`); a 1 px line vanished next to wide paint.
   **Level of detail per chunk** (`LOD_PX_PER_M` = 2): where a metre is under
   2 px at a chunk's nearest point, it draws its one-pixel lines (same
@@ -539,9 +539,12 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   its position). Only the icon follows that; the line renders as before, and
   anything else -- no height, three points, a height that is not a number --
   takes the old icon path. Autoware documents this for lights only; signs
-  follow it on request. The Autoware Karlsruhe map has 659 two-point lights
-  and 3059 two-point signs, none with a height tag, so they all stay as they
-  were.
+  follow it on request. **`height` has to be in the stream**, and for a while
+  it was not: the browser test's fake bridge sent it, JOSM and the scene
+  server never did, so every light lay flat. `Viewer3dStreamedTagsTest` and
+  `test_mapfeed.StreamedTagsTest` now start from a real way. The Autoware
+  Karlsruhe map (2026-10-22) has 3748 two-point lights, all with a height,
+  and 3059 two-point signs without one.
 - **Orthographic is a mode of the one camera, not a second camera.** Every
   module imports the same `camera`, and the camera lock already writes its
   own projection into it. In ortho the frustum is sized to show what the

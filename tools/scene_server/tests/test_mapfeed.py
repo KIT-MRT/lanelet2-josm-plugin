@@ -74,3 +74,48 @@ class OneWayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreamedTagsTest(unittest.TestCase):
+    """What the viewer reads off a streamed way must be in the stream.
+
+    The browser test drives a fake bridge that sends whatever tags it likes,
+    which once hid that `height` never left this server: the Autoware light
+    icon then always lay flat. So this goes through lanelet2's own loader.
+    """
+
+    OSM = """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <node id="1" lat="49.0000000" lon="8.4000000"><tag k="ele" v="168.0"/></node>
+  <node id="2" lat="49.0000000" lon="8.4000040"><tag k="ele" v="168.0"/></node>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="type" v="traffic_light"/>
+    <tag k="subtype" v="red_yellow_green"/>
+    <tag k="height" v="0.86"/>
+    <tag k="original_id" v="8407"/>
+  </way>
+</osm>
+"""
+
+    def test_an_autoware_light_keeps_its_height(self):
+        try:
+            import lanelet2  # noqa: F401
+        except Exception as exc:  # pragma: no cover - depends on the venv
+            raise unittest.SkipTest("lanelet2 not installed: %s" % exc)
+        import tempfile
+        from pathlib import Path
+
+        from ll2_scene.enu import SceneFrame
+        from ll2_scene.mapfeed import MapConverter
+        from ll2_scene.scene import MapFile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "light.osm"
+            path.write_text(self.OSM)
+            origin = (49.0, 8.4)
+            lanelet_map = MapFile(path, origin).lanelet_map
+            features = MapConverter(SceneFrame(*origin, *origin)).features(lanelet_map)
+        light = next(f for f in features if f["id"] == "way/10")
+        self.assertEqual({"type": "traffic_light", "subtype": "red_yellow_green",
+                          "height": "0.86"}, light["tags"])
+        self.assertEqual(6, len(light["pts"]), "two points: the light's bottom edge")
