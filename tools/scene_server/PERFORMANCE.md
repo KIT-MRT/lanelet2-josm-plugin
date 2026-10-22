@@ -4,6 +4,27 @@ Measured on the example scene (220 frames, ~740 k points a frame) on an
 8-core machine with no CUDA device. Numbers are wall clock, warm frame cache
 unless it says cold.
 
+## City start on a network mount
+
+The city index reads `poses.txt`, `maps/origin.json` and
+`timestamp.reference.txt` from every scene. On the CIFS share (130 ms ping)
+that was ~0.5 s a scene, one after another, almost all of it waiting for
+round trips. Opening the three files of one scene is ~0.3 s cold.
+
+| | whole pre-release (1651 scenes) |
+|---|---|
+| originally: one at a time, `stat` before every read | ~11 min (estimated from 70 scenes) |
+| `scandir` + 32 threads, read instead of check | 17 s |
+| next start, from the index cache (16.8 MB) | 2–4 s |
+
+Per scene the parallel read went from 445 ms (1 thread) to 13 ms (32) and
+7 ms (64). 32 is the default because the gain beyond it is a few seconds,
+and only on a cold start. The one background check after a cached start
+is a cold scan behind the server: 16 s. The city map (Karlsruhe, 136 MB, local) is 2 s to
+load and 5.7 s to turn into features; `/city.json` is 1.1 s. Opening a
+picked scene is ~1.4 s, mostly ~1300 `stat`s inside the kitscenes loader.
+That one is worth a look if picking ever feels slow.
+
 ## Done
 
 | | warm build | cold, 14 frames |

@@ -65,6 +65,13 @@ def main(argv=None):
     parser.add_argument("--max-open-scenes", type=int, default=8,
                         help="city: scenes kept open at once; idle ones beyond this are "
                              "closed (their disk cache stays)")
+    parser.add_argument("--rescan", action="store_true",
+                        help="city: read every scene from the dataset instead of the local "
+                             "index cache (new and removed scenes are noticed anyway; this "
+                             "is for files changed inside a scene)")
+    parser.add_argument("--index-workers", type=int, default=None,
+                        help="city: scenes read at once while indexing (default: 32; the "
+                             "index waits on the network, not the CPU)")
     parser.add_argument("--build-aggregates", action="store_true",
                         help="city: build every scene's whole-scene cloud into the cache, "
                              "one after the other, then exit. Cold builds take minutes a "
@@ -185,13 +192,15 @@ def main(argv=None):
 
 
 def run_city(args, log):
-    from .city import CityIndex
+    from .city import DEFAULT_WORKERS, CityIndex
 
-    t0 = time.perf_counter()
-    index = CityIndex(args.city, city=args.city_name, log=log)
-    log("city: %s (indexed in %.1fs)" % (index.describe_log(), time.perf_counter() - t0))
-    origin = index.default_anchor()
     cache_dir = None if args.no_cache else (args.cache_dir or default_cache_dir())
+    t0 = time.perf_counter()
+    index = CityIndex(args.city, city=args.city_name, log=log, cache_dir=cache_dir,
+                      rescan=args.rescan, workers=args.index_workers or DEFAULT_WORKERS)
+    log("city: %s (indexed in %.1fs: %d scenes read, %d from the local index cache)"
+        % (index.describe_log(), time.perf_counter() - t0, index.read_count, index.cached_count))
+    origin = index.default_anchor()
 
     def aggregator_for(source, disk):
         return SceneAggregator(
@@ -204,6 +213,9 @@ def run_city(args, log):
 
     def aggregate_cached(scene):
         return bool(cache_dir) and (FrameDiskCache.scene_dir(cache_dir, scene.id) / name).is_file()
+
+    # Once, behind the start: does the cache still match the dataset?
+    index.check_in_background()
 
     if args.build_aggregates:
         return build_all(index, origin, cache_dir, aggregator_for, aggregate_cached, args, log)

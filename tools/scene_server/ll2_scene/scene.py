@@ -45,10 +45,13 @@ def add_kitscenes_to_path(explicit=None):
 
 def read_origin(scene_dir):
     """(lat, lon) of the scene's projector origin, from `maps/origin.json`."""
+    # Read, don't check first: on a network mount every check is a round trip.
     path = Path(scene_dir) / "maps" / "origin.json"
-    if not path.is_file():
-        raise FileNotFoundError("no maps/origin.json in %s" % scene_dir)
-    data = json.loads(path.read_text())
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        raise FileNotFoundError("no maps/origin.json in %s" % scene_dir) from None
+    data = json.loads(text)
     return float(data["latitude"]), float(data["longitude"])
 
 
@@ -76,10 +79,11 @@ def read_poses(scene_dir):
 
 def read_reference_timestamps(scene_dir, poses):
     """One timestamp per frame, in seconds; the pose times when there is no file."""
-    path = Path(scene_dir) / "timestamp.reference.txt"
-    if not path.is_file():
+    try:
+        text = (Path(scene_dir) / "timestamp.reference.txt").read_text()
+    except FileNotFoundError:
         return poses["time"].copy()
-    vals = [float(v) for v in path.read_text().split() if v.strip()]
+    vals = [float(v) for v in text.split() if v.strip()]
     arr = np.array(vals, dtype=np.float64)
     # Some released scenes store nanoseconds here while poses.txt is in
     # seconds; the dataset's own loader uses the same 1e12 heuristic.

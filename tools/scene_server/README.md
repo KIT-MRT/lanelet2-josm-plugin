@@ -322,6 +322,28 @@ Sindelfingen). By default the city with the most scenes is served;
 that were never extracted are counted and skipped — nothing can be served
 from a tar.
 
+**Starting on a network mount.** The index reads three small files per scene
+(`poses.txt`, `maps/origin.json`, `timestamp.reference.txt`), and on a
+network share each file operation is a round trip. One after another, the
+1650 scenes of the pre-release would take about 11 minutes over a 130 ms link. So
+the walk reads 32 scenes at a time (`--index-workers`) and asks the server
+nothing it would learn by reading the file anyway: the whole dataset now
+indexes in about 17 s. What it read is kept in a local index cache
+(`city-index-*.npz` in the cache directory, never beside the data), so the
+next start only lists the splits and reads scenes it has not seen. That
+takes 2–4 s.
+
+| | |
+|---|---|
+| a new scene, a removed scene | noticed at every start: the listing is always fresh |
+| a file changed *inside* a known scene | found by one check that runs once in the background after a cached start. The log names the changed scenes and the cache is refreshed; the running server keeps what it started with, so restart to see them |
+| `--rescan` | ignore the index cache and read every scene now |
+| `--no-cache` | no index cache either |
+
+Network errors (a timeout on a `soft` CIFS mount, say) are never cached: that
+scene is left out this time and read again next start. A missing or broken
+file is cached like any other result.
+
 In the viewer:
 
 | | |

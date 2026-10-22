@@ -516,6 +516,21 @@ own `uv` venv; the shipped `server.py` stays stdlib-only.
   gate. `Auto` never starts a build (a cold one is minutes); only `Load` does.
   Scenes switch via `resetScene()` -- before the city there was only ever one
   scene per page, so switching had never had to drop anything.
+- **The city index is latency, not data** (`ll2_scene/city.py`). The real
+  dataset is on a CIFS share (~130 ms round trip), each scene is three files
+  of a few kB, and every `stat`/open is a round trip of its own: done one at
+  a time, 1650 scenes would take ~11 minutes (17 s now, 2-4 s cached). `scan` walks in a thread pool
+  (`--index-workers`, 32) with `os.scandir` (no `stat` per entry), and
+  *reading* `poses.txt` is the "is this a scene" test -- never check a file
+  and then read it. What was read goes to `IndexCache` (one `.npz` in the
+  cache dir, no pickles), keyed by scene directory; the listing is always
+  fresh, so new and removed scenes need no rescan. Only a changed file inside
+  a known scene is invisible to a cached start, which is what the **one**
+  background check after a cached start (`check_in_background`, log only,
+  the running index is not swapped) and `--rescan` are for. Network errors
+  (`OSError` other than not-found) are never cached. `tests/test_city_index.py`
+  holds the parallel and the cached index against a sequential copy of the
+  old walk.
 - **Autoware traffic lights and signs** (`autowareLightQuad` in
   `render/icons.js`): a `traffic_light*` or `traffic_sign` way with exactly
   two distinct points and a numeric
