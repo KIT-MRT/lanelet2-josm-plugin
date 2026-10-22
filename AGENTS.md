@@ -599,6 +599,16 @@ the shipped `server.py` stays stdlib-only.
   `picking.js`), as does the trajectory pick; the trajectory line shader
   trims at the near plane only in perspective. The near plane sits *behind*
   an ortho camera so tall geometry above a low camera still draws.
+- **Tile detail goes by distance** (`TileLayer._select`): a quadtree walk
+  from the whole world down, splitting whichever tile's pixels look largest
+  on screen (at its nearest point to the camera) until each shows at most √2
+  screen pixels per tile pixel or `MAX_TILES` (192) are used; only tiles
+  touching the visible ground (convex hull of `_footprint`) count. So a low
+  perspective view gets z21 under the camera and z15 at the horizon, where a
+  single zoom for the whole view, capped at 96 tiles, had dropped everything
+  to the coarse end. Ortho is all one distance, so one zoom, as before.
+  Memory is bounded by `CACHE_TILES` (384, ~0.6 MB a tile), not the per-view
+  cap; `measure_tiles.mjs` measured the busiest view at 173 tiles.
 - **Tiles are opaque.** three draws every opaque object before any
   transparent one regardless of `renderOrder`, so translucent tiles drew over
   the whole map (the synthetic test missed it -- the line showed faintly

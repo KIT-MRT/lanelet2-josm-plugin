@@ -378,6 +378,19 @@ try {
   await v.drag("left", 640, 400, 0, -120);  // tilt toward the horizon
   await sleep(300);
   t.check("tiles also cover the ground in perspective", await waitFor(async () => (await map("tiles()")).shown > 0));
+  // Detail by distance: low over the ground, near tiles are finer than far ones.
+  {
+    const cam = await v.evaluate("window.__ll2test.camera()");
+    await v.evaluate(`window.__ll2test.setView([${cam.pos[0]}, ${cam.pos[1]}, ${Z + 10}], 0, ${(-10 * Math.PI) / 180})`);
+    await frame();
+    const st = await waitFor(async () => (await map("tiles()")).wanted > 0) && await map("tiles()");
+    const zs = Object.keys(st.zooms).map(Number);
+    t.check("a low oblique view mixes zooms: fine near the camera, coarse far away",
+      Math.max(...zs) - Math.min(...zs) >= 3, JSON.stringify(st.zooms));
+    t.check("within the per-view budget", st.wanted <= 192, String(st.wanted));
+    t.check("and the tile under the camera is the finest", st.zoom === Math.max(...zs) && st.zoom >= 17,
+      JSON.stringify({ zoom: st.zoom, zooms: st.zooms }));
+  }
   await v.shot("mapview_perspective_tiles.png");
 
   await clickElement("tilesBtn");

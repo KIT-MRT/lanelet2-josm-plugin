@@ -23,11 +23,18 @@ import { store } from "../store.js";
 const EARTH_R = 6378137.0;           // Viewer3dEnu.EARTH_R, and Web Mercator's sphere
 const MERC_MAX = Math.PI * EARTH_R;  // 20037508.34 m
 const GRID = 4;                      // quads per tile edge
-const MAX_TILES = 96;                // per view; coarser zoom beyond that
+// Per view. With detail by distance no view measured needed more than 173
+// (street level, looking ahead; measure_tiles.mjs); 192 covers them in full.
+// Memory is bounded by CACHE_TILES, not by this: ~0.6 MB a tile (texture with
+// mipmaps plus the decoded image), so the 384-tile cache stays ~230 MB.
+const MAX_TILES = 192;
 const MAX_RANGE_M = 3000;            // perspective: how far out the ground is tiled
 const MAX_IN_FLIGHT = 8;
-const CACHE_TILES = 384;
+const CACHE_TILES = 384;             // twice a view: moving about keeps the neighbours
 const ANCESTOR_LEVELS = 4;           // coarser stand-ins while a tile loads
+// Split a tile while one of its pixels covers more than this many screen
+// pixels (√2: the same as rounding the zoom, which the single-zoom rule did).
+const REFINE_RATIO = Math.SQRT2;
 
 const TILE_VERTEX = /* glsl */`
 varying vec2 vUv;
@@ -266,6 +273,46 @@ export function checkSource(source) {
   return problems;
 }
 
+/** Convex hull of 2D points (monotone chain), counter-clockwise. */
+function convexHull(points) {
+  const pts = points.map((p) => [p[0], p[1]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+/** Whether an axis-aligned rectangle [x0, y0, x1, y1] overlaps a convex polygon (separating axes). */
+function rectTouchesHull(rect, hull) {
+  if (!hull.length) return false;
+  let hx0 = Infinity, hy0 = Infinity, hx1 = -Infinity, hy1 = -Infinity;
+  for (const [x, y] of hull) {
+    hx0 = Math.min(hx0, x); hy0 = Math.min(hy0, y); hx1 = Math.max(hx1, x); hy1 = Math.max(hy1, y);
+  }
+  if (rect[2] < hx0 || rect[0] > hx1 || rect[3] < hy0 || rect[1] > hy1) return false;
+  if (hull.length < 3) return true;
+  const corners = [[rect[0], rect[1]], [rect[2], rect[1]], [rect[2], rect[3]], [rect[0], rect[3]]];
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const nx = b[1] - a[1];
+    const ny = a[0] - b[0];   // outward normal of a counter-clockwise edge
+    const edge = nx * a[0] + ny * a[1];
+    if (corners.every(([x, y]) => nx * x + ny * y > edge)) return false;
+  }
+  return true;
+}
+
 class TileLayer {
   constructor() {
     this.group = new THREE.Group();
@@ -275,6 +322,7 @@ class TileLayer {
     this.source = { ...TILE_PRESETS.osm };
     this.opacity = 0.85;
     this.proxyHosts = new Set();
+    this.maxTiles = MAX_TILES;
     this.tiles = new Map();     // "z/x/y" -> { key, z, x, y, state, mesh, texture, used }
     this.inFlight = 0;
     this.queue = [];
@@ -392,38 +440,11 @@ class TileLayer {
     }
     this.lastKey = key;
 
-    const foot = this._footprint();
-    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-    for (const [x, y] of foot) {
-      const [lat, lon] = enuToLatLon(x, y, anchor);
-      const mx = mercX(lon);
-      const my = mercY(lat);
-      minx = Math.min(minx, mx); maxx = Math.max(maxx, mx);
-      miny = Math.min(miny, my); maxy = Math.max(maxy, my);
-    }
-    // Zoom: one tile pixel per screen pixel at the middle of the view.
-    const centre = foot[4];
-    const [clat] = enuToLatLon(centre[0], centre[1], anchor);
-    const depth = Math.max(1, camera.position.distanceTo(new THREE.Vector3(centre[0], centre[1], this._groundZ())));
-    const mpp = pixelsToMetres(1, depth);
-    const maxZoom = Math.max(0, Math.min(22, Number(this.source.maxZoom) || 19));
-    let z = Math.round(Math.log2((2 * MERC_MAX * Math.cos(rad(clat))) / (256 * Math.max(1e-3, mpp))));
-    z = Math.max(0, Math.min(maxZoom, z));
-    let range = this._range(z, minx, miny, maxx, maxy);
-    while (z > 0 && range.count > MAX_TILES) {
-      z--;
-      range = this._range(z, minx, miny, maxx, maxy);
-    }
-    this.zoom = z;
-
-    const want = [];
-    for (let ty = range.y0; ty <= range.y1; ty++) {
-      for (let tx = range.x0; tx <= range.x1; tx++) want.push([z, tx, ty]);
-    }
+    const want = this._select(anchor);
     this.wanted = want.length;
-    const cx = (range.x0 + range.x1) / 2;
-    const cy = (range.y0 + range.y1) / 2;
-    want.sort((a, b) => Math.hypot(a[1] - cx, a[2] - cy) - Math.hypot(b[1] - cx, b[2] - cy));
+    this.zoom = want.length ? Math.max(...want.map((w) => w[0])) : null;
+    this.zooms = {};
+    for (const [z] of want) this.zooms[z] = (this.zooms[z] || 0) + 1;
 
     const now = performance.now();
     const shown = new Set();
@@ -451,15 +472,57 @@ class TileLayer {
     this._pump();
   }
 
-  _range(z, minx, miny, maxx, maxy) {
-    const s = tileSize(z);
-    const n = 2 ** z;
-    const clamp = (v) => Math.max(0, Math.min(n - 1, v));
-    const x0 = clamp(Math.floor((minx + MERC_MAX) / s));
-    const x1 = clamp(Math.floor((maxx + MERC_MAX) / s));
-    const y0 = clamp(Math.floor((MERC_MAX - maxy) / s));
-    const y1 = clamp(Math.floor((MERC_MAX - miny) / s));
-    return { x0, x1, y0, y1, count: (x1 - x0 + 1) * (y1 - y0 + 1) };
+  /**
+   * The tiles to show, nearest first: a quadtree walk from the whole world
+   * down. It keeps splitting whichever tile's pixels look largest on screen,
+   * judged at the tile's nearest point to the camera, until every tile shows
+   * at most REFINE_RATIO screen pixels per tile pixel or MAX_TILES are used.
+   * Only tiles touching the ground in view count. So near ground gets fine
+   * tiles and far ground coarse ones, and when the budget runs out it has
+   * gone where it shows most. In ortho every tile is equally far: they all
+   * get one zoom, the one a single-zoom rule would pick.
+   */
+  _select(anchor) {
+    const hull = convexHull(this._footprint());
+    const g = this._groundZ();
+    const cam = camera.position;
+    const maxZoom = Math.max(0, Math.min(22, Number(this.source.maxZoom) || 19));
+    const make = (z, x, y) => {
+      const b = tileBounds(z, x, y);
+      // latLonToEnu is linear, so two corners give the tile's exact rectangle.
+      const [x0, y0] = latLonToEnu(latOfMercY(b.miny), lonOfMercX(b.minx), anchor);
+      const [x1, y1] = latLonToEnu(latOfMercY(b.maxy), lonOfMercX(b.maxx), anchor);
+      const rect = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+      const nx = Math.max(rect[0], Math.min(rect[2], cam.x));
+      const ny = Math.max(rect[1], Math.min(rect[3], cam.y));
+      const d = Math.max(1, Math.hypot(cam.x - nx, cam.y - ny, cam.z - g));
+      const latc = latOfMercY((b.miny + b.maxy) / 2);
+      const groundPerTilePx = (2 * MERC_MAX * Math.cos(rad(latc))) / (256 * 2 ** z);
+      return { z, x, y, rect, d, ratio: groundPerTilePx / Math.max(1e-6, pixelsToMetres(1, d)) };
+    };
+    let leaves = [make(0, 0, 0)];
+    for (let guard = 0; guard < 20000; guard++) {
+      let best = -1;
+      for (let i = 0; i < leaves.length; i++) {
+        const l = leaves[i];
+        if (l.final || l.z >= maxZoom || l.ratio <= REFINE_RATIO) continue;
+        if (best < 0 || l.ratio > leaves[best].ratio) best = i;
+      }
+      if (best < 0) break;
+      const p = leaves[best];
+      const kids = [];
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const k = make(p.z + 1, p.x * 2 + dx, p.y * 2 + dy);
+        if (rectTouchesHull(k.rect, hull)) kids.push(k);
+      }
+      if (leaves.length - 1 + kids.length > this.maxTiles) {
+        p.final = true;   // the budget is spent: this one stays as it is
+        continue;
+      }
+      leaves.splice(best, 1, ...kids);
+    }
+    leaves.sort((a, b) => a.d - b.d);
+    return leaves.map((l) => [l.z, l.x, l.y]);
   }
 
   _tile(z, x, y) {
@@ -597,7 +660,8 @@ class TileLayer {
       if (t.state === "ready") ready++;
       if (t.mesh && t.mesh.visible) shown++;
     }
-    return { on: this.on, zoom: this.zoom, wanted: this.wanted, ready, shown, failed: this.failed,
+    return { on: this.on, zoom: this.zoom, zooms: { ...(this.zooms || {}) }, wanted: this.wanted, ready, shown,
+             failed: this.failed,
              inFlight: this.inFlight, source: this.source, opacity: this.opacity };
   }
 }

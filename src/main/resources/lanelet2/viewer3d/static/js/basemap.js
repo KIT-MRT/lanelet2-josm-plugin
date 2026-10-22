@@ -274,6 +274,8 @@ if (TEST_HOOKS) {
     ortho: () => ({ on: ortho.on, groundZ: ortho.groundZ }),
     setOrtho: (on) => toggleOrtho(on),
     tiles: () => tileLayer.stats(),
+    // Measuring only: how many tiles a view may use.
+    setMaxTiles: (n) => { tileLayer.maxTiles = n; tileLayer.lastKey = ""; },
     setTiles: (on) => setTiles(on),
     setSource: (source) => {
       const problems = checkSource(source);

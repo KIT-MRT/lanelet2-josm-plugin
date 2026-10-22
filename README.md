@@ -200,7 +200,8 @@ culling.
   *MRT Karlsruhe 2024*, the institute's own aerial images, which are **not
   publicly reachable** (KIT network or VPN only) and need the proxy below. Tiles are drawn in the scene, each
   corner placed through the same lat/lon → ENU as the map, so they line up
-  in ortho and in perspective. They are off on every start, since turning
+  in ortho and in perspective. Detail follows distance: sharp tiles near the
+  camera, coarser ones toward the horizon. They are off on every start, since turning
   them on sends the viewed area to the tile server. WebGL can only use tiles
   from servers that allow cross-origin use (CORS); for one that does not,
   list it under *Allowed tile hosts* in JOSM's *Live 3D Viewer* window
