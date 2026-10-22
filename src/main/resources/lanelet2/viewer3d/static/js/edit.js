@@ -5,6 +5,9 @@
 // authoritative geometry back through the normal patch path; if it refuses
 // (layer hidden, node gone), the viewer puts the nodes back and says why.
 //
+// Selecting works in View mode too (to inspect tags, also on a read-only
+// map); everything that changes the map needs Edit mode.
+//
 //   click          select the node under the cursor, else the way
 //   shift+click    add / remove it
 //   ctrl+drag      box select (shift: add)
@@ -57,7 +60,6 @@ transform.addEventListener("mouseUp", endGizmoDrag);
 export const gizmoBusy = () => transform.dragging;
 
 const _axis = new THREE.Vector3();
-let pendingJosmSelection = null; // JOSM selection received outside edit mode
 
 // Each gesture stamps its nodes with a generation. A refusal from JOSM
 // reverts only nodes no later gesture has touched since, so a slow answer to
@@ -81,15 +83,28 @@ export function editBlockedReason() {
   return null;
 }
 
-/**
- * What the Selection panel describes: the viewer's selection, or outside
- * Edit mode (where JOSM's selection waits to be applied) JOSM's.
- */
+/** What the Selection panel describes: the selection, in either mode. */
 export function inspectedTokens() {
-  if (edit.on || !selection.isEmpty() || !pendingJosmSelection) return selection.tokens();
-  const sel = pendingJosmSelection;
-  return [...(sel.nodes || []).map(nodeToken), ...(sel.ways || [])];
+  return selection.tokens();
 }
+
+// A click in View mode may belong to something else first (a trajectory in
+// city mode) or to nothing at all (the camera lock): filters say so.
+const clickFilters = [];
+
+/** `fn(x, y)` returns true when a View-mode click at page pixel (x, y) is not a selection. */
+export function addViewClickFilter(fn) {
+  clickFilters.push(fn);
+}
+
+// The camera lock's Esc releases the lock first; it is not a deselect.
+let escapeBelongsElsewhere = () => false;
+export function setEscapeGuard(fn) {
+  escapeBelongsElsewhere = fn;
+}
+
+// The selection and the hover show in both modes.
+setHighlightVisible(true);
 
 export function setEditMode(on) {
   if (on && !edit.on) {
@@ -100,15 +115,8 @@ export function setEditMode(on) {
     }
   }
   edit.on = !!on;
-  if (edit.on) {
-    store.ensureNodeIndex();
-    if (pendingJosmSelection) {
-      selection.applyFromJosm(pendingJosmSelection);
-      pendingJosmSelection = null;
-    }
-  }
+  if (edit.on) store.ensureNodeIndex();
   lineLayer.setDotsVisible(edit.on);
-  setHighlightVisible(edit.on);
   const bar = document.getElementById("editBar");
   if (bar) bar.hidden = !edit.on;
   const card = document.getElementById("selCard");
@@ -218,11 +226,7 @@ selection.on("changed", () => refreshGizmo());
 store.on("applied", (msg) => {
   if (msg.type === "selection" || (msg.type === "snapshot" && msg.selection)) {
     const sel = msg.type === "selection" ? msg : msg.selection;
-    if (edit.on) selection.applyFromJosm(sel);
-    else {
-      pendingJosmSelection = sel;
-      editEvents.emit("pending");
-    }
+    selection.applyFromJosm(sel);
   }
   if (!drag) refreshGizmo();
 });
@@ -611,8 +615,14 @@ canvas.addEventListener("pointerup", (e) => {
     finishBox(b);
     return;
   }
-  if (!edit.on || !down || transform.dragging) return;
+  if (!down || transform.dragging) return;
   if (Math.abs(e.clientX - down.x) > CLICK_SLOP_PX || Math.abs(e.clientY - down.y) > CLICK_SLOP_PX) return;
+  if (!edit.on) {
+    // View mode: a click selects to inspect, unless it belongs elsewhere.
+    if (document.pointerLockElement === canvas) return;
+    if (e.button !== 0 && e.button !== 1) return;
+    if (clickFilters.some((fn) => fn(e.clientX, e.clientY))) return;
+  }
   if (e.button === 0) clickSelect(e.clientX, e.clientY, e.shiftKey, down.onGizmo);
   else if (e.button === 1) cycleAt(e.clientX, e.clientY);
 });
@@ -732,6 +742,12 @@ export function handleEditKey(e) {
   if (ctrl && (k === "y" || k === "Y")) {
     e.preventDefault();
     undo(true);
+    return true;
+  }
+  // Esc deselects in View mode too (in Edit mode below, with the tools).
+  if (!edit.on && k === "Escape" && !ctrl && !selection.isEmpty() && !escapeBelongsElsewhere()) {
+    cycle = null;
+    selection.clear();
     return true;
   }
   if (!edit.on || ctrl || e.altKey) return false;

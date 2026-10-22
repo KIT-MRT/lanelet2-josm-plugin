@@ -56,7 +56,8 @@ try {
     await v.hover(q[0], q[1]);
     return v.evaluate("window.__ll2test.hover()");
   };
-  t.check("no hover mark outside edit mode", (await hoverAt([5, 0, Z])) === null);
+  // Selecting to inspect works in View mode too, so the hover shows there.
+  t.check("in View mode the hover marks what a click would select too", (await hoverAt([5, 0, Z])) === "way/10");
   await v.key("e");
   t.check("E turns edit mode on", (await editState()).on);
   t.check("edit toolbar shows", await v.evaluate("!document.getElementById('editBar').hidden"));
@@ -237,9 +238,10 @@ try {
   await v.key("e");
   v.sendScene({ type: "selection", nodes: [1002], ways: [] });
   await sleep(200);
-  t.check("outside edit mode JOSM's selection is kept aside", sameSet((await sel()).nodes, ["node/1003"]));
+  t.check("in View mode JOSM's selection shows right away (to inspect it)", sameSet((await sel()).nodes, ["node/1002"]),
+    JSON.stringify(await sel()));
   await v.key("e");
-  t.check("and applied when edit mode turns on", sameSet((await sel()).nodes, ["node/1002"]), JSON.stringify(await sel()));
+  t.check("and stays when edit mode turns on", sameSet((await sel()).nodes, ["node/1002"]), JSON.stringify(await sel()));
 
   // ---- interpolate heights -------------------------------------------------------------
   await v.key("Escape");

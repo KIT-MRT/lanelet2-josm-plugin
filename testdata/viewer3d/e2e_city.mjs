@@ -228,6 +228,9 @@ try {
 
   await v.click(px[0], px[1]);
   t.check("clicking an arrow opens that scene", await waitFor(async () => (await scene()).base === `${base}/scene/east-1`));
+  const selAfterTrack = await v.evaluate("window.__ll2test.selection()");
+  t.check("and does not also select the map under it", selAfterTrack.ways.length === 0 && selAfterTrack.nodes.length === 0,
+    JSON.stringify(selAfterTrack));
   t.check("at the frame that was clicked", await waitFor(async () => {
     const s = await scene();
     return s.frame === 10 && !s.loading;

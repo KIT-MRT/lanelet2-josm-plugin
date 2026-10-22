@@ -36,7 +36,7 @@ import { installCity, onCityMessage, update as updateCity, cityState } from "./j
 import { installBasemap, update as updateBasemap } from "./js/basemap.js";
 import { rigActive, rig, update as updateRig } from "./js/sensors/camrig.js";
 import { selection } from "./js/selection.js";
-import { edit, gizmoBusy, transform, clickTarget, editBlockedReason } from "./js/edit.js";
+import { edit, gizmoBusy, transform, clickTarget, editBlockedReason, addViewClickFilter, setEscapeGuard } from "./js/edit.js";
 import { nav, navBusy, installNav } from "./js/nav.js";
 import { installKeys, applyHeldCamera, isPointerLocked } from "./js/keys.js";
 import { installJosmView, maybeSyncJosmView } from "./js/josmview.js";
@@ -52,6 +52,10 @@ import { installLineStyleUi } from "./js/ui/linestyleui.js";
 import { ortho } from "./js/camera.js";
 
 installShell();
+// Under the camera lock picking assumes a projection the view does not have,
+// and Esc releases the lock before it deselects anything.
+addViewClickFilter(() => rigActive());
+setEscapeGuard(() => rigActive());
 
 // edit.js created TransformControls at import, so these listeners come after
 // its pointerdown (see nav.js).
@@ -111,7 +115,8 @@ function currentHints() {
   }
   const base = ortho.on
     ? [["Left-drag", "pan"], ["Right-drag", "turn"], ["Wheel", "zoom"], ["B", "north up"], ["V", "3D"]]
-    : [["Left-drag", "orbit"], ["Right-drag", "look"], ["Middle", "pan"], ["Wheel", "zoom"], ["WASD", "walk"]];
+    : [["Click", "inspect"], ["Left-drag", "orbit"], ["Right-drag", "look"], ["Middle", "pan"], ["Wheel", "zoom"],
+       ["WASD", "walk"]];
   if (cityState.scenes.length && !sceneState.info) base.push(["Click a track", "open that scene"]);
   else if (sceneState.info) base.push([", .", "frames"], ["K", "car"]);
   base.push(["Ctrl K", "commands"], ["?", "all keys"]);

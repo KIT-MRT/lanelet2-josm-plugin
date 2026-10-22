@@ -19,6 +19,7 @@ import urllib.request
 
 from .aggregate import SceneAggregator, aggregate_cache_name
 from .bridge import ViewerBridge
+from .describe import make_command_handler
 from .cache import DEFAULT_LIMIT_GB, FrameDiskCache, default_cache_dir
 from .http import CityHttpServer, SceneHttpServer
 from .scene import MapFile, SceneSource
@@ -159,7 +160,16 @@ def main(argv=None):
         if http:
             bridge.send(source.describe(http.base_url))
 
-    bridge = ViewerBridge(args.viewer_host, args.ingest_port, log=log)
+    # The viewer's Selection tab asks for every tag of what is selected. Ours
+    # to answer only when the map in the viewer is ours; with JOSM streaming
+    # it, JOSM answers and this server stays silent.
+    def map_owner():
+        if send_map:
+            return source.lanelet_map
+        return False if existing else None
+
+    bridge = ViewerBridge(args.viewer_host, args.ingest_port, log=log,
+                          on_command=make_command_handler(map_owner, log=log))
     bridge.start(on_connect=on_connect)
 
     try:
@@ -241,7 +251,13 @@ def run_city(args, log):
                                               "scenes": len(index.scenes),
                                               "anchor": {"lat": anchor[0], "lon": anchor[1]}}})
 
-    bridge = ViewerBridge(args.viewer_host, args.ingest_port, log=log)
+    def map_owner():
+        if send_map:
+            return map_file.lanelet_map
+        return False if existing else None
+
+    bridge = ViewerBridge(args.viewer_host, args.ingest_port, log=log,
+                          on_command=make_command_handler(map_owner, log=log))
     bridge.start(on_connect=on_connect)
     try:
         while True:

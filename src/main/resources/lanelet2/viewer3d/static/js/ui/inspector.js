@@ -14,7 +14,7 @@ import { selection } from "../selection.js";
 import { edit, editEvents, inspectedTokens } from "../edit.js";
 import { sendCommand } from "../net.js";
 import { toast } from "../hud.js";
-import { ui, currentTab, panelOpen, escapeHtml } from "./shell.js";
+import { ui, currentTab, panelOpen, escapeHtml, setTabBadge } from "./shell.js";
 
 const DEBOUNCE_MS = 150;
 const REPLY_TIMEOUT_MS = 4000;
@@ -43,7 +43,8 @@ function schedule(force = false) {
   const key = tokens.join(",");
   if (key !== state.key) state.stale = true;
   if (!visible()) {
-    // Keep the tab's dot honest without asking JOSM for anything.
+    // Nothing is asked while the tab is hidden; a dot says there is news.
+    if (key !== state.key && tokens.length) setTabBadge("inspect", true);
     return;
   }
   clearTimeout(timer);
@@ -170,7 +171,7 @@ function render() {
   $("inspectCopy").disabled = !tokens.length || state.loading;
   $("inspectRefresh").disabled = !tokens.length || state.loading;
   if (!tokens.length) {
-    body.innerHTML = `<div class="empty">Click a line or a node in Edit mode (<kbd>E</kbd>), or select something in JOSM.</div>`;
+    body.innerHTML = `<div class="empty">Click a line or a node to see its tags (in View or Edit mode), or select something in JOSM.</div>`;
     return;
   }
   const infos = tokens.map((t) => state.details.get(t)).filter(Boolean);
@@ -241,7 +242,11 @@ function render() {
     }
   }
   if (state.note) parts.push(`<div class="hint warnText">${escapeHtml(state.note)}</div>`);
-  else if (state.source === "josm") parts.push('<div class="hint">From JOSM. Tags edited there show here once you come back to this window.</div>');
+  else if (state.source === "josm" && store.mapSource === "scene_server") {
+    parts.push('<div class="hint">From the scene server\'s lanelet2 map (read-only).</div>');
+  } else if (state.source === "josm") {
+    parts.push('<div class="hint">From JOSM. Tags edited there show here once you come back to this window.</div>');
+  }
   body.innerHTML = parts.join("");
 }
 
@@ -270,7 +275,6 @@ export function installInspector() {
     selection.set([{ type: kind, id: kind === "node" ? Number(t.slice(5)) : t }]);
   });
   selection.on("changed", () => schedule());
-  editEvents.on("pending", () => schedule());
   editEvents.on("mode", () => schedule());
   // A selected way changed in the stream (geometry, type or subtype).
   store.on("upsert", (f) => {

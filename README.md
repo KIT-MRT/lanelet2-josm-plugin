@@ -131,7 +131,8 @@ culling.
   settings), the 3D view, a side panel on the right and a status bar. The
   panel has tabs — *Layers* (lanelets, icons, map tiles and their source),
   *Selection* (every tag of the selected lines and nodes and the relations
-  they belong to, asked from JOSM), *Sensor data* (only with a recorded scene
+  they belong to, asked from JOSM or the scene server; a click selects in
+  View mode too, Edit adds the tools), *Sensor data* (only with a recorded scene
   or city) and *Debug* (camera readouts; turn it on in Settings). Fold it away with `\` or by clicking the
   active tab; drag its edge to resize it. Everything is remembered per
   browser. In a narrow window the panel floats over the view.

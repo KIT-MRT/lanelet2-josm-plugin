@@ -19,7 +19,7 @@ import { camera, frameBox, setCameraView, lookAtPoint, view } from "../camera.js
 import { store } from "../store.js";
 import { toast } from "../hud.js";
 import { setJob, setTabAvailable, currentTab, panelOpen } from "../ui/shell.js";
-import { edit } from "../edit.js";
+import { edit, addViewClickFilter } from "../edit.js";
 import { rigActive } from "./camrig.js";
 import { trajectoryLayer } from "../render/trajectories.js";
 import { pointLayer } from "../render/points.js";
@@ -94,6 +94,8 @@ export function installCity() {
   els.deselect.addEventListener("click", () => clearScene());
   window.addEventListener("ll2:scene", onSceneChanged);
   installPointer();
+  // A click on a trajectory opens its scene; it does not also select the map.
+  addViewClickFilter((x, y) => pickable() && !!pickAt(x, y));
 }
 
 /** A `city` message: fetch the trajectories and draw them. */

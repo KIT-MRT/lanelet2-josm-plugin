@@ -298,7 +298,7 @@ try {
   const insp = () => v.evaluate("window.__ll2inspect.state()");
   await clickEl('#sidePanel .tabs [data-tab="inspect"]');
   t.check("the Selection tab says how to select something",
-    (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("Edit mode"));
+    (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("Click a line"));
   v.commands.length = 0;
   await v.key("e");
   let at = await v.reveal([20, 0, Z]);
@@ -364,6 +364,42 @@ try {
   t.check("the connection popover says so too",
     (await v.evaluate("document.getElementById('connPop').textContent")).includes("scene server (view only)"));
   await v.key("Escape");
+
+  // ---- selecting to inspect, in View mode (read-only map) ----------------------------------------------------
+  // The scene server answers describe from its lanelet2 map; the fake bridge plays it.
+  v.reply = (cmd) => {
+    const d = (cmd.ops || []).find((o) => o.op === "describe");
+    if (!d) return { ok: false, message: "The 3D scene server is read-only" };
+    return { ok: true, message: "Described from the scene server's map", details: d.ids.map((id) => ({
+      id, tags: { type: "line_thin", subtype: "dashed", lane_change: "no" }, nodes: 3,
+      memberships: [{ id: "relation/7", role: "left", tags: { type: "lanelet", subtype: "road" } }] })) };
+  };
+  await clickEl('#sidePanel .tabs [data-tab="inspect"]');
+  const cam0v = await v.camera();
+  at = await v.reveal([20, 0, Z]);
+  const camAfterReveal = await v.camera();
+  await v.click(at[0], at[1]);
+  t.check("in View mode a click selects the line", (await v.evaluate("window.__ll2test.selection()")).ways.join() === "way/10",
+    JSON.stringify(await v.evaluate("window.__ll2test.selection()")));
+  t.check("without the edit tools or the gizmo", !(await v.evaluate("window.__ll2test.edit().on")) && (await hidden("editBar"))
+    && (await v.evaluate("window.__ll2test.gizmo()")).at === null);
+  t.check("and the click did not move the camera", JSON.stringify((await v.camera()).pos) === JSON.stringify(camAfterReveal.pos));
+  t.check("the scene server's tags show, and where they come from",
+    await waitFor(async () => (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("lane_change")),
+    await v.evaluate("document.getElementById('inspectBody').textContent"));
+  t.check("(from the scene server's map)",
+    (await v.evaluate("document.getElementById('inspectBody').textContent")).includes("scene server"));
+  t.check("the status bar says a click inspects", (await ui()).hints.includes("inspect"), (await ui()).hints);
+  const cc2 = await box("canvas");
+  await v.drag("left", cc2.cx, cc2.cy + 40, 80, 0);
+  t.check("a drag still orbits and keeps the selection",
+    (await v.evaluate("window.__ll2test.selection()")).ways.join() === "way/10");
+  await v.key("Escape");
+  t.check("Esc deselects in View mode too", (await v.evaluate("window.__ll2test.selection()")).ways.length === 0);
+  v.reply = () => ({ ok: true, message: "ok" });
+  void cam0v;
+  await clickEl('#sidePanel .tabs [data-tab="layers"]');
+
   v.sendScene({ type: "snapshot", anchor: { lat: 49.0, lon: 8.4 }, features });
   await waitFor(() => v.evaluate("!document.getElementById('editBtn').classList.contains('blocked')"));
   await v.key("e");

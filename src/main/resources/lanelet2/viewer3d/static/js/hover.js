@@ -1,4 +1,4 @@
-// Hover in edit mode: marks what a left click at the pointer would select
+// Hover (both modes): marks what a left click at the pointer would select
 // (the node, else the way; on a gizmo handle only a node dot), with the same
 // rule as the click itself, so there is no guessing before clicking. Picks at
 // most once a frame, and only when the pointer, the gizmo handle under it or
@@ -36,7 +36,7 @@ canvas.addEventListener("pointerleave", () => { pointer.inside = false; });
 
 /** Per frame. `busy`: a drag, orbit or captured mouse owns the pointer. */
 export function updateHover(busy) {
-  if (!edit.on || !pointer.inside || pointer.buttons || busy) {
+  if (!pointer.inside || pointer.buttons || busy) {
     lastKey = "";
     show(null);
     return;

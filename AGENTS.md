@@ -617,8 +617,20 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   `details`. Read-only: no visibility check, answered on its own. Tags
   edited in JOSM produce no patch, so the tab asks again when it opens, when
   the selection or a selected way changes, and when the window regains
-  focus. The scene server refuses it, and the tab falls back to the
-  streamed tags with a note.
+  focus. The scene server answers it too (`ll2_scene/describe.py`, from its
+  lanelet2 map: attributes, plus lanelets by bound role, areas outer/inner
+  and regulatory elements by parameter role via `findUsages`), but **only
+  when the viewer's map is its own**; with JOSM streaming the map it sends
+  no reply at all, because the browser takes the first `command_result`
+  with a matching id and a refusal would beat JOSM's answer. Without either,
+  the tab falls back to the streamed tags with a note.
+- **Selecting is not an edit.** A click (no drag) selects in View mode too,
+  to inspect tags, also on a read-only map; the gizmo, tools, box select and
+  every change stay in Edit mode. JOSM's selection is applied at once (it
+  used to wait for Edit mode), and the hover shows in both modes. Clicks a
+  View-mode selection must not take go through `addViewClickFilter`: a
+  trajectory in city mode, the camera lock. Esc deselects in View too,
+  after the camera lock's own Esc (`setEscapeGuard`).
 - `move_node`/`set_tag` go into **one** `SequenceCommand("3D viewer edit", ...)`
   on the undo stack, so one gesture is one Ctrl+Z. **All or nothing** (a
   deliberate change from the Jython, which skipped missing nodes): if any

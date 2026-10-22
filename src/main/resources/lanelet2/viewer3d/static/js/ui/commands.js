@@ -200,10 +200,10 @@ const MOUSE = [
     [["Shift"], "Ten times faster"],
     [["2D view"], "Left-drag pans, right-drag turns"],
   ]],
-  ["Select (Edit mode)", [
-    [["Click"], "Select the node under the cursor, else the way"],
+  ["Select (View and Edit)", [
+    [["Click"], "Select the node under the cursor, else the way; its tags are in the Selection tab"],
     [["Shift click"], "Add or remove"],
-    [["Ctrl drag"], "Box select (Shift: add)"],
+    [["Ctrl drag"], "Box select, Edit mode (Shift: add)"],
     [["Middle-click"], "Cycle through everything under the cursor"],
     [["Esc"], "Deselect"],
   ]],

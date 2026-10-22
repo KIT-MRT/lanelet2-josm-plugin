@@ -68,7 +68,12 @@ panel turns to its *Sensor data* tab.
 
 A map the scene server sends itself is marked `"source": "scene_server"` in
 its snapshot, so the viewer greys out *Edit* (and says why) instead of
-letting edits be refused one by one.
+letting edits be refused one by one. Selecting still works in View mode: a
+click selects a line or node, and the viewer's *Selection* tab shows every
+attribute from the lanelet2 map, with the lanelets (left / right bound),
+areas and regulatory elements (by role) that use it. The scene server answers
+that `describe` request only while the map in the viewer is its own; with
+JOSM streaming the map, JOSM answers.
 
 Releasing the lock leaves the camera **where it is**, so you keep the vantage
 point you locked on to and just lose the image; only the roll is dropped,

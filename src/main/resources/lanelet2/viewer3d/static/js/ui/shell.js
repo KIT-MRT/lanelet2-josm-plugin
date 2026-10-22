@@ -206,6 +206,13 @@ export function reveal(el) {
   el.scrollIntoView({ block: "nearest" });
 }
 
+/** A dot on a tab that is not showing: something new there. */
+export function setTabBadge(name, on) {
+  const tab = document.querySelector(`#sidePanel .tabs [data-tab="${name}"]`);
+  const badge = tab && tab.querySelector(".badge");
+  if (badge) badge.hidden = !on || (name === activeTab && panelOpen());
+}
+
 // ---- menus and popovers ----------------------------------------------------------
 let openMenu = null; // { menu, button }
 
