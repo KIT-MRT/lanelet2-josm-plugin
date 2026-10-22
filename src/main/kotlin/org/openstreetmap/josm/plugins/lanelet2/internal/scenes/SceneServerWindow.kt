@@ -75,6 +75,11 @@ object SceneServerWindow {
             font = Font(Font.MONOSPACED, Font.PLAIN, 12)
         }
         val startBtn = JButton("Start")
+        val rescanBtn = JButton("Rescan everything")
+        rescanBtn.toolTipText = "<html>Restart, reading every scene from the dataset instead of the local index<br>" +
+            "(about 17 s on the network mount), and rewrite the index. For scenes that<br>" +
+            "were unreadable or still being copied at the last index. New scenes need<br>" +
+            "no rescan: Start finds them.</html>"
         val stopBtn = JButton("Stop")
         val viewerBtn = JButton("Open viewer")
         val closeBtn = JButton("Close")
@@ -102,6 +107,9 @@ object SceneServerWindow {
                 ?: "Python: checking…"
             serverLabel.text = "Scene server: ${server.statusText()}"
             startBtn.isEnabled = !busy
+            val root = File(rootField.text.trim())
+            // Only a city has an index to rescan.
+            rescanBtn.isEnabled = !busy && root.isDirectory && SceneLaunch.detectMode(root) == SceneMode.CITY
             stopBtn.isEnabled = !busy && server.isAlive()
             if (installLog.isEmpty() || server.isAlive()) {
                 val text = server.tail().joinToString("\n")
@@ -127,8 +135,8 @@ object SceneServerWindow {
 
         fun fail(message: String) = SwingUtilities.invokeLater { Dialogs.error(message, TITLE) }
 
-        /** Everything Start does, off the EDT. */
-        fun startFlow(root: File, useJosmMap: Boolean) {
+        /** Everything Start (and Rescan) does, off the EDT. */
+        fun startFlow(root: File, useJosmMap: Boolean, rescan: Boolean) {
             var python = BackendRunner.resolvePython()
             var check = SceneSetup.check(python)
             if (!check.ok) {
@@ -194,6 +202,7 @@ object SceneServerWindow {
             val plan = LaunchPlan(
                 root = root, mode = SceneLaunch.detectMode(root), useJosmMap = useJosmMap,
                 viewerHost = host, viewerPort = http, ingestPort = ingest, httpPort = port,
+                rescan = rescan,
             )
             val (ok, msg) = server.start(plan, python, extractDir, BackendRunner.resolveEnvScript())
             if (!ok) fail(msg)
@@ -209,11 +218,11 @@ object SceneServerWindow {
             FileChoosers.chooseDirectory("KITScenes folder", current.takeIf { it.isDirectory })
                 ?.let { rootField.text = it.absolutePath }
         }
-        startBtn.addActionListener {
+        fun launch(rescan: Boolean) {
             val root = File(rootField.text.trim())
             if (!root.isDirectory) {
                 Dialogs.warn("Choose the KITScenes folder first.", TITLE)
-                return@addActionListener
+                return
             }
             val useJosmMap = josmBox.isSelected && hasJosmMap()
             LaneletSettings.put(KEY_ROOT, root.path)
@@ -222,12 +231,14 @@ object SceneServerWindow {
             refresh()
             Thread {
                 try {
-                    startFlow(root, useJosmMap)
+                    startFlow(root, useJosmMap, rescan)
                 } finally {
                     SwingUtilities.invokeLater { busy = false; refresh() }
                 }
             }.apply { isDaemon = true; name = "lanelet2-scene-start" }.start()
         }
+        startBtn.addActionListener { launch(rescan = false) }
+        rescanBtn.addActionListener { launch(rescan = true) }
         stopBtn.addActionListener {
             server.stop()
             refresh()
@@ -256,7 +267,7 @@ object SceneServerWindow {
         form.border = BorderFactory.createEmptyBorder(8, 8, 0, 8)
 
         val buttons = JPanel(BorderLayout())
-        buttons.add(JPanel(FlowLayout(FlowLayout.LEFT)).apply { add(startBtn); add(stopBtn); add(viewerBtn) }, BorderLayout.WEST)
+        buttons.add(JPanel(FlowLayout(FlowLayout.LEFT)).apply { add(startBtn); add(rescanBtn); add(stopBtn); add(viewerBtn) }, BorderLayout.WEST)
         buttons.add(JPanel(FlowLayout(FlowLayout.RIGHT)).apply { add(closeBtn) }, BorderLayout.EAST)
 
         dlg.add(form, BorderLayout.NORTH)

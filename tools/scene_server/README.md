@@ -348,7 +348,7 @@ takes 2–4 s.
 |---|---|
 | a new scene, a removed scene | noticed at every start: the listing is always fresh |
 | a file changed *inside* a known scene | found by one check that runs once in the background after a cached start. The log names the changed scenes and the cache is refreshed; the running server keeps what it started with, so restart to see them |
-| `--rescan` | ignore the index cache and read every scene now |
+| `--rescan` (*Rescan everything* in JOSM's KITScenes window) | ignore the index cache and read every scene now; also for a scene that was unreadable or half-copied when first indexed |
 | `--no-cache` | no index cache either |
 
 Network errors (a timeout on a `soft` CIFS mount, say) are never cached: that

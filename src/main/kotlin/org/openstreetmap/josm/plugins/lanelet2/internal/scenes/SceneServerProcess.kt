@@ -20,6 +20,8 @@ data class LaunchPlan(
     val ingestPort: Int,
     val httpPort: Int,
     val waitForMapS: Int = SceneLaunch.WAIT_FOR_MAP_S,
+    /** City: read every scene from the dataset, not the local index cache (which is rewritten). */
+    val rescan: Boolean = false,
 )
 
 /** The `python -m ll2_scene` command for a [LaunchPlan]; pure, so it is tested as such. */
@@ -39,6 +41,7 @@ object SceneLaunch {
         addAll(listOf("--viewer-host", plan.viewerHost, "--viewer-port", plan.viewerPort.toString(),
             "--ingest-port", plan.ingestPort.toString(), "--http-port", plan.httpPort.toString()))
         if (plan.useJosmMap) addAll(listOf("--no-map", "--wait-for-map", plan.waitForMapS.toString()))
+        if (plan.rescan && plan.mode == SceneMode.CITY) add("--rescan")
     }
 
     /** [python] with [args], through the backends' env script when one is set (as [BackendRunner] does). */

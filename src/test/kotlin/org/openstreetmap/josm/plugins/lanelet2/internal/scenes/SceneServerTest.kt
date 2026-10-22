@@ -75,6 +75,15 @@ class SceneServerTest {
     }
 
     @Test
+    fun aRescanReadsEverySceneAgainButOnlyACityHasAnIndex() {
+        val city = plan(File("/data/kitscenes"), SceneMode.CITY, josm = true).copy(rescan = true)
+        assertEquals("--rescan", SceneLaunch.arguments(city).last())
+        assertFalse("--rescan" in SceneLaunch.arguments(city.copy(rescan = false)), "only when asked")
+        val scene = plan(File("/data/val/abc"), SceneMode.SCENE, josm = true).copy(rescan = true)
+        assertFalse("--rescan" in SceneLaunch.arguments(scene), "one scene has no index")
+    }
+
+    @Test
     fun withoutJosmsMapASceneBringsItsOwn() {
         val args = SceneLaunch.arguments(plan(File("/data/val/abc"), SceneMode.SCENE, josm = false))
         assertEquals(listOf("-m", "ll2_scene", "--scene", "/data/val/abc"), args.take(4))

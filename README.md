@@ -256,6 +256,9 @@ Python 3.8–3.12; when the system Python is newer and
 [uv](https://docs.astral.sh/uv/) is installed, uv provides a 3.12. The scene
 is then placed on JOSM's map, which stays editable; in city mode the map also
 picks the city. The window shows the scene server's log; it stops with JOSM.
+New scenes in the dataset are found by the next Start; **Rescan everything**
+re-reads every scene (about 17 s on a network mount), for one that was
+unreadable or still being copied when it was first indexed.
 
 **Without JOSM** (setup once: `tools/scene_server/setup.sh`, which needs `uv`
 and a `kitscenes` checkout next to this repository):

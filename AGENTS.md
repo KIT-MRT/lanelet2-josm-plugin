@@ -562,7 +562,8 @@ the shipped `server.py` stays stdlib-only.
   fresh, so new and removed scenes need no rescan. Only a changed file inside
   a known scene is invisible to a cached start, which is what the **one**
   background check after a cached start (`check_in_background`, log only,
-  the running index is not swapped) and `--rescan` are for. Network errors
+  the running index is not swapped) and `--rescan` (*Rescan everything* in
+  the KITScenes window, `LaunchPlan.rescan`, city only) are for. Network errors
   (`OSError` other than not-found) are never cached. `tests/test_city_index.py`
   holds the parallel and the cached index against a sequential copy of the
   old walk.
