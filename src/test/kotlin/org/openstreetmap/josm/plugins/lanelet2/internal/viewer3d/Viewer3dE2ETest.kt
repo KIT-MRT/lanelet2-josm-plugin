@@ -332,6 +332,90 @@ class Viewer3dE2ETest {
         }
     }
 
+    /** Requests until the server stops answering (or `max`); how many it answered. */
+    private fun hammer(httpPort: Int, max: Int): Int {
+        for (i in 0 until max) {
+            if (!Viewer3dServerProcess.probeHealth("127.0.0.1", httpPort, timeoutMs = 1000)) return i
+        }
+        return max
+    }
+
+    /**
+     * The leftover that had to be killed by hand: a server whose output went to
+     * a pipe nobody read blocks once ~64 KiB of request log sit in it, and hangs
+     * holding both ports. /healthz no longer answers, so Stop used to report
+     * "not running" and Start failed to bind. Start must now clear it, and Stop
+     * must free both ports.
+     */
+    @Test
+    fun aHungLeftoverOnThePortsIsClearedByStartAndStop(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        Viewer3dStore.extract(root)
+        val httpPort = 49265
+        val ingestPort = 49266
+        var hung: Process? = null
+        val server = Viewer3dServerProcess(
+            python = { python3 },
+            extract = { Viewer3dStore.ensureExtracted(root) },
+            proxyHosts = { emptyList() },
+            envProxyHosts = { emptyList() },
+            logFile = { File(dir.toFile(), "viewer.log") },
+        )
+        try {
+            hung = ProcessBuilder(
+                python3, File(root, "viewer3d/server.py").absolutePath, "--host", "127.0.0.1",
+                "--http-port", httpPort.toString(), "--ingest-port", ingestPort.toString(),
+                "--icons-dir", File(root, "style_images").absolutePath, "--no-browser",
+            ).directory(File(root, "viewer3d")).redirectErrorStream(true).start()   // output never read
+            assumeTrue(waitForHealth(httpPort, 5000), "leftover did not become healthy")
+            val answered = hammer(httpPort, 5000)
+            assertTrue(answered < 5000, "the leftover never hung on its full pipe")
+            assertTrue(hung.isAlive && server.holdsPort(httpPort) && server.holdsPort(ingestPort),
+                "hung, alive and holding both ports")
+
+            val (ok, msg) = server.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok, msg)
+            assertTrue(hung.waitFor(5, TimeUnit.SECONDS), "the hung leftover was stopped")
+            assertTrue(Viewer3dServerProcess.probeUi("127.0.0.1", httpPort), "a new server serves the page")
+
+            val (stopped, stopMsg) = server.stop("127.0.0.1", httpPort, ingestPort)
+            assertTrue(stopped, stopMsg)
+            assertFalse(server.holdsPort(httpPort) || server.holdsPort(ingestPort), "both ports free after Stop")
+        } finally {
+            hung?.destroyForcibly()
+            server.stop("127.0.0.1", httpPort, ingestPort)
+        }
+    }
+
+    /** The server JOSM starts writes to a log file, so no number of requests can block it. */
+    @Test
+    fun aServerJosmStartsLogsToAFileAndKeepsAnswering(@TempDir dir: Path) {
+        val python3 = Viewer3dServerProcess.locatePython3()
+        assumeTrue(python3 != null, "no python3 available")
+        val root = dir.resolve("lanelet2").toFile()
+        val log = File(dir.toFile(), "viewer.log")
+        val httpPort = 49365
+        val ingestPort = 49366
+        val server = Viewer3dServerProcess(
+            python = { python3 },
+            extract = { Viewer3dStore.ensureExtracted(root) },
+            proxyHosts = { emptyList() },
+            envProxyHosts = { emptyList() },
+            logFile = { log },
+        )
+        try {
+            val (ok, msg) = server.start("127.0.0.1", ingestPort, httpPort, openBrowser = false)
+            assertTrue(ok, msg)
+            assertEquals(2500, hammer(httpPort, 2500), "it stopped answering")
+            assertTrue(log.length() > 64 * 1024, "the request log went to the file (${log.length()} bytes)")
+        } finally {
+            server.stop("127.0.0.1", httpPort, ingestPort)
+        }
+        assertFalse(server.holdsPort(httpPort), "stopped")
+    }
+
     private fun waitForHealth(httpPort: Int, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

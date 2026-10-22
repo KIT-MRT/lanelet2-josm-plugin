@@ -86,7 +86,8 @@ object Viewer3dWindow {
         stopBtn.addActionListener {
             val host = hostField.text.trim().ifBlank { Viewer3dSettings.DEFAULT_HOST }
             val http = httpPortField.text.trim().toIntOrNull() ?: Viewer3dSettings.DEFAULT_HTTP_PORT
-            val (ok, msg) = server.stop(host, http)
+            val ingest = ingestPortField.text.trim().toIntOrNull() ?: Viewer3dSettings.DEFAULT_INGEST_PORT
+            val (ok, msg) = server.stop(host, http, ingest)
             refreshStatus()
             if (ok) Dialogs.infoAutoClose(msg, "Live 3D Viewer", 2000)
             else Dialogs.error(msg, "Live 3D Viewer")

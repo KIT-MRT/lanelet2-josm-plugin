@@ -797,6 +797,17 @@ including `josm_hmi*` and `ll2_extract_range*`, is out of scope):
   only when `GET /` returns the page; otherwise recycle (remote `POST
   /shutdown`, then kill by port if the leftover is older than that endpoint).
   Do **not** `close()` the plugin `JarFile` when listing shipped viewer files.
+- **The viewer server's output goes to a file** (`plugins/lanelet2/viewer3d_server.log`),
+  never a pipe. It logs every request (`log_message`), and on a pipe nobody
+  read it blocked once ~64 KiB sat there (measured: after ~970 requests) and
+  hung, alive and holding both ports: /healthz timed out, so Stop said "not
+  running" and Start spawned a second server that could not bind, losing the
+  handle on the first. Now `stop()` kills JOSM's own process and then any of
+  our `server.py` (by command line, `isViewerServer`) still listening on the
+  HTTP **or ingest** port, answering or not; `start()` clears such a hung
+  leftover first; JOSM exiting stops the server it started (a shutdown hook;
+  an adopted one is left alone). `Viewer3dE2ETest` hangs a real server on an
+  unread pipe and checks Start and Stop clear it.
 
 ### Approved divergences from the Jython (do NOT "restore parity")
 

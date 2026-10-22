@@ -34,15 +34,29 @@ class Viewer3dServerProcess(
             null
         }
     },
-    /** Tile servers to proxy (`--tile-proxy-host`), from the settings. */
-    private val proxyHosts: () -> List<String> = { Viewer3dSettings.getTileProxyHosts() },
+    /** Tile servers to proxy (`--tile-proxy-host`), from the settings (none without settings). */
+    private val proxyHosts: () -> List<String> = {
+        try {
+            Viewer3dSettings.getTileProxyHosts()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    },
     /** What the server adds on its own from JOSM's environment. */
     private val envProxyHosts: () -> List<String> = {
         Viewer3dSettings.parseHosts(System.getenv("LL2_TILE_PROXY_HOSTS"))
     },
+    /**
+     * Where the server's output goes. Never a pipe nobody reads: it logs every
+     * request, and once 64 KiB of that sat unread it blocked mid-log and hung,
+     * still holding both ports (measured: after ~970 requests).
+     */
+    private val logFile: () -> File = { File(Viewer3dResources.defaultExtractRoot(), "viewer3d_server.log") },
 ) {
     @Volatile
     private var process: Process? = null
+
+    private var exitHookInstalled = false
 
     fun isRunning(host: String, httpPort: Int): Boolean = probeHealth(host, httpPort)
 
@@ -87,13 +101,16 @@ class Viewer3dServerProcess(
             }
             // Serves a page, but from another plugin build (or one older than
             // the build handshake): recycle rather than adopt stale code.
-            stop(h, httpPort)
+            stop(h, httpPort, ingestPort)
         } else if (isRunning(h, httpPort)) {
             // A leftover answers /healthz (so the GUI says "running") but
             // cannot serve index.html — usually because extract deleted
             // viewer3d/ from under an older process. Adopt is wrong; recycle.
-            stop(h, httpPort)
+            stop(h, httpPort, ingestPort)
         }
+        // A server of ours that holds a port but does not answer (hung) would
+        // make the new one fail to bind: clear it, and our own old process.
+        if (holdsPort(httpPort) || holdsPort(ingestPort) || process?.isAlive == true) stop(h, httpPort, ingestPort)
         val py = python()
         if (py == null) {
             return false to "python3 is not available on PATH.\nInstall Python 3.7+ to use the live 3D viewer."
@@ -126,11 +143,15 @@ class Viewer3dServerProcess(
         if (profile) cmd.add("--profile")
         if (!openBrowser) cmd.add("--no-browser")
         return try {
+            val log = logFile()
+            log.parentFile?.mkdirs()
             val proc = ProcessBuilder(cmd)
                 .directory(paths.viewerDir)
                 .redirectErrorStream(true)
+                .redirectOutput(log)
                 .start()
             process = proc
+            installExitHook()
             repeat(20) {
                 sleeper(100)
                 if (isServingUi(h, httpPort)) return true to "Viewer server started."
@@ -139,7 +160,7 @@ class Viewer3dServerProcess(
                     return false to "Viewer server answered /healthz but died before serving the page."
                 }
                 if (!proc.isAlive) {
-                    val out = proc.inputStream.bufferedReader().readText()
+                    val out = try { logFile().readText().takeLast(500) } catch (_: Exception) { "" }
                     process = null
                     return false to (
                         "Viewer server exited immediately.\n" +
@@ -149,7 +170,7 @@ class Viewer3dServerProcess(
                 }
             }
             if (isRunning(h, httpPort) && !isServingUi(h, httpPort)) {
-                stop(h, httpPort)
+                stop(h, httpPort, ingestPort)
                 return false to "Viewer server started but is not serving index.html."
             }
             true to "Viewer server is starting..."
@@ -159,7 +180,7 @@ class Viewer3dServerProcess(
         }
     }
 
-    fun stop(host: String, httpPort: Int): Pair<Boolean, String> {
+    fun stop(host: String, httpPort: Int, ingestPort: Int = settingsIngestPort()): Pair<Boolean, String> {
         val h = host.ifBlank { Viewer3dSettings.DEFAULT_HOST }
         val proc = process
         if (proc != null && proc.isAlive) {
@@ -169,22 +190,51 @@ class Viewer3dServerProcess(
             } catch (_: Exception) {
                 proc.destroyForcibly()
             }
-            process = null
         }
-        if (!isRunning(h, httpPort)) {
+        process = null
+        fun gone() = !isRunning(h, httpPort) && !holdsPort(httpPort) && !holdsPort(ingestPort)
+        if (gone()) {
             return true to if (proc != null) "Viewer server stopped." else "Viewer server was not running."
         }
-        // Still answering: a server this JOSM did not spawn owns the port, so
-        // there is no handle to kill. Ask it to exit instead, otherwise the
-        // leftover keeps the port and Stop can never clear it.
-        if (requestRemoteShutdown(h, httpPort) && !isRunning(h, httpPort)) {
+        // A server this JOSM did not spawn (or lost track of) still owns a port,
+        // so there is no handle to kill. Ask it to exit if it still answers;
+        // one that hangs gets signalled. A port held by anything other than our
+        // server.py is never touched.
+        if (isRunning(h, httpPort) && requestRemoteShutdown(h, httpPort) && gone()) {
             return true to "Stopped a viewer server that this JOSM did not start."
         }
-        if (killViewerListeners(httpPort) && !isRunning(h, httpPort)) {
-            return true to "Killed a leftover viewer server on port $httpPort."
+        if (killViewerListeners(httpPort, ingestPort) && gone()) {
+            return true to "Killed a leftover viewer server on ports $httpPort / $ingestPort."
         }
         return false to "Failed to stop the viewer server on port $httpPort.\n" +
-            "Kill the leftover python process (plugins/lanelet2/viewer3d/server.py) and click Start again."
+            "Something else holds port $httpPort or $ingestPort; free it or pick other ports."
+    }
+
+    /** The configured ingest port; the default where there are no settings (tests). */
+    private fun settingsIngestPort(): Int = try {
+        Viewer3dSettings.getIngestPort()
+    } catch (_: Exception) {
+        Viewer3dSettings.DEFAULT_INGEST_PORT
+    }
+
+    /** Whether one of our viewer servers listens on [port] (answering or not). */
+    fun holdsPort(port: Int): Boolean = pidsListeningOn(port).any { isViewerServer(processCommandLine(it)) }
+
+    /** JOSM exiting stops the server it started (one it only adopted is left alone). */
+    @Synchronized
+    private fun installExitHook() {
+        if (exitHookInstalled) return
+        exitHookInstalled = true
+        Runtime.getRuntime().addShutdownHook(Thread({
+            process?.let { p ->
+                p.destroy()
+                try {
+                    if (!p.waitFor(2, TimeUnit.SECONDS)) p.destroyForcibly()
+                } catch (_: Exception) {
+                    p.destroyForcibly()
+                }
+            }
+        }, "lanelet2-viewer3d-stop"))
     }
 
     fun openBrowserTab(host: String, httpPort: Int): Pair<Boolean, String> {
@@ -203,7 +253,7 @@ class Viewer3dServerProcess(
     }
 
     fun shutdown() {
-        stop(Viewer3dSettings.getHost(), Viewer3dSettings.getHttpPort())
+        stop(Viewer3dSettings.getHost(), Viewer3dSettings.getHttpPort(), Viewer3dSettings.getIngestPort())
     }
 
     companion object {
@@ -266,11 +316,10 @@ class Viewer3dServerProcess(
          * Last resort for a leftover whose /shutdown is missing or ignored.
          * Only signals processes whose command line is our extracted server.py.
          */
-        fun killViewerListeners(httpPort: Int): Boolean {
+        fun killViewerListeners(vararg ports: Int): Boolean {
             var killed = false
-            for (pid in pidsListeningOn(httpPort)) {
-                val cmd = processCommandLine(pid) ?: continue
-                if ("viewer3d/server.py" !in cmd && !cmd.contains("lanelet2/viewer3d")) continue
+            for (pid in ports.flatMap { pidsListeningOn(it) }.distinct()) {
+                if (!isViewerServer(processCommandLine(pid))) continue
                 try {
                     val handle = ProcessHandle.of(pid).orElse(null) ?: continue
                     handle.destroy()
@@ -285,6 +334,10 @@ class Viewer3dServerProcess(
             }
             return killed
         }
+
+        /** Our extracted (or source-tree) viewer `server.py`, by its command line. */
+        internal fun isViewerServer(cmd: String?): Boolean =
+            cmd != null && ("viewer3d/server.py" in cmd || cmd.contains("lanelet2/viewer3d"))
 
         internal fun pidsListeningOn(port: Int): List<Long> {
             val inodes = linkedSetOf<String>()
